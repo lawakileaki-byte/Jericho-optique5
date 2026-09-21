@@ -1202,7 +1202,10 @@ function venteTotal(v){
   return (Number(v.prixVenteTotalSansRemise)||0) - (Number(v.remise)||0);
 }
 function venteReste(v){
-  return Math.max(venteTotal(v) - (Number(v.avance)||0), 0);
+  // Bon non encaissé ne s'applique que s'il y a une assurance (pas "Pas d'assurance")
+  const avance = Number(v.avance)||0;
+  const bon = (v.assurance && v.assurance !== "Pas d'assurance") ? (Number(v.montantBonNonEncaisse)||0) : 0;
+  return Math.max(venteTotal(v) - avance - bon, 0);
 }
 
 function renderVentes(){
@@ -1518,10 +1521,10 @@ function venteForm(data){
       <div class="form-section-title">Client</div>
       <div class="field"><label>Date de mise en relation</label><input required type="date" id="v-date" value="${escapeAttr(d.dateMiseEnRelation||todayISO())}"></div>
       <div class="field"><label>Boutique (Business Unit)</label><select id="v-bu">${BOUTIQUES.map(b=>`<option ${d.businessUnit===b?'selected':''}>${b}</option>`).join('')}</select></div>
+      <div class="field full"><label>Téléphone <span style="font-weight:400;color:#9a998f;">— saisir d'abord pour retrouver le client</span></label><input id="v-tel" value="${escapeAttr(d.telephone)}" placeholder="ex: 70 00 00 00" inputmode="numeric"></div>
       <div class="field"><label>Nom</label><input required id="v-nom" value="${escapeAttr(d.nom)}"></div>
       <div class="field"><label>Prénom</label><input id="v-prenom" value="${escapeAttr(d.prenom)}"></div>
       <div class="field full"><label>Adresse (résidence)</label><input id="v-adresse" value="${escapeAttr(d.adresse)}"></div>
-      <div class="field full"><label>Contact</label><input id="v-tel" value="${escapeAttr(d.telephone)}"></div>
 
       <div class="form-section-title">Article vendu</div>
       <div class="field full"><label>Quel article vendez-vous ?</label><select id="v-article">${TYPES_ARTICLE.map(t=>`<option ${d.typeArticle===t?'selected':''}>${t}</option>`).join('')}</select></div>
@@ -1542,19 +1545,19 @@ function venteForm(data){
       </div>
 
       <div id="sec-prescription" style="display:none;grid-column:1/-1;">
-        <div class="form-section-title">Prescription œil droit</div>
+        <div class="form-section-title">Prescription œil droit (OD)</div>
         <div class="form-grid">
-          <div class="field"><label>Sphère</label><input id="v-od-sphere" value="${escapeAttr(d.odSphere)}"></div>
-          <div class="field"><label>Cylindre</label><input id="v-od-cyl" value="${escapeAttr(d.odCylindre)}"></div>
-          <div class="field"><label>Axe</label><input id="v-od-axe" value="${escapeAttr(d.odAxe)}"></div>
-          <div class="field"><label>Addition</label><input id="v-od-add" value="${escapeAttr(d.odAddition)}"></div>
+          <div class="field"><label>Sphère</label><input type="number" step="0.25" id="v-od-sphere" value="${escapeAttr(d.odSphere)}" placeholder="ex: -1.75" inputmode="decimal"></div>
+          <div class="field"><label>Cylindre</label><input type="number" step="0.25" id="v-od-cyl" value="${escapeAttr(d.odCylindre)}" placeholder="ex: -0.50" inputmode="decimal"></div>
+          <div class="field"><label>Axe (0-180)</label><input type="number" step="1" min="0" max="180" id="v-od-axe" value="${escapeAttr(d.odAxe)}" placeholder="ex: 90" inputmode="numeric"></div>
+          <div class="field"><label>Addition</label><input type="number" step="0.25" min="0" id="v-od-add" value="${escapeAttr(d.odAddition)}" placeholder="ex: 2.00" inputmode="decimal"></div>
         </div>
-        <div class="form-section-title">Prescription œil gauche</div>
+        <div class="form-section-title">Prescription œil gauche (OG)</div>
         <div class="form-grid">
-          <div class="field"><label>Sphère</label><input id="v-og-sphere" value="${escapeAttr(d.ogSphere)}"></div>
-          <div class="field"><label>Cylindre</label><input id="v-og-cyl" value="${escapeAttr(d.ogCylindre)}"></div>
-          <div class="field"><label>Axe</label><input id="v-og-axe" value="${escapeAttr(d.ogAxe)}"></div>
-          <div class="field"><label>Addition</label><input id="v-og-add" value="${escapeAttr(d.ogAddition)}"></div>
+          <div class="field"><label>Sphère</label><input type="number" step="0.25" id="v-og-sphere" value="${escapeAttr(d.ogSphere)}" placeholder="ex: -1.75" inputmode="decimal"></div>
+          <div class="field"><label>Cylindre</label><input type="number" step="0.25" id="v-og-cyl" value="${escapeAttr(d.ogCylindre)}" placeholder="ex: -0.50" inputmode="decimal"></div>
+          <div class="field"><label>Axe (0-180)</label><input type="number" step="1" min="0" max="180" id="v-og-axe" value="${escapeAttr(d.ogAxe)}" placeholder="ex: 90" inputmode="numeric"></div>
+          <div class="field"><label>Addition</label><input type="number" step="0.25" min="0" id="v-og-add" value="${escapeAttr(d.ogAddition)}" placeholder="ex: 2.00" inputmode="decimal"></div>
         </div>
         <div class="form-section-title">Verre</div>
         <div class="form-grid">
@@ -1578,14 +1581,21 @@ function venteForm(data){
       <div id="sec-pricing-global" style="display:none;grid-column:1/-1;">
         <div class="form-section-title">Prix de vente</div>
         <div class="form-grid">
-          <div class="field"><label>Prix de vente monture</label><input type="number" min="0" id="v-prix-monture" value="${escapeAttr(d.prixVenteMonture)}"></div>
-          <div class="field"><label>Prix de vente lentilles</label><input type="number" min="0" id="v-prix-lentilles" value="${escapeAttr(d.prixVenteLentilles)}"></div>
-          <div class="field"><label>Prix de vente lentilles (2e paire)</label><input type="number" min="0" id="v-prix-lentilles-2e" value="${escapeAttr(d.prixVenteLentilles2e)}"></div>
-          <div class="field"><label>Prix de vente monture (2e paire)</label><input type="number" min="0" id="v-prix-monture-2e" value="${escapeAttr(d.prixVenteMonture2e)}"></div>
-          <div class="field"><label>Prix de vente total (sans remise)</label><input type="number" min="0" id="v-prix-total" value="${escapeAttr(d.prixVenteTotalSansRemise)}"></div>
-          <div class="field"><label>Remise (montant)</label><input type="number" min="0" id="v-remise" value="${escapeAttr(d.remise)}"></div>
-          <div class="field"><label>Avance</label><input type="number" min="0" id="v-avance" value="${escapeAttr(d.avance)}"></div>
-          <div class="field"><label>Bon non encaissé <span style="font-weight:400;color:#9a998f;">(si assurance)</span></label><input type="number" min="0" id="v-bon" value="${escapeAttr(d.montantBonNonEncaisse)}"></div>
+          <div class="field"><label>Prix monture</label><input type="number" min="0" step="500" id="v-prix-monture" value="${escapeAttr(d.prixVenteMonture)}" oninput="calcVenteTotal()"></div>
+          <div class="field"><label>Prix lentilles</label><input type="number" min="0" step="500" id="v-prix-lentilles" value="${escapeAttr(d.prixVenteLentilles)}" oninput="calcVenteTotal()"></div>
+          <div class="field"><label>Prix lentilles (2e paire)</label><input type="number" min="0" step="500" id="v-prix-lentilles-2e" value="${escapeAttr(d.prixVenteLentilles2e)}" oninput="calcVenteTotal()"></div>
+          <div class="field"><label>Prix monture (2e paire)</label><input type="number" min="0" step="500" id="v-prix-monture-2e" value="${escapeAttr(d.prixVenteMonture2e)}" oninput="calcVenteTotal()"></div>
+          <div class="field" style="background:var(--sand-light);border-radius:8px;padding:8px;">
+            <label style="color:#E8A93B;font-weight:600;">Total (calculé auto)</label>
+            <input type="number" min="0" id="v-prix-total" value="${escapeAttr(d.prixVenteTotalSansRemise)}" style="font-weight:600;" oninput="calcVenteReste()">
+          </div>
+          <div class="field"><label>Remise (montant)</label><input type="number" min="0" step="500" id="v-remise" value="${escapeAttr(d.remise)}" oninput="calcVenteReste()"></div>
+          <div class="field"><label>Avance encaissée</label><input type="number" min="0" step="500" id="v-avance" value="${escapeAttr(d.avance)}" oninput="calcVenteReste()"></div>
+          <div class="field" id="wrap-bon"><label>Bon non encaissé <span style="font-weight:400;color:#9a998f;">(assurance)</span></label><input type="number" min="0" step="500" id="v-bon" value="${escapeAttr(d.montantBonNonEncaisse)}" oninput="calcVenteReste()"></div>
+          <div class="field" style="background:#fdf0ee;border-radius:8px;padding:8px;" id="wrap-reste">
+            <label style="color:#A6402E;font-weight:600;">Reste à payer</label>
+            <input type="number" id="v-reste-display" readonly style="font-weight:600;color:#A6402E;background:transparent;border:none;" value="0">
+          </div>
         </div>
       </div>
 
@@ -1936,6 +1946,50 @@ function attachVenteConditionalLogic(){
     sel.addEventListener('change', update);
     update();
   };
+  // Calcul automatique du total
+  window.calcVenteTotal = function(){
+    const monture = Number(document.getElementById('v-prix-monture')?.value)||0;
+    const lentilles = Number(document.getElementById('v-prix-lentilles')?.value)||0;
+    const lentilles2 = Number(document.getElementById('v-prix-lentilles-2e')?.value)||0;
+    const monture2 = Number(document.getElementById('v-prix-monture-2e')?.value)||0;
+    const total = monture + lentilles + lentilles2 + monture2;
+    const elTotal = document.getElementById('v-prix-total');
+    if(elTotal) elTotal.value = total || '';
+    window.calcVenteReste();
+  };
+
+  window.calcVenteReste = function(){
+    const total = Number(document.getElementById('v-prix-total')?.value)||0;
+    const remise = Number(document.getElementById('v-remise')?.value)||0;
+    const avance = Number(document.getElementById('v-avance')?.value)||0;
+    const assurance = document.getElementById('v-assurance')?.value || '';
+    const hasBon = assurance && assurance !== "Pas d'assurance";
+    const bon = hasBon ? (Number(document.getElementById('v-bon')?.value)||0) : 0;
+    const reste = Math.max(total - remise - avance - bon, 0);
+    const elReste = document.getElementById('v-reste-display');
+    if(elReste) elReste.value = reste;
+    // Masquer/afficher le bon non encaissé selon l'assurance
+    const wrapBon = document.getElementById('wrap-bon');
+    if(wrapBon) wrapBon.style.display = hasBon ? '' : 'none';
+  };
+
+  // Masquer/afficher bon selon assurance au changement
+  const assuranceSelect = document.getElementById('v-assurance');
+  if(assuranceSelect) assuranceSelect.addEventListener('change', window.calcVenteReste);
+
+  // Lancer le calcul initial si on édite une vente existante
+  window.calcVenteReste();
+
+  // Autocomplete sur le TELEPHONE en premier
+  setTimeout(()=>{
+    setupAutocomplete('v-tel', getClientSuggestions, (s)=>{
+      const tel = document.getElementById('v-tel'); if(tel) tel.value = s.telephone;
+      const n = document.getElementById('v-nom'); if(n) n.value = s.nom;
+      const pr = document.getElementById('v-prenom'); if(pr) pr.value = s.prenom;
+      const ad = document.getElementById('v-adresse'); if(ad) ad.value = s.adresse;
+      const bu = document.getElementById('v-bu'); if(bu && s.boutique) bu.value = s.boutique;
+    });
+  }, 100);
   bindAutre('v-assurance','wrap-assurance-autre');
   bindAutre('v-apporteur','wrap-apporteur-autre');
   bindAutre('v-gestionnaire','wrap-gestionnaire-autre');
