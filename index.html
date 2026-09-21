@@ -1274,6 +1274,7 @@ function renderVentes(){
             <td>${fmtDate(v.dateRdv)}</td>
             <td><div class="row-actions">
               <button class="icon-btn" data-edit-vente="${v.id}">Modifier</button>
+              <button class="icon-btn" data-print-vente="${v.id}">🖨️ Reçu</button>
               ${isAdmin() ? `<button class="icon-btn danger" data-del-vente="${v.id}">Suppr.</button>` : ''}
             </div></td>
           </tr>`;
@@ -1744,6 +1745,136 @@ function getClientSuggestions(query){
 }
 
 /* =========================================================
+   IMPRESSION REÇU PDF
+   ========================================================= */
+function imprimerRecu(v){
+  if(!v){ showToast("Vente introuvable."); return; }
+  const total = venteTotal(v);
+  const reste = venteReste(v);
+  const avance = Number(v.avance)||0;
+  const remise = Number(v.remise)||0;
+  const bon = (v.assurance && v.assurance !== "Pas d'assurance") ? (Number(v.montantBonNonEncaisse)||0) : 0;
+
+  const lignes = [];
+  if(v.typeArticle==='Réparation et entretien'){
+    lignes.push(['Réparation', fmtFCFA(Number(v.cout)||0)]);
+  } else if(v.typeArticle==='Accessoires'){
+    if(Number(v.prixVenteMontureAcc)) lignes.push(['Monture', fmtFCFA(Number(v.prixVenteMontureAcc))]);
+    if(Number(v.montantAchatSpray)) lignes.push(['Spray nettoyant', fmtFCFA(Number(v.montantAchatSpray))]);
+    if(Number(v.montantVenteEtui)) lignes.push(['Étui', fmtFCFA(Number(v.montantVenteEtui))]);
+    if(Number(v.montantVenteEssuieVerre)) lignes.push(['Lingette', fmtFCFA(Number(v.montantVenteEssuieVerre))]);
+    if(Number(v.remiseAcc)) lignes.push(['Remise', '- '+fmtFCFA(Number(v.remiseAcc))]);
+  } else {
+    if(Number(v.prixVenteMonture)) lignes.push(['Monture optique', fmtFCFA(Number(v.prixVenteMonture))]);
+    if(Number(v.prixVenteMonture2e)) lignes.push(['Monture (2e paire)', fmtFCFA(Number(v.prixVenteMonture2e))]);
+    if(Number(v.prixVenteLentilles)) lignes.push(['Lentilles', fmtFCFA(Number(v.prixVenteLentilles))]);
+    if(Number(v.prixVenteLentilles2e)) lignes.push(['Lentilles (2e paire)', fmtFCFA(Number(v.prixVenteLentilles2e))]);
+    if(remise) lignes.push(['Remise accordée', '- '+fmtFCFA(remise)]);
+  }
+
+  const html = `<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Reçu Jéricho Optique</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:'Segoe UI',Arial,sans-serif;font-size:13px;color:#1a1a1a;background:#fff;padding:32px;}
+  .header{display:flex;align-items:center;justify-content:space-between;border-bottom:3px solid #E8A93B;padding-bottom:18px;margin-bottom:24px;}
+  .logo{height:56px;}
+  .boutique-info{text-align:right;font-size:12px;color:#555;line-height:1.7;}
+  .boutique-info b{font-size:13px;color:#1a1a1a;}
+  h1{font-size:20px;font-weight:700;color:#26282B;margin-bottom:4px;}
+  .meta{font-size:12px;color:#666;margin-bottom:20px;}
+  .meta span{margin-right:20px;}
+  .client-box{background:#F5F4F0;border-radius:8px;padding:14px 16px;margin-bottom:20px;}
+  .client-box h3{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:#E8A93B;margin-bottom:8px;}
+  .client-row{display:flex;gap:32px;}
+  .client-field{font-size:13px;line-height:1.8;}
+  .client-field span{color:#666;display:block;font-size:11px;}
+  table{width:100%;border-collapse:collapse;margin-bottom:20px;}
+  thead th{background:#26282B;color:#fff;padding:9px 12px;text-align:left;font-size:12px;}
+  tbody td{padding:9px 12px;border-bottom:1px solid #eee;font-size:13px;}
+  tbody tr:last-child td{border-bottom:none;}
+  .amount{text-align:right;}
+  .totals{margin-left:auto;width:260px;border-top:2px solid #26282B;padding-top:12px;}
+  .total-row{display:flex;justify-content:space-between;padding:5px 0;font-size:13px;}
+  .total-row.main{font-weight:700;font-size:16px;border-top:1px solid #ddd;margin-top:8px;padding-top:10px;}
+  .total-row.remain{color:${reste>0?'#A6402E':'#2d7a3a'};font-weight:700;font-size:15px;}
+  .rdv-box{background:#EAF3FE;border-left:4px solid #68AAD1;border-radius:4px;padding:12px 16px;margin-top:20px;}
+  .rdv-box b{color:#185FA5;}
+  .footer{margin-top:28px;border-top:1px solid #eee;padding-top:14px;text-align:center;font-size:11px;color:#999;line-height:1.8;}
+  .stamp{margin-top:20px;border:2px dashed #ccc;border-radius:8px;height:70px;display:flex;align-items:center;justify-content:center;color:#bbb;font-size:12px;}
+  @media print{body{padding:16px;} .stamp{margin-top:12px;}}
+</style>
+</head>
+<body>
+  <div class="header">
+    <div>
+      <img class="logo" src="${document.querySelector('.nav-logo')?.src || document.querySelector('.brand-logo')?.src || ''}" alt="Jéricho Optique">
+    </div>
+    <div class="boutique-info">
+      <b>Jéricho Optique — ${escapeHtml(v.businessUnit||'')}</b><br>
+      Tél : 25 66 30 07 · WhatsApp : 51 87 12 12<br>
+      Patte d'Oie (à 150m du Jardin 2000)<br>
+      Tanghin (collée à la pharmacie Jean Paul 2)
+    </div>
+  </div>
+
+  <h1>Reçu de vente</h1>
+  <div class="meta">
+    <span>📅 Date : <b>${fmtDate(v.dateMiseEnRelation)}</b></span>
+    <span>🧾 Référence : <b>${v.id?.slice(-6)||'—'}</b></span>
+    <span>👤 Commercial : <b>${escapeHtml(v.commercial||v.gestionnaire||'—')}</b></span>
+  </div>
+
+  <div class="client-box">
+    <h3>Client</h3>
+    <div class="client-row">
+      <div class="client-field"><span>Nom complet</span><b>${escapeHtml(`${v.nom||''} ${v.prenom||''}`.trim())}</b></div>
+      ${v.telephone ? `<div class="client-field"><span>Téléphone</span>${escapeHtml(String(v.telephone))}</div>` : ''}
+      ${v.adresse ? `<div class="client-field"><span>Adresse</span>${escapeHtml(v.adresse)}</div>` : ''}
+      ${(v.assurance && v.assurance!=="Pas d'assurance") ? `<div class="client-field"><span>Assurance</span>${escapeHtml(v.assurance)}</div>` : ''}
+    </div>
+  </div>
+
+  <table>
+    <thead><tr><th>Article / Prestation</th><th class="amount">Montant</th></tr></thead>
+    <tbody>
+      <tr><td><b>${escapeHtml(v.typeArticle||'Article')}</b></td><td></td></tr>
+      ${lignes.map(([lib,mt])=>`<tr><td style="padding-left:20px;">${escapeHtml(lib)}</td><td class="amount">${mt}</td></tr>`).join('')}
+    </tbody>
+  </table>
+
+  <div class="totals">
+    <div class="total-row"><span>Total brut</span><span>${fmtFCFA(total + remise)}</span></div>
+    ${remise ? `<div class="total-row"><span>Remise</span><span>- ${fmtFCFA(remise)}</span></div>` : ''}
+    <div class="total-row main"><span>Total net</span><span>${fmtFCFA(total)}</span></div>
+    ${avance ? `<div class="total-row"><span>Avance versée</span><span>- ${fmtFCFA(avance)}</span></div>` : ''}
+    ${bon ? `<div class="total-row"><span>Bon assurance</span><span>- ${fmtFCFA(bon)}</span></div>` : ''}
+    <div class="total-row remain"><span>${reste>0?'Reste à payer':'Soldé ✓'}</span><span>${reste>0?fmtFCFA(reste):'0'}</span></div>
+  </div>
+
+  ${v.dateRdv ? `<div class="rdv-box">📅 <b>Date de rendez-vous :</b> ${fmtDate(v.dateRdv)}${v.commentaire?'<br>💬 '+escapeHtml(v.commentaire):''}</div>` : (v.commentaire?`<div class="rdv-box">💬 ${escapeHtml(v.commentaire)}</div>`:'')}
+
+  <div class="stamp">Signature et cachet</div>
+
+  <div class="footer">
+    Jéricho Optique — « De la beauté dans votre regard ! »<br>
+    Merci de votre confiance. Conservez ce reçu pour tout SAV ou garantie.<br>
+    Document généré le ${new Date().toLocaleDateString('fr-FR')}
+  </div>
+</body>
+</html>`;
+
+  const win = window.open('', '_blank', 'width=800,height=900');
+  if(!win){ showToast("Autorisez les popups pour imprimer."); return; }
+  win.document.write(html);
+  win.document.close();
+  win.onload = ()=>{ win.focus(); win.print(); };
+}
+
+/* =========================================================
    EVENEMENTS
    ========================================================= */
 function attachGlobalEvents(){
@@ -1786,7 +1917,7 @@ function attachGlobalEvents(){
   const app = document.getElementById('app');
   if(app){
     app.addEventListener('click', async (e)=>{
-      const t = e.target.closest('button, a[data-nav], [data-tab], [data-del-prospect], [data-del-client], [data-del-sav], [data-del-vente], [data-del-stock], [data-edit-prospect], [data-edit-client], [data-edit-sav], [data-edit-vente], [data-edit-stock], [data-view-client], [data-convert-prospect], [data-edit-user], [data-toggle-user], [data-nav]');
+      const t = e.target.closest('button, a[data-nav], [data-tab], [data-del-prospect], [data-del-client], [data-del-sav], [data-del-vente], [data-del-stock], [data-edit-prospect], [data-edit-client], [data-edit-sav], [data-edit-vente], [data-edit-stock], [data-view-client], [data-convert-prospect], [data-edit-user], [data-toggle-user], [data-nav], [data-print-vente]');
       if(!t) return;
 
       // Navigation publique
@@ -1833,7 +1964,7 @@ function attachGlobalEvents(){
       }
 
       // Ventes
-      if(t.id==='btn-new-vente'){ state.modal={type:'vente',data:null}; render(); return; }
+      if(t.dataset.printVente){ imprimerRecu(DB.ventes.find(v=>v.id===t.dataset.printVente)); return; }
       if(t.id==='btn-export-ventes'){ exportCSV(DB.ventes,['dateMiseEnRelation','nom','prenom','adresse','telephone','typeArticle','businessUnit','gestionnaire','apporteurAffaire','assurance','prixVenteTotalSansRemise','remise','avance','dateRdv','commentaire'],'ventes_jericho.csv'); return; }
       if(t.dataset.editVente){ state.modal={type:'vente',data:DB.ventes.find(v=>v.id===t.dataset.editVente)||null}; render(); return; }
       if(t.dataset.delVente){
