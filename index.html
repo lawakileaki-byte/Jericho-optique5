@@ -1389,7 +1389,7 @@ function prospectForm(data){
       <div class="field"><label>Nom</label><input required id="p-nom" value="${escapeAttr(d.nom)}"></div>
       <div class="field"><label>Prénom</label><input id="p-prenom" value="${escapeAttr(d.prenom)}"></div>
       <div class="field full"><label>Adresse (résidence)</label><input id="p-adresse" value="${escapeAttr(d.adresse)}"></div>
-      <div class="field full"><label>Contact (téléphone)</label><input id="p-tel" value="${escapeAttr(d.telephone)}"></div>
+      <div class="field full"><label>Contact (téléphone)</label><input id="p-tel" value="${escapeAttr(String(d.telephone||''))}" inputmode="numeric" placeholder="ex: 70 00 00 00"></div>
       <div class="field full"><label>Besoin exprimé</label><input id="p-besoin" placeholder="ex : lunettes de vue, solaire..." value="${escapeAttr(d.besoin)}"></div>
       <div class="field"><label>Source</label><select id="p-source">${SOURCES.map(s=>`<option ${d.source===s?'selected':''}>${s}</option>`).join('')}</select></div>
       <div class="field"><label>Statut</label><select id="p-statut">${STATUTS_PROSPECT.map(s=>`<option ${d.statut===s?'selected':''}>${s}</option>`).join('')}</select></div>
@@ -1415,7 +1415,7 @@ function clientForm(data){
       <div class="field"><label>Nom</label><input required id="c-nom" value="${escapeAttr(d.nom)}"></div>
       <div class="field"><label>Prénom</label><input id="c-prenom" value="${escapeAttr(d.prenom)}"></div>
       <div class="field full"><label>Adresse (résidence)</label><input id="c-adresse" value="${escapeAttr(d.adresse)}"></div>
-      <div class="field"><label>Téléphone</label><input id="c-tel" value="${escapeAttr(d.telephone)}"></div>
+      <div class="field"><label>Téléphone</label><input id="c-tel" value="${escapeAttr(String(d.telephone||''))}" inputmode="numeric" placeholder="ex: 70 00 00 00"></div>
       <div class="field"><label>Email</label><input id="c-email" value="${escapeAttr(d.email)}"></div>
       <div class="field full"><label>Boutique préférée</label><select id="c-boutique">${BOUTIQUES.map(b=>`<option ${d.boutique===b?'selected':''}>${b}</option>`).join('')}</select></div>
       <div class="field full"><label>Notes</label><textarea id="c-notes">${escapeHtml(d.notes)}</textarea></div>
@@ -1723,15 +1723,20 @@ function setupAutocomplete(inputId, getSuggestions, onSelect){
 }
 
 function getClientSuggestions(query){
-  const q = query.toLowerCase();
+  const q = query.toLowerCase().replace(/\s/g,'');
   const results = [];
   [...DB.clients, ...DB.prospects].forEach(p=>{
     const name = `${p.nom||''} ${p.prenom||''}`.trim();
-    const tel = p.telephone||'';
+    const tel = String(p.telephone||'').replace(/\s/g,'');
     if(name.toLowerCase().includes(q) || tel.includes(q)){
       const key = `${p.nom}|${tel}`;
       if(!results.find(r=>r.key===key)){
-        results.push({ key, label: `<b>${escapeHtml(name)}</b> <span style="color:#888;font-size:12px;">${escapeHtml(tel)}</span>`, nom: p.nom, prenom: p.prenom||'', telephone: tel, adresse: p.adresse||'', boutique: p.boutique });
+        results.push({
+          key,
+          label: `<b>${escapeHtml(name)}</b> <span style="color:#888;font-size:12px;">${escapeHtml(tel)}</span>`,
+          nom: p.nom||'', prenom: p.prenom||'',
+          telephone: tel, adresse: p.adresse||'', boutique: p.boutique||''
+        });
       }
     }
   });
