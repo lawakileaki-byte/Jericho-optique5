@@ -517,7 +517,7 @@ async function loadUsers(){
 async function findAccount(identifiant, pwd){
   await loadUsers();
   return USERS_CACHE.find(u =>
-    u.id.toLowerCase() === identifiant.toLowerCase() && u.motDePasse === pwd
+    u.id.toLowerCase() === identifiant.toLowerCase().trim() && u.motDePasse === pwd
   ) || null;
 }
 
@@ -952,9 +952,16 @@ function renderTeamTab(){
    TABLEAU DE BORD
    --------------------------------------------------------- */
 function renderDashboard(){
-  const p = DB.prospects, c = DB.clients, s = DB.sav, st = DB.stock, v = DB.ventes;
-  const totalProspects = p.length;
-  const convertis = p.filter(x=>x.statut==='Converti en client').length;
+  const p = DB.prospects, c = DB.clients, s = DB.sav, st = DB.stock;
+
+  // Admin voit tout, commercial voit uniquement ses propres données
+  const myName = state.commercial;
+  const iAmAdmin = isAdmin();
+  const v = iAmAdmin ? DB.ventes : DB.ventes.filter(x => x.commercial === myName || x.gestionnaire === myName);
+  const myProspects = iAmAdmin ? p : p.filter(x => x.commercial === myName);
+
+  const totalProspects = myProspects.length;
+  const convertis = myProspects.filter(x=>x.statut==='Converti en client').length;
   const taux = totalProspects ? Math.round(convertis/totalProspects*100) : 0;
   const savOuverts = s.filter(x=>x.statut!=='Résolu').length;
   const valeurStock = st.reduce((a,x)=>a+(Number(x.quantite)||0)*(Number(x.prixUnitaire)||0),0);
@@ -962,36 +969,50 @@ function renderDashboard(){
   const caTotal = v.reduce((a,x)=>a+venteTotal(x),0);
   const resteAPayerTotal = v.reduce((a,x)=>a+venteReste(x),0);
 
-  const recentProspects = [...p].sort((a,b)=>(b.dateMiseEnRelation||'').localeCompare(a.dateMiseEnRelation||'')).slice(0,5);
-  const recentSav = [...s].sort((a,b)=>b.dateOuverture.localeCompare(a.dateOuverture)).slice(0,5);
+  const recentProspects = [...myProspects].sort((a,b)=>(b.dateMiseEnRelation||'').localeCompare(a.dateMiseEnRelation||'')).slice(0,5);
+  const recentSav = [...s].sort((a,b)=>(b.dateOuverture||'').localeCompare(a.dateOuverture||'')).slice(0,5);
+  const recentVentes = [...v].sort((a,b)=>(b.dateMiseEnRelation||'').localeCompare(a.dateMiseEnRelation||'')).slice(0,5);
+
+  const titre = iAmAdmin ? 'Vue d\'ensemble — Jéricho Optique' : `Mes chiffres — ${escapeHtml(myName)}`;
+  const sousTitre = iAmAdmin ? 'Toutes les boutiques et tous les commerciaux.' : `Vos ventes et prospects personnels.`;
 
   return `
   <div class="main-head">
-    <div><h2>Tableau de bord</h2><p>Vue d'ensemble des deux boutiques, Patte d'Oie et Tanghin.</p></div>
+    <div><h2>Tableau de bord</h2><p>${sousTitre}</p></div>
   </div>
 
   <div class="kpi-row">
-    <div class="kpi"><div class="lbl">Chiffre d'affaires</div><div class="val" style="font-size:24px;">${fmtFCFA(caTotal)}</div><div class="sub">${v.length} vente(s) enregistrée(s)</div></div>
-    <div class="kpi ${resteAPayerTotal>0?'warn':''}"><div class="lbl">Reste à payer</div><div class="val" style="font-size:24px;">${fmtFCFA(resteAPayerTotal)}</div><div class="sub">Sur l'ensemble des ventes</div></div>
-    <div class="kpi"><div class="lbl">Prospects au total</div><div class="val">${totalProspects}</div><div class="sub">${convertis} converti(s) en client</div></div>
+    <div class="kpi"><div class="lbl">${iAmAdmin ? 'CA total' : 'Mon CA'}</div><div class="val" style="font-size:24px;">${fmtFCFA(caTotal)}</div><div class="sub">${v.length} vente(s)</div></div>
+    <div class="kpi ${resteAPayerTotal>0?'warn':''}"><div class="lbl">Reste à payer</div><div class="val" style="font-size:24px;">${fmtFCFA(resteAPayerTotal)}</div><div class="sub">Sur mes ventes</div></div>
+    <div class="kpi"><div class="lbl">${iAmAdmin ? 'Prospects total' : 'Mes prospects'}</div><div class="val">${totalProspects}</div><div class="sub">${convertis} converti(s)</div></div>
     <div class="kpi"><div class="lbl">Taux de conversion</div><div class="val">${taux}%</div><div class="sub">Prospects → clients</div></div>
+    ${iAmAdmin ? `
     <div class="kpi ${savOuverts>0?'warn':''}"><div class="lbl">Tickets SAV ouverts</div><div class="val">${savOuverts}</div><div class="sub">Sur ${s.length} au total</div></div>
     <div class="kpi ${stockBas>0?'warn':''}"><div class="lbl">Articles sous le seuil</div><div class="val">${stockBas}</div><div class="sub">Valeur stock : ${fmtFCFA(valeurStock)}</div></div>
+    ` : ''}
   </div>
 
   <div class="panel">
-    <h3>Derniers prospects</h3>
-    ${renderMiniTable(recentProspects, ['Nom','Boutique','Statut','Mise en relation'], r=>[
+    <h3>${iAmAdmin ? 'Dernières ventes' : 'Mes dernières ventes'}</h3>
+    ${renderMiniTable(recentVentes, ['Client','Type','Montant','Boutique','Date'], r=>[
+      escapeHtml(`${r.nom||''} ${r.prenom||''}`.trim()), escapeHtml(r.typeArticle||''), fmtFCFA(venteTotal(r)), escapeHtml(r.businessUnit||''), fmtDate(r.dateMiseEnRelation)
+    ])}
+  </div>
+
+  <div class="panel">
+    <h3>${iAmAdmin ? 'Derniers prospects' : 'Mes derniers prospects'}</h3>
+    ${renderMiniTable(recentProspects, ['Nom','Boutique','Statut','Date'], r=>[
       escapeHtml(`${r.nom} ${r.prenom||''}`.trim()), escapeHtml(r.boutique), statutBadge(r.statut,'prospect'), fmtDate(r.dateMiseEnRelation)
     ])}
   </div>
 
+  ${iAmAdmin ? `
   <div class="panel">
     <h3>Derniers tickets SAV</h3>
     ${renderMiniTable(recentSav, ['Client','Boutique','Type','Statut','Ouvert le'], r=>[
-      escapeHtml(r.clientNom), escapeHtml(r.boutique), escapeHtml(r.typeDemande), statutBadge(r.statut,'sav'), fmtDate(r.dateOuverture)
+      escapeHtml(r.clientNom||''), escapeHtml(r.boutique||''), escapeHtml(r.typeDemande||''), statutBadge(r.statut,'sav'), fmtDate(r.dateOuverture)
     ])}
-  </div>
+  </div>` : ''}
   `;
 }
 
@@ -1837,6 +1858,7 @@ function attachGlobalEvents(){
     });
   }, 100);
   bindClick('btn-export-ventes', ()=>exportCSV(DB.ventes, ['dateMiseEnRelation','nom','prenom','adresse','telephone','typeArticle','businessUnit','gestionnaire','apporteurAffaire','assurance','prixVenteTotalSansRemise','remise','avance','dateRdv','commentaire'], 'ventes_jericho.csv'));
+  bindClick('btn-new-vente', ()=>{ state.modal={type:'vente', data:null}; render(); });
   document.querySelectorAll('[data-edit-vente]').forEach(el=>el.addEventListener('click', ()=>{
     const item = DB.ventes.find(v=>v.id===el.dataset.editVente);
     state.modal={type:'vente', data:item}; render();
