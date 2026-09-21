@@ -1761,8 +1761,92 @@ function attachGlobalEvents(){
   if(logout) logout.addEventListener('click', ()=>{ setCommercial('','','',''); render(); });
 
   // Prospects
-  bindClick('btn-new-prospect', ()=>{ state.modal={type:'prospect', data:null}; render(); });
-  bindClick('btn-export-prospects', ()=>exportCSV(DB.prospects, ['dateMiseEnRelation','nom','prenom','adresse','telephone','besoin','source','boutique','statut','commercial','notes'], 'prospects_jericho.csv'));
+  // Délégation d'événements — un seul listener qui gère tous les boutons
+  const app = document.getElementById('app');
+  if(app){
+    app.addEventListener('click', async (e)=>{
+      const t = e.target.closest('button, a[data-nav], [data-tab], [data-del-prospect], [data-del-client], [data-del-sav], [data-del-vente], [data-del-stock], [data-edit-prospect], [data-edit-client], [data-edit-sav], [data-edit-vente], [data-edit-stock], [data-view-client], [data-convert-prospect], [data-edit-user], [data-toggle-user], [data-nav]');
+      if(!t) return;
+
+      // Navigation publique
+      if(t.dataset.nav){ e.preventDefault(); state.view = t.dataset.nav; render(); return; }
+
+      // Onglets équipe
+      if(t.dataset.tab){ state.teamTab = t.dataset.tab; render(); return; }
+
+      // Déconnexion
+      if(t.id==='logout-btn'){ setCommercial('','','',''); render(); return; }
+
+      // Prospects
+      if(t.id==='btn-new-prospect'){ state.modal={type:'prospect',data:null}; render(); return; }
+      if(t.id==='btn-export-prospects'){ exportCSV(DB.prospects,['dateMiseEnRelation','nom','prenom','adresse','telephone','besoin','source','boutique','statut','commercial','notes'],'prospects_jericho.csv'); return; }
+      if(t.dataset.editProspect){ state.modal={type:'prospect',data:DB.prospects.find(p=>p.id===t.dataset.editProspect)||null}; render(); return; }
+      if(t.dataset.convertProspect){
+        const pr = DB.prospects.find(p=>p.id===t.dataset.convertProspect);
+        if(pr) state.modal={type:'client',data:{nom:pr.nom,prenom:pr.prenom||'',adresse:pr.adresse||'',telephone:pr.telephone||'',email:'',boutique:pr.boutique||'',notes:pr.notes||'',dateCreation:todayISO(),historique:[]},sourceProspectId:pr.id};
+        render(); return;
+      }
+      if(t.dataset.delProspect){
+        if(!confirm('Supprimer ce prospect ?')) return;
+        const id=t.dataset.delProspect;
+        try{ await apiDelete('prospects',id); DB.prospects=DB.prospects.filter(p=>p.id!==id); render(); showToast('Prospect supprimé.'); }catch(err){ showToast("Erreur, réessaie."); } return;
+      }
+
+      // Clients
+      if(t.id==='btn-new-client'){ state.modal={type:'client',data:null}; render(); return; }
+      if(t.dataset.viewClient){ state.modal={type:'client-view',data:DB.clients.find(c=>c.id===t.dataset.viewClient)||null}; render(); return; }
+      if(t.dataset.editClient){ state.modal={type:'client',data:DB.clients.find(c=>c.id===t.dataset.editClient)||null}; render(); return; }
+      if(t.dataset.delClient){
+        if(!confirm('Supprimer ce client ?')) return;
+        const id=t.dataset.delClient;
+        try{ await apiDelete('clients',id); DB.clients=DB.clients.filter(c=>c.id!==id); render(); showToast('Client supprimé.'); }catch(err){ showToast("Erreur, réessaie."); } return;
+      }
+
+      // SAV
+      if(t.id==='btn-new-sav'){ state.modal={type:'sav',data:null}; render(); return; }
+      if(t.dataset.editSav){ state.modal={type:'sav',data:DB.sav.find(s=>s.id===t.dataset.editSav)||null}; render(); return; }
+      if(t.dataset.delSav){
+        if(!confirm('Supprimer ce ticket ?')) return;
+        const id=t.dataset.delSav;
+        try{ await apiDelete('sav',id); DB.sav=DB.sav.filter(s=>s.id!==id); render(); showToast('Ticket supprimé.'); }catch(err){ showToast("Erreur, réessaie."); } return;
+      }
+
+      // Ventes
+      if(t.id==='btn-new-vente'){ state.modal={type:'vente',data:null}; render(); return; }
+      if(t.id==='btn-export-ventes'){ exportCSV(DB.ventes,['dateMiseEnRelation','nom','prenom','adresse','telephone','typeArticle','businessUnit','gestionnaire','apporteurAffaire','assurance','prixVenteTotalSansRemise','remise','avance','dateRdv','commentaire'],'ventes_jericho.csv'); return; }
+      if(t.dataset.editVente){ state.modal={type:'vente',data:DB.ventes.find(v=>v.id===t.dataset.editVente)||null}; render(); return; }
+      if(t.dataset.delVente){
+        if(!confirm('Supprimer cette vente ?')) return;
+        const id=t.dataset.delVente;
+        try{ await apiDelete('ventes',id); DB.ventes=DB.ventes.filter(v=>v.id!==id); render(); showToast('Vente supprimée.'); }catch(err){ showToast("Erreur, réessaie."); } return;
+      }
+
+      // Stock
+      if(t.id==='btn-new-stock'){ state.modal={type:'stock',data:null}; render(); return; }
+      if(t.id==='btn-export-stock'){ exportCSV(DB.stock,['reference','designation','categorie','boutique','quantite','prixUnitaire','seuilAlerte'],'stock_jericho.csv'); return; }
+      if(t.dataset.editStock){ state.modal={type:'stock',data:DB.stock.find(s=>s.id===t.dataset.editStock)||null}; render(); return; }
+      if(t.dataset.delStock){
+        if(!confirm('Supprimer cet article ?')) return;
+        const id=t.dataset.delStock;
+        try{ await apiDelete('stock',id); DB.stock=DB.stock.filter(s=>s.id!==id); render(); showToast('Article supprimé.'); }catch(err){ showToast("Erreur, réessaie."); } return;
+      }
+
+      // Admin utilisateurs
+      if(t.id==='btn-new-user'){ state.modal={type:'user',data:null}; render(); return; }
+      if(t.dataset.editUser){ const u=USERS_CACHE.find(x=>x.id===t.dataset.editUser); state.modal={type:'user',data:u}; render(); return; }
+      if(t.dataset.toggleUser){
+        const u=USERS_CACHE.find(x=>x.id===t.dataset.toggleUser);
+        if(!u) return;
+        const ns=u.actif==='oui'?'non':'oui';
+        if(!confirm(`${ns==='non'?'Désactiver':'Réactiver'} le compte de ${u.nom} ?`)) return;
+        u.actif=ns;
+        try{ await saveUser(u); render(); showToast(`Compte ${u.nom} ${ns==='oui'?'activé':'désactivé'}.`); }catch(err){ showToast("Erreur, réessaie."); } return;
+      }
+
+      // Modal
+      if(t.id==='modal-cancel'||t.id==='modal-backdrop'){ state.modal=null; render(); return; }
+    });
+  }
   document.querySelectorAll('[data-edit-prospect]').forEach(el=>el.addEventListener('click', ()=>{
     const item = DB.prospects.find(p=>p.id===el.dataset.editProspect);
     state.modal={type:'prospect', data:item}; render();
@@ -1786,64 +1870,23 @@ function attachGlobalEvents(){
     };
     render();
   }));
+  // Filtres (restent ici car bindFilter écoute les inputs, pas les boutons)
   bindFilter('f-prospect-q', v=>state.filters.prospects.q=v, 'input');
   bindFilter('f-prospect-statut', v=>state.filters.prospects.statut=v, 'change');
   bindFilter('f-prospect-boutique', v=>state.filters.prospects.boutique=v, 'change');
-
-  // Clients
-  bindClick('btn-new-client', ()=>{ state.modal={type:'client', data:null}; render(); });
-  document.querySelectorAll('[data-view-client]').forEach(el=>el.addEventListener('click', ()=>{
-    const item = DB.clients.find(c=>c.id===el.dataset.viewClient);
-    state.modal={type:'client-view', data:item}; render();
-  }));
-  document.querySelectorAll('[data-del-client]').forEach(el=>el.addEventListener('click', async ()=>{
-    if(!confirm('Supprimer ce client ?')) return;
-    const id = el.dataset.delClient;
-    try{
-      await apiDelete('clients', id);
-      DB.clients = DB.clients.filter(c=>c.id!==id);
-      render(); showToast('Client supprimé.');
-    }catch(e){ showToast("Erreur de suppression, réessaie."); }
-  }));
   bindFilter('f-client-q', v=>state.filters.clients.q=v, 'input');
   bindFilter('f-client-boutique', v=>state.filters.clients.boutique=v, 'change');
-
-  // SAV
-  bindClick('btn-new-sav', ()=>{ state.modal={type:'sav', data:null}; render(); });
-  document.querySelectorAll('[data-edit-sav]').forEach(el=>el.addEventListener('click', ()=>{
-    const item = DB.sav.find(t=>t.id===el.dataset.editSav);
-    state.modal={type:'sav', data:item}; render();
-  }));
-  document.querySelectorAll('[data-del-sav]').forEach(el=>el.addEventListener('click', async ()=>{
-    if(!confirm('Supprimer ce ticket SAV ?')) return;
-    const id = el.dataset.delSav;
-    try{
-      await apiDelete('sav', id);
-      DB.sav = DB.sav.filter(t=>t.id!==id);
-      render(); showToast('Ticket supprimé.');
-    }catch(e){ showToast("Erreur de suppression, réessaie."); }
-  }));
   bindFilter('f-sav-q', v=>state.filters.sav.q=v, 'input');
   bindFilter('f-sav-statut', v=>state.filters.sav.statut=v, 'change');
   bindFilter('f-sav-boutique', v=>state.filters.sav.boutique=v, 'change');
+  bindFilter('f-vente-q', v=>state.filters.ventes.q=v, 'input');
+  bindFilter('f-vente-boutique', v=>state.filters.ventes.boutique=v, 'change');
+  bindFilter('f-vente-type', v=>state.filters.ventes.typeArticle=v, 'change');
+  bindFilter('f-stock-q', v=>state.filters.stock.q=v, 'input');
+  bindFilter('f-stock-boutique', v=>state.filters.stock.boutique=v, 'change');
+  bindFilter('f-stock-categorie', v=>state.filters.stock.categorie=v, 'change');
 
-  // Gestion comptes (Admin)
-  bindClick('btn-new-user', ()=>{ state.modal={type:'user', data:null}; render(); });
-  document.querySelectorAll('[data-edit-user]').forEach(el=>el.addEventListener('click', ()=>{
-    const u = USERS_CACHE.find(x=>x.id===el.dataset.editUser);
-    state.modal={type:'user', data:u}; render();
-  }));
-  document.querySelectorAll('[data-toggle-user]').forEach(el=>el.addEventListener('click', async ()=>{
-    const u = USERS_CACHE.find(x=>x.id===el.dataset.toggleUser);
-    if(!u) return;
-    const newStatus = u.actif==='oui' ? 'non' : 'oui';
-    if(!confirm(`${newStatus==='non'?'Désactiver':'Réactiver'} le compte de ${u.nom} ?`)) return;
-    u.actif = newStatus;
-    try{ await saveUser(u); render(); showToast(`Compte ${u.nom} ${newStatus==='oui'?'activé':'désactivé'}.`); }
-    catch(e){ showToast("Erreur d'enregistrement, réessaie."); }
-  }));
-
-  // Autocomplete sur les formulaires ouverts
+  // Autocomplete
   setTimeout(()=>{
     setupAutocomplete('s-nom', getClientSuggestions, (s)=>{
       const el = document.getElementById('s-nom'); if(el) el.value = `${s.nom} ${s.prenom}`.trim();
@@ -1857,41 +1900,6 @@ function attachGlobalEvents(){
       const bu = document.getElementById('v-bu'); if(bu && s.boutique) bu.value = s.boutique;
     });
   }, 100);
-  bindClick('btn-export-ventes', ()=>exportCSV(DB.ventes, ['dateMiseEnRelation','nom','prenom','adresse','telephone','typeArticle','businessUnit','gestionnaire','apporteurAffaire','assurance','prixVenteTotalSansRemise','remise','avance','dateRdv','commentaire'], 'ventes_jericho.csv'));
-  bindClick('btn-new-vente', ()=>{ state.modal={type:'vente', data:null}; render(); });
-  document.querySelectorAll('[data-edit-vente]').forEach(el=>el.addEventListener('click', ()=>{
-    const item = DB.ventes.find(v=>v.id===el.dataset.editVente);
-    state.modal={type:'vente', data:item}; render();
-  }));
-  document.querySelectorAll('[data-del-vente]').forEach(el=>el.addEventListener('click', async ()=>{
-    if(!confirm('Supprimer cette vente ?')) return;
-    const id = el.dataset.delVente;
-    try{
-      await apiDelete('ventes', id);
-      DB.ventes = DB.ventes.filter(v=>v.id!==id);
-      render(); showToast('Vente supprimée.');
-    }catch(e){ showToast("Erreur de suppression, réessaie."); }
-  }));
-  bindFilter('f-vente-q', v=>state.filters.ventes.q=v, 'input');
-  bindFilter('f-vente-boutique', v=>state.filters.ventes.boutique=v, 'change');
-  bindFilter('f-vente-type', v=>state.filters.ventes.typeArticle=v, 'change');
-
-  // Stock
-  bindClick('btn-new-stock', ()=>{ state.modal={type:'stock', data:null}; render(); });
-  bindClick('btn-export-stock', ()=>exportCSV(DB.stock, ['reference','designation','categorie','boutique','quantite','prixUnitaire','seuilAlerte'], 'stock_jericho.csv'));
-  document.querySelectorAll('[data-edit-stock]').forEach(el=>el.addEventListener('click', ()=>{
-    const item = DB.stock.find(s=>s.id===el.dataset.editStock);
-    state.modal={type:'stock', data:item}; render();
-  }));
-  document.querySelectorAll('[data-del-stock]').forEach(el=>el.addEventListener('click', async ()=>{
-    if(!confirm('Supprimer cet article ?')) return;
-    const id = el.dataset.delStock;
-    try{
-      await apiDelete('stock', id);
-      DB.stock = DB.stock.filter(s=>s.id!==id);
-      render(); showToast('Article supprimé.');
-    }catch(e){ showToast("Erreur de suppression, réessaie."); }
-  }));
   bindFilter('f-stock-q', v=>state.filters.stock.q=v, 'input');
   bindFilter('f-stock-boutique', v=>state.filters.stock.boutique=v, 'change');
   bindFilter('f-stock-categorie', v=>state.filters.stock.categorie=v, 'change');
