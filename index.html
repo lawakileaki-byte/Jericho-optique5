@@ -1038,6 +1038,7 @@ function statutBadge(statut, kind){
 function renderProspects(){
   const f = state.filters.prospects;
   let rows = DB.prospects.filter(p=>{
+    if(!isAdmin() && p.commercial !== state.commercial) return false;
     if(f.statut && p.statut!==f.statut) return false;
     if(f.boutique && p.boutique!==f.boutique) return false;
     if(f.q){
@@ -1048,9 +1049,11 @@ function renderProspects(){
     return true;
   }).sort((a,b)=>(b.dateMiseEnRelation||'').localeCompare(a.dateMiseEnRelation||''));
 
+  const titreProspects = isAdmin() ? 'Tous les prospects' : `Mes prospects — ${escapeHtml(state.commercial)}`;
+
   return `
   <div class="main-head">
-    <div><h2>Prospects</h2><p>Base Jéricho : collecte et suivi des personnes mises en relation avec la boutique, avant qu'elles deviennent clientes.</p></div>
+    <div><h2>Prospects</h2><p>${titreProspects}</p></div>
     <button class="btn-sm" id="btn-new-prospect">+ Nouveau prospect</button>
   </div>
 
@@ -1210,7 +1213,9 @@ function venteReste(v){
 
 function renderVentes(){
   const f = state.filters.ventes;
+  // Un commercial ne voit que ses propres ventes
   let rows = DB.ventes.filter(v=>{
+    if(!isAdmin() && v.commercial !== state.commercial && v.gestionnaire !== state.commercial) return false;
     if(f.boutique && v.businessUnit!==f.boutique) return false;
     if(f.typeArticle && v.typeArticle!==f.typeArticle) return false;
     if(f.q){
@@ -1223,10 +1228,11 @@ function renderVentes(){
 
   const caTotal = rows.reduce((a,v)=>a+venteTotal(v),0);
   const resteTotal = rows.reduce((a,v)=>a+venteReste(v),0);
+  const titre = isAdmin() ? 'Toutes les ventes' : `Mes ventes — ${escapeHtml(state.commercial)}`;
 
   return `
   <div class="main-head">
-    <div><h2>Ventes</h2><p>Dossier de vente complet : article, assurance, prescription, tarification et RDV.</p></div>
+    <div><h2>Ventes</h2><p>${titre}</p></div>
     <button class="btn-sm" id="btn-new-vente">+ Nouvelle vente</button>
   </div>
 
