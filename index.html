@@ -2947,7 +2947,7 @@ function attachGlobalEvents(){
       if(t.dataset.tab){ state.teamTab = t.dataset.tab; render(); return; }
 
       // Déconnexion
-      if(t.id==='logout-btn'){ setCommercial('','','',''); render(); return; }
+      if(t.id==='btn-logout'||t.id==='logout-btn'){ setCommercial('','','',''); render(); return; }
 
       // Prospects
       if(t.id==='btn-new-prospect'){ state.modal={type:'prospect',data:null}; render(); return; }
@@ -2992,7 +2992,9 @@ function attachGlobalEvents(){
         const v = DB.ventes.find(x=>x.id===t.dataset.viewVenteClient);
         if(v){ state.modal={type:'client-view', data:{nom:v.nom||'', prenom:v.prenom||'', telephone:v.telephone||'', adresse:v.adresse||'', boutique:v.businessUnit||'', id:''}}; render(); } return;
       }
-      if(t.id==='btn-export-ventes'){ exportCSV(DB.ventes,['dateMiseEnRelation','nom','prenom','adresse','telephone','typeArticle','businessUnit','gestionnaire','apporteurAffaire','assurance','prixVenteTotalSansRemise','remise','avance','dateRdv','commentaire'],'ventes_jericho.csv'); return; }
+      // Ventes
+      if(t.id==='btn-new-vente'){ state.modal={type:'vente',data:null}; render(); return; }
+      if(t.id==='btn-export-ventes'){ exportCSV(DB.ventes,['dateMiseEnRelation','civilite','nom','prenom','adresse','telephone','typeArticle','businessUnit','gestionnaire','saisePar','assurance','prixVenteTotalSansRemise','remise','avance','dateRdv','commentaire'],'ventes_jericho.csv'); return; }
       if(t.dataset.editVente){ state.modal={type:'vente',data:DB.ventes.find(v=>v.id===t.dataset.editVente)||null}; render(); return; }
       if(t.dataset.delVente){
         if(!confirm('Supprimer cette vente ?')) return;
