@@ -654,7 +654,7 @@ function appelation(nom, prenom, civilite){
   const c = civilite || '';
   const p = prenom || '';
   const n = nom || '';
-  if(c && n) return `${c} ${n}`;
+  if(c && n) return `${c} ${n.toUpperCase()}`;
   if(p) return p;
   return n;
 }
@@ -2943,7 +2943,7 @@ function attachGlobalEvents(){
       if(t.dataset.editProspect){ state.modal={type:'prospect',data:DB.prospects.find(p=>p.id===t.dataset.editProspect)||null}; render(); return; }
       if(t.dataset.convertProspect){
         const pr = DB.prospects.find(p=>p.id===t.dataset.convertProspect);
-        if(pr) state.modal={type:'client',data:{nom:pr.nom,prenom:pr.prenom||'',adresse:pr.adresse||'',telephone:pr.telephone||'',email:'',boutique:pr.boutique||'',notes:pr.notes||'',dateCreation:todayISO(),historique:[]},sourceProspectId:pr.id};
+        if(pr) state.modal={type:'client',data:{nom:pr.nom,prenom:pr.prenom||'',civilite:pr.civilite||'',adresse:pr.adresse||'',telephone:pr.telephone||'',email:'',boutique:pr.boutique||'',notes:pr.notes||'',dateCreation:todayISO(),historique:[]},sourceProspectId:pr.id};
         render(); return;
       }
       if(t.dataset.delProspect){
@@ -3032,7 +3032,7 @@ function attachGlobalEvents(){
     if(!p) return;
     state.modal = {
       type:'client',
-      data: { id:'', nom:p.nom, prenom:p.prenom||'', adresse:p.adresse||'', telephone:p.telephone||'', email:'', boutique:p.boutique, notes:p.notes||'' },
+      data: { id:'', nom:p.nom, prenom:p.prenom||'', civilite:p.civilite||'', adresse:p.adresse||'', telephone:p.telephone||'', email:'', boutique:p.boutique, notes:p.notes||'' },
       sourceProspectId: p.id
     };
     render();
