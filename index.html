@@ -652,11 +652,11 @@ const MOIS = ["Janvier","Février","Mars","Avril","Mai","Juin","Juillet","Août"
 // Génère l'appellation personnalisée : "Madame Traoré", "Monsieur Ali", ou juste "Fatou"
 function appelation(nom, prenom, civilite){
   const c = civilite || '';
-  const p = prenom || '';
-  const n = nom || '';
-  if(c && n) return `${c} ${n.toUpperCase()}`;
-  if(p) return p;
-  return n;
+  const n = (nom || '').trim();
+  const p = (prenom || '').trim();
+  if(c && n) return `${c} ${n}`;
+  if(n) return n;
+  return p;
 }
 
 // Génère le message WhatsApp avec la bonne formule de politesse
@@ -3329,7 +3329,6 @@ function attachModalEvents(){
       assurance: val('v-assurance'), assuranceAutre: val('v-assurance-autre').trim(),
       apporteurAffaire: val('v-apporteur'), apporteurAffaireAutre: val('v-apporteur-autre').trim(),
       gestionnaire: val('v-gestionnaire'), gestionnaireAutre: val('v-gestionnaire-autre').trim(),
-      saisePar: data?.saisePar || state.commercial, // figé à la création, jamais modifié
       odSphere: val('v-od-sphere').trim(), odCylindre: val('v-od-cyl').trim(), odAxe: val('v-od-axe').trim(), odAddition: val('v-od-add').trim(),
       ogSphere: val('v-og-sphere').trim(), ogCylindre: val('v-og-cyl').trim(), ogAxe: val('v-og-axe').trim(), ogAddition: val('v-og-add').trim(),
       laboratoire: val('v-labo'), laboratoireAutre: val('v-labo-autre').trim(),
@@ -3341,7 +3340,8 @@ function attachModalEvents(){
       prixVenteTotalSansRemise: val('v-prix-total'), remise: val('v-remise'),
       avance: val('v-avance'), montantBonNonEncaisse: val('v-bon'),
       dateRdv: val('v-rdv'), commentaire: val('v-commentaire').trim(),
-      commercial: val('v-commercial').trim() || state.commercial,
+      saisePar: (existing && existing.saisePar) || state.commercial,
+      commercial: (existing && existing.commercial) || state.commercial,
       dateCreation: (existing && existing.dateCreation) || todayISO()
     };
     const idx = DB.ventes.findIndex(v=>v.id===id);
