@@ -582,6 +582,8 @@ function isAdmin(){ return state.role==='admin'; }
 
 const BOUTIQUES = ["Patte d'Oie","Tanghin"];
 const SOURCES = ["Passage en boutique","Page Facebook","Recommandation","Appel téléphonique","Autre"];
+const MOIS = ["Janvier","Février","Mars","Avril","Mai","Juin","Juillet","Août","Septembre","Octobre","Novembre","Décembre"];
+const MOIS_COURTS = ["jan","fev","mar","avr","mai","jun","jul","aou","sep","oct","nov","dec"];
 const STATUTS_PROSPECT = ["Nouveau","Contacté","Rendez-vous pris","Converti en client","Perdu"];
 const TYPES_SAV = ["Réparation","Garantie","Réclamation","Ajustement / réglage","Autre"];
 const STATUTS_SAV = ["Ouvert","En cours","En attente de pièce","Résolu"];
@@ -978,7 +980,7 @@ function renderDashboard(){
   const recentSav = [...s].sort((a,b)=>(b.dateOuverture||'').localeCompare(a.dateOuverture||'')).slice(0,5);
   const recentVentes = [...v].sort((a,b)=>(b.dateMiseEnRelation||'').localeCompare(a.dateMiseEnRelation||'')).slice(0,5);
 
-  const titre = iAmAdmin ? 'Vue d\'ensemble — Jéricho Optique' : `Mes chiffres — ${escapeHtml(myName)}`;
+  const titre = iAmAdmin ? 'Vue d\'ensemble — Jéricho Optique' : `Mes chiffres : ${escapeHtml(myName)}`;
   const sousTitre = iAmAdmin ? 'Toutes les boutiques et tous les commerciaux.' : `Vos ventes et prospects personnels.`;
 
   return `
@@ -1054,7 +1056,7 @@ function renderProspects(){
     return true;
   }).sort((a,b)=>(b.dateMiseEnRelation||'').localeCompare(a.dateMiseEnRelation||''));
 
-  const titreProspects = isAdmin() ? 'Tous les prospects' : `Mes prospects — ${escapeHtml(state.commercial)}`;
+  const titreProspects = isAdmin() ? 'Tous les prospects' : `Mes prospects : ${escapeHtml(state.commercial)}`;
 
   return `
   <div class="main-head">
@@ -1233,7 +1235,7 @@ function renderVentes(){
 
   const caTotal = rows.reduce((a,v)=>a+venteTotal(v),0);
   const resteTotal = rows.reduce((a,v)=>a+venteReste(v),0);
-  const titre = isAdmin() ? 'Toutes les ventes' : `Mes ventes — ${escapeHtml(state.commercial)}`;
+  const titre = isAdmin() ? 'Toutes les ventes' : `Mes ventes : ${escapeHtml(state.commercial)}`;
 
   return `
   <div class="main-head">
@@ -1629,12 +1631,69 @@ function venteForm(data){
    ========================================================= */
 function renderAdminComptes(){
   const users = USERS_CACHE;
+  const nowM = new Date();
+  const moisIdx = nowM.getMonth();
+  const annee = nowM.getFullYear();
+  const debutMois = `${annee}-${String(moisIdx+1).padStart(2,'0')}-01`;
+  const finMois = nowM.toISOString().slice(0,10);
+  const debutAnnee = `${annee}-01-01`;
+
+  // Suivi objectifs par commercial
+  const commerciaux = users.filter(u=>u.role==='commercial'&&u.actif==='oui');
+  const suiviRows = commerciaux.map(u=>{
+    let objMensuels = {};
+    if(u.objectifsMensuels){ try{ objMensuels = JSON.parse(u.objectifsMensuels); }catch(e){} }
+    const objMois = Number(objMensuels[moisIdx])||0;
+    const objAnnuel = Number(u.objectifAnnuel)||0;
+    const ventes = DB.ventes.filter(v=>v.commercial===u.nom||v.gestionnaire===u.nom);
+    const caMois = ventes.filter(v=>{const d=(v.dateMiseEnRelation||'').slice(0,10);return d>=debutMois&&d<=finMois;}).reduce((a,v)=>a+venteTotal(v),0);
+    const caAnnee = ventes.filter(v=>{const d=(v.dateMiseEnRelation||'').slice(0,10);return d>=debutAnnee&&d<=finMois;}).reduce((a,v)=>a+venteTotal(v),0);
+    const pctM = objMois>0?Math.round(caMois/objMois*100):null;
+    const pctA = objAnnuel>0?Math.round(caAnnee/objAnnuel*100):null;
+    const statut = pctM===null?'non défini':pctM>=100?'Atteint':pctM>=70?'En bonne voie':'En retard';
+    const statBadge = {'Atteint':'b-done','En bonne voie':'b-rdv','En retard':'b-lost','non défini':'b-new'}[statut]||'b-new';
+    return `<tr>
+      <td><b>${escapeHtml(u.nom)}</b></td>
+      <td style="text-align:right;">${objMois>0?fmtFCFA(objMois):'<span style="color:#ccc;">—</span>'}</td>
+      <td style="text-align:right;font-weight:600;">${fmtFCFA(caMois)}</td>
+      <td style="text-align:right;"><span style="font-weight:700;color:${pctM>=100?'#2d7a3a':pctM>=70?'#E8A93B':pctM!==null?'#A6402E':'#ccc'};">${pctM!==null?pctM+'%':'—'}</span></td>
+      <td><span class="badge ${statBadge}">${statut}</span></td>
+      <td style="text-align:right;">${objAnnuel>0?fmtFCFA(objAnnuel):'<span style="color:#ccc;">—</span>'}</td>
+      <td style="text-align:right;font-weight:600;">${fmtFCFA(caAnnee)}</td>
+      <td style="text-align:right;"><span style="font-weight:700;color:${pctA>=100?'#2d7a3a':pctA>=70?'#68AAD1':pctA!==null?'#A6402E':'#ccc'};">${pctA!==null?pctA+'%':'—'}</span></td>
+      <td><button class="icon-btn" data-edit-user="${u.id}">Modifier objectifs</button></td>
+    </tr>`;
+  }).join('');
+
   return `
   <div class="main-head">
-    <div><h2>Gestion des comptes</h2><p>Créez, modifiez ou désactivez les comptes de l'équipe. Les changements sont enregistrés dans Google Sheets.</p></div>
+    <div><h2>Gestion des comptes</h2><p>Comptes, objectifs et suivi de l'équipe en temps réel.</p></div>
     <button class="btn-sm" id="btn-new-user">+ Nouveau compte</button>
   </div>
+
+  ${commerciaux.length ? `
+  <div class="panel">
+    <h3 style="margin-bottom:14px;">Suivi des objectifs — ${MOIS[moisIdx]} ${annee}</h3>
+    <div style="overflow-x:auto;"><table>
+      <thead>
+        <tr>
+          <th>Commercial</th>
+          <th style="text-align:right;">Obj. mois</th>
+          <th style="text-align:right;">CA mois</th>
+          <th style="text-align:right;">%</th>
+          <th>Statut</th>
+          <th style="text-align:right;">Obj. annuel</th>
+          <th style="text-align:right;">CA année</th>
+          <th style="text-align:right;">%</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>${suiviRows}</tbody>
+    </table></div>
+  </div>` : ''}
+
   <div class="panel" style="padding:0;">
+    <div style="padding:14px 20px;border-bottom:1px solid var(--line);"><b>Tous les comptes</b></div>
     <table>
       <thead><tr><th>Identifiant</th><th>Nom affiché</th><th>Rôle</th><th>Boutique</th><th>Statut</th><th>Dernière connexion</th><th></th></tr></thead>
       <tbody>
@@ -1679,11 +1738,15 @@ function renderMonCompte(){
    FORMULAIRES ADMIN UTILISATEURS
    ========================================================= */
 function userForm(data){
-  const d = data || { id:'', nom:'', motDePasse:'', role:'commercial', boutique:BOUTIQUES[0], actif:'oui' };
+  const d = data || { id:'', nom:'', motDePasse:'', role:'commercial', boutique:BOUTIQUES[0], actif:'oui', objectifAnnuel:'', objectifsMensuels:'' };
   const isEdit = !!data;
+  let objMensuels = {};
+  if(d.objectifsMensuels){ try{ objMensuels = JSON.parse(d.objectifsMensuels); }catch(e){} }
+
   return `
   <h3>${isEdit?'Modifier le compte':'Nouveau compte commercial'}</h3>
   <form id="form-user">
+    <div class="form-section-title">Informations du compte</div>
     <div class="form-grid">
       <div class="field"><label>Identifiant (login)</label><input required id="u-id" value="${escapeAttr(d.id)}" ${isEdit?'readonly style="background:#f5f4f0;"':''} placeholder="ex: aminata" autocomplete="off"></div>
       <div class="field"><label>Nom affiché</label><input required id="u-nom" value="${escapeAttr(d.nom)}" placeholder="ex: Aminata"></div>
@@ -1692,6 +1755,26 @@ function userForm(data){
       <div class="field"><label>Boutique principale</label><select id="u-boutique"><option value="Toutes" ${d.boutique==='Toutes'?'selected':''}>Toutes</option>${BOUTIQUES.map(b=>`<option ${d.boutique===b?'selected':''}>${b}</option>`).join('')}</select></div>
       <div class="field"><label>Statut</label><select id="u-actif"><option value="oui" ${d.actif==='oui'?'selected':''}>Actif</option><option value="non" ${d.actif==='non'?'selected':''}>Inactif</option></select></div>
     </div>
+
+    <div class="form-section-title" style="margin-top:20px;">Objectifs de vente</div>
+    <div class="form-grid">
+      <div class="field full">
+        <label>Objectif annuel (FCFA)</label>
+        <input type="number" min="0" step="50000" id="u-obj-annuel" value="${escapeAttr(d.objectifAnnuel||'')}" placeholder="ex: 18 000 000">
+      </div>
+      <div class="field full" style="background:var(--sand-light);border-radius:8px;padding:14px;">
+        <label style="display:block;margin-bottom:12px;font-weight:600;">Objectifs mensuels <span style="font-weight:400;color:#9a998f;font-size:12px;">— la directrice peut mettre à jour chaque mois</span></label>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;">
+          ${MOIS.map((m,i)=>`
+            <div>
+              <label style="font-size:11px;font-weight:700;color:#E8A93B;text-transform:uppercase;letter-spacing:.05em;">${m}</label>
+              <input type="number" min="0" step="50000" id="u-obj-m${i}" value="${escapeAttr(String(objMensuels[i]||''))}" placeholder="0">
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    </div>
+
     <div class="modal-actions">
       <button type="button" class="btn-sm btn-ghost" id="modal-cancel">Annuler</button>
       <button type="submit" class="btn-sm">${isEdit?'Enregistrer':'Créer le compte'}</button>
@@ -1995,6 +2078,81 @@ function renderAnalyse(){
       <div style="text-align:right;font-size:13px;margin-top:4px;"><b>Taux de conversion : <span style="color:#E8A93B;">${txConv}%</span></b></div>
     </div>
   </div>
+
+  <!-- OBJECTIFS -->
+  ${(()=>{
+    const user = USERS_CACHE.find(u=>u.id===state.userId);
+    if(!user) return '';
+    const objAnnuel = Number(user.objectifAnnuel)||0;
+    let objMensuels = {};
+    if(user.objectifsMensuels){ try{ objMensuels = JSON.parse(user.objectifsMensuels); }catch(e){} }
+    const nowM = new Date();
+    const moisIdx = nowM.getMonth();
+    const annee = nowM.getFullYear();
+    const objMois = Number(objMensuels[moisIdx])||0;
+    const debutMois = `${annee}-${String(moisIdx+1).padStart(2,'0')}-01`;
+    const finMois = nowM.toISOString().slice(0,10);
+    const vMois = mesVentes.filter(v=>{const d=(v.dateMiseEnRelation||'').slice(0,10);return d>=debutMois&&d<=finMois;});
+    const caMois = vMois.reduce((a,v)=>a+venteTotal(v),0);
+    const debutAnnee = `${annee}-01-01`;
+    const vAnnee = mesVentes.filter(v=>{const d=(v.dateMiseEnRelation||'').slice(0,10);return d>=debutAnnee&&d<=finMois;});
+    const caAnnee = vAnnee.reduce((a,v)=>a+venteTotal(v),0);
+    const pctMois = objMois>0 ? Math.min(Math.round(caMois/objMois*100),100) : null;
+    const pctAnnee = objAnnuel>0 ? Math.min(Math.round(caAnnee/objAnnuel*100),100) : null;
+    const moisEcoules = moisIdx+1;
+    const projAnnee = moisEcoules>0 ? Math.round(caAnnee/moisEcoules*12) : 0;
+
+    function pBar(pct, col='#E8A93B'){
+      const c = pct>=100?'#2d7a3a':pct>=70?col:'#A6402E';
+      return `<div style="background:#f0efe9;border-radius:8px;height:16px;overflow:hidden;margin:8px 0;"><div style="background:${c};height:100%;width:${pct}%;border-radius:8px;"><span style="display:${pct>=15?'block':'none'};text-align:right;padding-right:8px;line-height:16px;font-size:11px;font-weight:700;color:#fff;">${pct}%</span></div></div>`;
+    }
+
+    if(!objAnnuel && !objMois) return `<div class="panel" style="border:2px dashed #ddd;text-align:center;padding:28px;color:#9a998f;"><div style="font-size:32px;margin-bottom:8px;">🎯</div><div style="font-weight:600;margin-bottom:4px;">Aucun objectif défini pour l'instant</div><div style="font-size:13px;">La directrice peut fixer vos objectifs dans Gestion comptes.</div></div>`;
+
+    const lignesMois = MOIS.map((m,i)=>{
+      const obj = Number(objMensuels[i])||0;
+      const deb = `${annee}-${String(i+1).padStart(2,'0')}-01`;
+      const finM = i===11?`${annee}-12-31`:`${annee}-${String(i+2).padStart(2,'0')}-01`;
+      const caM = mesVentes.filter(v=>{const d=(v.dateMiseEnRelation||'').slice(0,10);return d>=deb&&d<finM;}).reduce((a,v)=>a+venteTotal(v),0);
+      const pct = obj>0?Math.round(caM/obj*100):null;
+      const estFutur = i>moisIdx, estCourant = i===moisIdx;
+      return `<tr style="${estCourant?'background:#FFF9EF;font-weight:600;':''}${estFutur?'opacity:.45;':''}">
+        <td>${m}${estCourant?' <span style="background:#E8A93B;color:#fff;font-size:10px;padding:1px 6px;border-radius:10px;">EN COURS</span>':''}</td>
+        <td style="text-align:right;">${obj>0?fmtFCFA(obj):'<span style="color:#ccc;">—</span>'}</td>
+        <td style="text-align:right;">${estFutur?'<span style="color:#ccc;">—</span>':fmtFCFA(caM)}</td>
+        <td style="text-align:right;">${pct!==null&&!estFutur?`<span style="color:${pct>=100?'#2d7a3a':pct>=70?'#E8A93B':'#A6402E'};font-weight:700;">${pct}%</span>`:'<span style="color:#ccc;">—</span>'}</td>
+      </tr>`;
+    }).join('');
+
+    return `<div class="panel">
+      <h3 style="margin-bottom:16px;">🎯 Mes objectifs ${annee}</h3>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px;">
+        <div style="background:var(--sand-light);border-radius:10px;padding:16px;">
+          <div style="font-size:11px;font-weight:700;color:#E8A93B;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;">${MOIS[moisIdx]} ${annee}</div>
+          <div style="display:flex;justify-content:space-between;align-items:baseline;">
+            <span style="font-size:22px;font-weight:700;">${fmtFCFA(caMois)}</span>
+            <span style="font-size:12px;color:#888;">/ ${objMois>0?fmtFCFA(objMois):'non défini'}</span>
+          </div>
+          ${pctMois!==null?pBar(pctMois):''}
+          ${pctMois!==null?`<div style="font-size:12px;color:#666;">${pctMois>=100?'Objectif mensuel atteint ✅':fmtFCFA(objMois-caMois)+' restants'}</div>`:''}
+        </div>
+        <div style="background:var(--sand-light);border-radius:10px;padding:16px;">
+          <div style="font-size:11px;font-weight:700;color:#68AAD1;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;">Année ${annee}</div>
+          <div style="display:flex;justify-content:space-between;align-items:baseline;">
+            <span style="font-size:22px;font-weight:700;">${fmtFCFA(caAnnee)}</span>
+            <span style="font-size:12px;color:#888;">/ ${objAnnuel>0?fmtFCFA(objAnnuel):'non défini'}</span>
+          </div>
+          ${pctAnnee!==null?pBar(pctAnnee,'#68AAD1'):''}
+          ${objAnnuel>0?`<div style="font-size:12px;color:#666;">Projection au rythme actuel : <b style="color:${projAnnee>=objAnnuel?'#2d7a3a':'#A6402E'};">${fmtFCFA(projAnnee)}</b></div>`:''}
+        </div>
+      </div>
+      <h4 style="margin-bottom:10px;font-size:13px;color:#555;">Suivi mensuel ${annee}</h4>
+      <div style="overflow-x:auto;"><table>
+        <thead><tr><th>Mois</th><th style="text-align:right;">Objectif</th><th style="text-align:right;">Réalisé</th><th style="text-align:right;">Atteinte</th></tr></thead>
+        <tbody>${lignesMois}</tbody>
+      </table></div>
+    </div>`;
+  })()}
   `;
 }
 
@@ -2112,7 +2270,7 @@ function imprimerRecu(v){
   <div class="stamp">Signature et cachet</div>
 
   <div class="footer">
-    Jéricho Optique — « De la beauté dans votre regard ! »<br>
+    Jéricho Optique, « De la beauté dans votre regard ! »<br>
     Merci de votre confiance. Conservez ce reçu pour tout SAV ou garantie.<br>
     Document généré le ${new Date().toLocaleDateString('fr-FR')}
   </div>
@@ -2595,12 +2753,22 @@ function attachModalEvents(){
     if(!isEdit && USERS_CACHE.find(u=>u.id===newId)){ showToast(`L'identifiant "${newId}" existe déjà.`); return; }
 
     const existing = isEdit ? {...USERS_CACHE.find(u=>u.id===origId)} : null;
+
+    // Récupérer les objectifs mensuels depuis les 12 champs
+    const objMensuels = {};
+    MOIS.forEach((_,i)=>{
+      const v = document.getElementById(`u-obj-m${i}`)?.value;
+      if(v && Number(v)>0) objMensuels[i] = Number(v);
+    });
+
     const userRow = {
       id: isEdit ? origId : newId,
       nom, role, boutique, actif,
       motDePasse: pwd || (existing ? existing.motDePasse : ''),
       dateCreation: existing ? existing.dateCreation : todayISO(),
-      derniereConnexion: existing ? existing.derniereConnexion : ''
+      derniereConnexion: existing ? existing.derniereConnexion : '',
+      objectifAnnuel: document.getElementById('u-obj-annuel')?.value || '',
+      objectifsMensuels: JSON.stringify(objMensuels)
     };
     try{
       await saveUser(userRow);
