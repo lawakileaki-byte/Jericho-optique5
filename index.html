@@ -1034,7 +1034,7 @@ function renderDashboard(){
   const debutMois = `${annee}-${String(moisIdx+1).padStart(2,'0')}-01`;
   const debutAnnee = `${annee}-01-01`;
 
-  const mesVentes = iAmAdmin ? DB.ventes : DB.ventes.filter(v=>v.commercial===myName||v.gestionnaire===myName);
+  const mesVentes = iAmAdmin ? DB.ventes : DB.ventes.filter(v=>venteGestionnaireNom(v)===myName);
   const myProspects = iAmAdmin ? p : p.filter(x=>x.commercial===myName);
 
   const ventesMois = mesVentes.filter(v=>(v.dateMiseEnRelation||'').slice(0,10)>=debutMois);
@@ -1336,6 +1336,12 @@ function venteReste(v){
   const bon = (v.assurance && v.assurance !== "Pas d'assurance") ? (Number(v.montantBonNonEncaisse)||0) : 0;
   return Math.max(venteTotal(v) - avance - bon, 0);
 }
+// Le gestionnaire (et non le commercial de permanence qui a fait la saisie) est la personne
+// à qui le chiffre d'affaires de la vente doit être attribué.
+function venteGestionnaireNom(v){
+  if(!v) return '';
+  return v.gestionnaire==='Autre' ? (v.gestionnaireAutre||'') : (v.gestionnaire||'');
+}
 
 function renderVentes(){
   const f = state.filters.ventes;
@@ -1356,7 +1362,7 @@ function renderVentes(){
   else if(f.periode==='tout') debutPeriode = '';
 
   let rows = DB.ventes.filter(v=>{
-    if(!isAdmin() && v.commercial !== state.commercial && v.gestionnaire !== state.commercial) return false;
+    if(!isAdmin() && venteGestionnaireNom(v) !== state.commercial) return false;
     if(debutPeriode && (v.dateMiseEnRelation||'').slice(0,10) < debutPeriode) return false;
     if(f.boutique && v.businessUnit!==f.boutique) return false;
     if(f.typeArticle && v.typeArticle!==f.typeArticle) return false;
@@ -1668,7 +1674,7 @@ function clientView(client){
   <!-- Historique ventes -->
   <h4 style="font-size:13px;font-weight:700;margin-bottom:8px;">Historique complet (${ventesClient.length} achat${ventesClient.length>1?'s':''})</h4>
   ${ventesClient.length?`<div style="overflow-x:auto;"><table>
-    <thead><tr><th>Date</th><th>Type</th><th>Montant</th><th>Remise</th><th>Avance</th><th>Reste</th><th>RDV</th><th>Commercial</th><th></th></tr></thead>
+    <thead><tr><th>Date</th><th>Type</th><th>Montant</th><th>Remise</th><th>Avance</th><th>Reste</th><th>RDV</th><th>Gestionnaire</th><th></th></tr></thead>
     <tbody>
       ${ventesClient.map(v=>`<tr>
         <td style="white-space:nowrap;">${fmtDate(v.dateMiseEnRelation)}</td>
@@ -1678,7 +1684,7 @@ function clientView(client){
         <td>${v.avance&&Number(v.avance)>0?fmtFCFA(Number(v.avance)):'—'}</td>
         <td>${venteReste(v)>0?`<span style="color:#A6402E;font-weight:600;">${fmtFCFA(venteReste(v))}</span>`:'<span style="color:#2d7a3a;">Soldé</span>'}</td>
         <td style="white-space:nowrap;">${fmtDate(v.dateRdv)}</td>
-        <td style="font-size:12px;">${escapeHtml(v.commercial||v.gestionnaire||'')}</td>
+        <td style="font-size:12px;">${escapeHtml(venteGestionnaireNom(v)||'')}</td>
         <td><button class="icon-btn" data-print-vente="${v.id}">🖨️</button></td>
       </tr>`).join('')}
     </tbody>
@@ -1795,7 +1801,7 @@ function venteForm(data){
       <div id="sec-staff" class="form-grid" style="display:none;grid-column:1/-1;">
         <div class="field"><label>Apporteur d'affaire</label><select id="v-apporteur">${STAFF.map(s=>`<option ${d.apporteurAffaire===s?'selected':''}>${s}</option>`).join('')}</select></div>
         <div class="field" id="wrap-apporteur-autre" style="display:none;"><label>Précisez</label><input id="v-apporteur-autre" value="${escapeAttr(d.apporteurAffaireAutre)}"></div>
-        <div class="field"><label>Gestionnaire</label><select id="v-gestionnaire">${STAFF.map(s=>`<option ${d.gestionnaire===s?'selected':''}>${s}</option>`).join('')}</select></div>
+        <div class="field"><label>Gestionnaire <span style="font-weight:400;color:#9a998f;">— en boutique, modifiable</span></label><select id="v-gestionnaire">${STAFF.map(s=>`<option ${d.gestionnaire===s?'selected':''}>${s}</option>`).join('')}</select></div>
         <div class="field" id="wrap-gestionnaire-autre" style="display:none;"><label>Précisez</label><input id="v-gestionnaire-autre" value="${escapeAttr(d.gestionnaireAutre)}"></div>
       </div>
 
@@ -1856,7 +1862,7 @@ function venteForm(data){
 
       <div class="form-section-title">Suivi</div>
       <div class="field"><label>Date de RDV</label><input type="date" id="v-rdv" value="${escapeAttr(d.dateRdv)}"></div>
-      <div class="field"><label>Commercial</label><input id="v-commercial" value="${escapeAttr(d.commercial||state.commercial)}"></div>
+      <div class="field"><label>Commercial de permanence <span style="font-weight:400;color:#9a998f;">🔒 saisi par</span></label><input id="v-commercial-display" value="${escapeAttr(d.commercial||state.commercial)}" disabled style="background:#f1f0eb;color:#8a8980;cursor:not-allowed;"><input type="hidden" id="v-commercial" value="${escapeAttr(d.commercial||state.commercial)}"></div>
       <div class="field full"><label>Commentaire</label><textarea id="v-commentaire">${escapeHtml(d.commentaire)}</textarea></div>
     </div>
     <div class="modal-actions">
@@ -1886,7 +1892,7 @@ function renderAdminComptes(){
     if(u.objectifsMensuels){ try{ objMensuels = JSON.parse(u.objectifsMensuels); }catch(e){} }
     const objMois = Number(objMensuels[moisIdx])||0;
     const objAnnuel = Number(u.objectifAnnuel)||0;
-    const ventes = DB.ventes.filter(v=>v.commercial===u.nom||v.gestionnaire===u.nom);
+    const ventes = DB.ventes.filter(v=>venteGestionnaireNom(v)===u.nom);
     const caMois = ventes.filter(v=>{const d=(v.dateMiseEnRelation||'').slice(0,10);return d>=debutMois&&d<=finMois;}).reduce((a,v)=>a+venteTotal(v),0);
     const caAnnee = ventes.filter(v=>{const d=(v.dateMiseEnRelation||'').slice(0,10);return d>=debutAnnee&&d<=finMois;}).reduce((a,v)=>a+venteTotal(v),0);
     const pctM = objMois>0?Math.round(caMois/objMois*100):null;
@@ -2088,10 +2094,10 @@ function renderJournee(){
   const heure = now.getHours();
   const salut = heure<12 ? 'Bonjour' : heure<18 ? 'Bon après-midi' : 'Bonsoir';
 
-  // Mes ventes (filtrées par commercial)
+  // Mes ventes (filtrées par gestionnaire — c'est lui qui est crédité du dossier)
   const mesVentes = isAdmin()
     ? DB.ventes
-    : DB.ventes.filter(v=>v.commercial===nom||v.gestionnaire===nom);
+    : DB.ventes.filter(v=>venteGestionnaireNom(v)===nom);
 
   // Mes prospects
   const mesProspects = isAdmin()
@@ -2327,10 +2333,10 @@ function renderAnalyse(){
   const debut = startOf(periode);
   const fin = periode==='custom' ? dateFin : today;
 
-  // Filtre par commercial si non admin
+  // Filtre par gestionnaire si non admin (le CA est crédité au gestionnaire, pas au commercial de permanence)
   const mesVentes = isAdmin()
     ? DB.ventes
-    : DB.ventes.filter(v=>v.commercial===state.commercial||v.gestionnaire===state.commercial);
+    : DB.ventes.filter(v=>venteGestionnaireNom(v)===state.commercial);
   const mesProspects = isAdmin()
     ? DB.prospects
     : DB.prospects.filter(p=>p.commercial===state.commercial);
@@ -2376,11 +2382,11 @@ function renderAnalyse(){
   ventesP.forEach(v=>{const d=(v.dateMiseEnRelation||'').slice(0,10); jours[d]=(jours[d]||0)+venteTotal(v);});
   const joursArr = Object.entries(jours).sort((a,b)=>a[0].localeCompare(b[0]));
 
-  // CA par commercial (admin seulement)
+  // CA par gestionnaire (admin seulement) — le CA est attribué au gestionnaire, pas au commercial de permanence
   const parCommercial = {};
   if(isAdmin()){
     DB.ventes.filter(v=>{const d=(v.dateMiseEnRelation||'').slice(0,10);return d>=debut&&d<=fin;})
-      .forEach(v=>{const c=v.commercial||v.gestionnaire||'?'; parCommercial[c]=(parCommercial[c]||0)+venteTotal(v);});
+      .forEach(v=>{const c=venteGestionnaireNom(v)||'?'; parCommercial[c]=(parCommercial[c]||0)+venteTotal(v);});
   }
 
   // Assurances
@@ -2525,7 +2531,7 @@ function renderAnalyse(){
   <!-- CLASSEMENT COMMERCIAUX (admin seulement) -->
   ${isAdmin() && Object.keys(parCommercial).length ? `
   <div class="panel">
-    <h3 style="margin-bottom:14px;">CA par commercial sur la période</h3>
+    <h3 style="margin-bottom:14px;">CA par gestionnaire sur la période</h3>
     ${svgCommerciaux(Object.entries(parCommercial).sort((a,b)=>b[1]-a[1]))}
   </div>` : ''}
 
@@ -2704,7 +2710,7 @@ function imprimerRecu(v){
   <div class="meta">
     <span>📅 Date : <b>${fmtDate(v.dateMiseEnRelation)}</b></span>
     <span>🧾 Référence : <b>${v.id?.slice(-6)||'—'}</b></span>
-    <span>👤 Commercial : <b>${escapeHtml(v.commercial||v.gestionnaire||'—')}</b></span>
+    <span>👤 Gestionnaire : <b>${escapeHtml(venteGestionnaireNom(v)||'—')}</b></span>
   </div>
 
   <div class="client-box">
@@ -3175,7 +3181,7 @@ function attachModalEvents(){
       prixVenteTotalSansRemise: val('v-prix-total'), remise: val('v-remise'),
       avance: val('v-avance'), montantBonNonEncaisse: val('v-bon'),
       dateRdv: val('v-rdv'), commentaire: val('v-commentaire').trim(),
-      commercial: val('v-commercial').trim() || state.commercial,
+      commercial: (existing && existing.commercial) || state.commercial,
       dateCreation: (existing && existing.dateCreation) || todayISO()
     };
     const idx = DB.ventes.findIndex(v=>v.id===id);
