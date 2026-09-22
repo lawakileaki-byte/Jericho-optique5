@@ -3098,6 +3098,12 @@ function attachGlobalEvents(){
         render(); return;
       }
       if(t.id==='btn-export-ventes'){ exportCSV(DB.ventes,['dateMiseEnRelation','civilite','nom','prenom','adresse','telephone','typeArticle','businessUnit','gestionnaire','saisePar','assurance','prixVenteTotalSansRemise','remise','avance','dateRdv','commentaire'],'ventes_jericho.csv'); return; }
+      if(t.id==='btn-new-vente'){ state.modal={type:'vente',data:null}; render(); return; }
+      if(t.dataset.editVente){ state.modal={type:'vente',data:DB.ventes.find(v=>v.id===t.dataset.editVente)||null}; render(); return; }
+      if(t.dataset.delVente){
+        if(!confirm('Supprimer cette vente ?')) return;
+        try{ await apiDelete('ventes',t.dataset.delVente); DB.ventes=DB.ventes.filter(v=>v.id!==t.dataset.delVente); render(); showToast('Vente supprimée.'); }catch(e){ showToast('Erreur, réessaie.'); } return;
+      }
       if(t.dataset.editVente){ state.modal={type:'vente',data:DB.ventes.find(v=>v.id===t.dataset.editVente)||null}; render(); return; }
       if(t.dataset.delVente){
         if(!confirm('Supprimer cette vente ?')) return;
