@@ -627,6 +627,7 @@ function setCommercial(nom, role, userId, boutique){
   state.userId = userId;
   state.boutique = boutique || '';
   state.teamTab = role==='admin' ? 'dashboard' : 'journee';
+  state.view = nom ? 'equipe' : 'accueil'; // connexion → equipe, déconnexion → accueil
   try{
     sessionStorage.setItem('jo_commercial', nom);
     sessionStorage.setItem('jo_role', role);
@@ -3483,8 +3484,9 @@ function exportCSV(rows, fields, filename){
   document.getElementById('app').innerHTML = `<div style="display:flex;align-items:center;justify-content:center;height:100vh;font-family:'IBM Plex Sans',sans-serif;color:#8a8980;">Chargement de Jéricho Optique…</div>`;
   await loadAll();
   await loadUsers();
-  // Si déjà connecté via sessionStorage, définir le bon onglet d'accueil
+  // Si déjà connecté via sessionStorage, restaurer la vue et l'onglet
   if(state.commercial && state.role){
+    state.view = 'equipe';
     state.teamTab = state.role==='admin' ? 'dashboard' : 'journee';
   }
   render();
