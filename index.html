@@ -988,17 +988,12 @@ function renderTeam(){
   <div class="team-wrap">
     <div class="team-shell">
       <div class="sidebar">
-        <div class="who"><div class="lbl">Connecté(e) en tant que</div><div class="name">${escapeHtml(state.commercial)}</div><div class="role-badge ${isAdmin()?'is-admin':''}">${isAdmin()?'Directrice · Admin':'Commercial(e)'}</div></div>
-        ${isAdmin() ? `<button data-tab="dashboard" class="${state.teamTab==='dashboard'?'active':''}">Tableau de bord</button>` : ''}
-        <button data-tab="journee" class="${state.teamTab==='journee'?'active':''}">☀️ Ma journée</button>
-        <button data-tab="prospects" class="${state.teamTab==='prospects'?'active':''}">Prospects</button>
-        <button data-tab="clients" class="${state.teamTab==='clients'?'active':''}">Clients &amp; SAV</button>
-        <button data-tab="ventes" class="${state.teamTab==='ventes'?'active':''}">Ventes</button>
-        <button data-tab="stock" class="${state.teamTab==='stock'?'active':''}">Stock</button>
-        <button data-tab="analyse" class="${state.teamTab==='analyse'?'active':''}">📊 Analyse</button>
-        ${isAdmin() ? `<button data-tab="admin" class="${state.teamTab==='admin'?'active':''}">Gestion comptes</button>` : ''}
-        <button data-tab="moncompte" class="${state.teamTab==='moncompte'?'active':''}">Mon compte</button>
-        <div class="out"><button id="btn-logout">Changer de compte</button></div>
+        <div class="who">
+          <div class="lbl">Connecté(e) en tant que</div>
+          <div class="name">${escapeHtml(state.commercial)}</div>
+          <div class="role-badge ${isAdmin()?'is-admin':''}">${isAdmin()?'Directrice · Admin':'Commercial(e)'}</div>
+          <button id="btn-logout" style="margin-top:8px;width:100%;padding:6px 8px;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);color:#9a998f;border-radius:6px;font-size:12px;cursor:pointer;text-align:center;">⇄ Changer de compte</button>
+        </div></div>
       </div>
       <div class="main" id="main-panel">
         ${renderTeamTab()}
@@ -3061,7 +3056,18 @@ function bindClick(id, fn){ const el=document.getElementById(id); if(el) el.addE
 function bindFilter(id, setter, evt){
   const el = document.getElementById(id);
   if(!el) return;
-  el.addEventListener(evt, ()=>{ setter(el.value); render(); document.getElementById(id).focus(); });
+  el.addEventListener(evt, ()=>{
+    setter(el.value);
+    const val = el.value;
+    const pos = el.selectionStart;
+    render();
+    // Remettre le focus et la position du curseur après render
+    const newEl = document.getElementById(id);
+    if(newEl){
+      newEl.focus();
+      if(evt==='input') try{ newEl.setSelectionRange(pos, pos); }catch(e){}
+    }
+  });
 }
 
 function attachVenteConditionalLogic(){
