@@ -611,10 +611,11 @@ const LOGO_SONAR = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQQAAACICAMAAA
    ========================================================= */
 function render(){
   const app = document.getElementById('app');
-  app.innerHTML = `
-    ${renderTopbar()}
-    ${state.view==='accueil' ? renderPublic() : renderTeam()}
-  `;
+  if(state.view==='accueil'){
+    app.innerHTML = renderPublic();
+  } else {
+    app.innerHTML = `${renderTopbar()}${renderTeam()}`;
+  }
   attachGlobalEvents();
   if(state.modal) renderModal();
 }
@@ -2847,6 +2848,7 @@ function exportCSV(rows, fields, filename){
 (async function init(){
   document.getElementById('app').innerHTML = `<div style="display:flex;align-items:center;justify-content:center;height:100vh;font-family:'IBM Plex Sans',sans-serif;color:#8a8980;">Chargement de Jéricho Optique…</div>`;
   await loadAll();
+  await loadUsers();
   render();
 })();
 </script>
