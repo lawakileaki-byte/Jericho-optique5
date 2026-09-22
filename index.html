@@ -963,68 +963,129 @@ function renderTeamTab(){
    --------------------------------------------------------- */
 function renderDashboard(){
   const p = DB.prospects, c = DB.clients, s = DB.sav, st = DB.stock;
-
-  // Admin voit tout, commercial voit uniquement ses propres données
   const myName = state.commercial;
   const iAmAdmin = isAdmin();
-  const v = iAmAdmin ? DB.ventes : DB.ventes.filter(x => x.commercial === myName || x.gestionnaire === myName);
-  const myProspects = iAmAdmin ? p : p.filter(x => x.commercial === myName);
+  const now = new Date();
+  const today = now.toISOString().slice(0,10);
+  const annee = now.getFullYear();
+  const moisIdx = now.getMonth();
+  const debutMois = `${annee}-${String(moisIdx+1).padStart(2,'0')}-01`;
+  const debutAnnee = `${annee}-01-01`;
+
+  const mesVentes = iAmAdmin ? DB.ventes : DB.ventes.filter(v=>v.commercial===myName||v.gestionnaire===myName);
+  const myProspects = iAmAdmin ? p : p.filter(x=>x.commercial===myName);
+
+  const ventesMois = mesVentes.filter(v=>(v.dateMiseEnRelation||'').slice(0,10)>=debutMois);
+  const ventesAnnee = mesVentes.filter(v=>(v.dateMiseEnRelation||'').slice(0,10)>=debutAnnee);
+  const caMois = ventesMois.reduce((a,v)=>a+venteTotal(v),0);
+  const caAnnee = ventesAnnee.reduce((a,v)=>a+venteTotal(v),0);
+  const resteTotal = mesVentes.reduce((a,v)=>a+venteReste(v),0);
+  const ventesNonSoldees = mesVentes.filter(v=>venteReste(v)>0);
+
+  // Portefeuille — dernière vente par téléphone
+  const dvt = {};
+  mesVentes.forEach(v=>{
+    const tel = String(v.telephone||'').replace(/\s/g,'');
+    if(!tel) return;
+    const d = (v.dateMiseEnRelation||'').slice(0,10);
+    if(!dvt[tel] || d > dvt[tel].date)
+      dvt[tel] = {date:d, nom:`${v.nom||''} ${v.prenom||''}`.trim(), telephone:tel, type:v.typeArticle||''};
+  });
+  const tousClients = Object.values(dvt);
+  const nbClients = tousClients.length;
+
+  const d18 = new Date(now); d18.setMonth(d18.getMonth()-18);
+  const d24 = new Date(now); d24.setMonth(d24.getMonth()-24);
+  const d10 = new Date(now); d10.setMonth(d10.getMonth()-10);
+  const s18 = d18.toISOString().slice(0,10);
+  const s24 = d24.toISOString().slice(0,10);
+  const s10 = d10.toISOString().slice(0,10);
+
+  const clients24 = tousClients.filter(c=>c.date<=s24 && c.type.toLowerCase().includes('monture'));
+  const clients18 = tousClients.filter(c=>c.date<=s18 && c.date>s24 && c.type.toLowerCase().includes('monture'));
+  const clientsLentilles = tousClients.filter(c=>c.date<=s10 && c.type.toLowerCase().includes('lentille'));
 
   const totalProspects = myProspects.length;
   const convertis = myProspects.filter(x=>x.statut==='Converti en client').length;
   const taux = totalProspects ? Math.round(convertis/totalProspects*100) : 0;
   const savOuverts = s.filter(x=>x.statut!=='Résolu').length;
-  const valeurStock = st.reduce((a,x)=>a+(Number(x.quantite)||0)*(Number(x.prixUnitaire)||0),0);
-  const stockBas = st.filter(x=>Number(x.quantite) <= Number(x.seuilAlerte||0)).length;
-  const caTotal = v.reduce((a,x)=>a+venteTotal(x),0);
-  const resteAPayerTotal = v.reduce((a,x)=>a+venteReste(x),0);
+  const stockBas = st.filter(x=>Number(x.quantite)<=Number(x.seuilAlerte||0)).length;
 
+  const user = USERS_CACHE.find(u=>u.id===state.userId);
+  let objMensuels = {};
+  if(user?.objectifsMensuels){ try{ objMensuels=JSON.parse(user.objectifsMensuels); }catch(e){} }
+  const objMois = Number(objMensuels[moisIdx])||0;
+  const pctMois = objMois>0 ? Math.min(Math.round(caMois/objMois*100),100) : null;
+
+  const recentVentes = [...mesVentes].sort((a,b)=>(b.dateMiseEnRelation||'').localeCompare(a.dateMiseEnRelation||'')).slice(0,5);
   const recentProspects = [...myProspects].sort((a,b)=>(b.dateMiseEnRelation||'').localeCompare(a.dateMiseEnRelation||'')).slice(0,5);
   const recentSav = [...s].sort((a,b)=>(b.dateOuverture||'').localeCompare(a.dateOuverture||'')).slice(0,5);
-  const recentVentes = [...v].sort((a,b)=>(b.dateMiseEnRelation||'').localeCompare(a.dateMiseEnRelation||'')).slice(0,5);
 
-  const titre = iAmAdmin ? 'Vue d\'ensemble — Jéricho Optique' : `Mes chiffres : ${escapeHtml(myName)}`;
-  const sousTitre = iAmAdmin ? 'Toutes les boutiques et tous les commerciaux.' : `Vos ventes et prospects personnels.`;
+  function kpi(label, val, sub, warn, action){
+    return `<div class="kpi ${warn?'warn':''}" ${action?`style="cursor:pointer;" onclick="${action}"`:''}><div class="lbl">${label}</div><div class="val" style="font-size:${String(val).length>9?'16px':'22px'};">${val}</div><div class="sub">${sub}${action?` <span style="color:#E8A93B;font-size:10px;">→ détail</span>`:''}</div></div>`;
+  }
+
+  function listeRelance(clients, titre, couleur, msgWA){
+    if(!clients.length) return '';
+    return `<div class="panel" style="border-left:4px solid ${couleur};">
+      <h3 style="color:${couleur};margin-bottom:10px;">${titre} (${clients.length})</h3>
+      ${clients.slice(0,8).map(cl=>{
+        const num = cl.telephone.startsWith('226')?cl.telephone:'226'+cl.telephone;
+        const msg = encodeURIComponent(msgWA.replace('{nom}',cl.nom));
+        return `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--line);flex-wrap:wrap;gap:8px;">
+          <div><b style="font-size:13px;">${escapeHtml(cl.nom)}</b><span style="font-size:11px;color:#888;margin-left:8px;">Dernier achat : ${fmtDate(cl.date)}</span></div>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <span style="font-size:12px;color:#555;">${escapeHtml(cl.telephone)}</span>
+            <a href="https://wa.me/${num}?text=${msg}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:5px;background:#25D366;color:#fff;text-decoration:none;padding:5px 10px;border-radius:6px;font-size:11px;font-weight:600;">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="#fff"><path d="M12.04 2c-5.46 0-9.91 4.45-9.91 9.91 0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38c1.45.79 3.08 1.21 4.74 1.21 5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.816 9.816 0 0 0 12.04 2m.01 1.67c2.2 0 4.26.86 5.82 2.42a8.225 8.225 0 0 1 2.41 5.83c0 4.54-3.7 8.23-8.24 8.23-1.48 0-2.93-.39-4.19-1.15l-.3-.17-3.12.82.83-3.04-.2-.32a8.188 8.188 0 0 1-1.26-4.38c.01-4.54 3.7-8.24 8.25-8.24M8.53 7.33c-.16 0-.43.06-.66.31-.22.25-.87.86-.87 2.07 0 1.22.89 2.39 1 2.56.14.17 1.76 2.67 4.25 3.73.59.27 1.05.42 1.41.53.59.19 1.13.16 1.56.1.48-.07 1.46-.6 1.67-1.18.21-.58.21-1.07.14-1.18-.07-.11-.25-.17-.53-.31-.28-.14-1.66-.82-1.92-.91-.26-.09-.44-.14-.63.14-.19.28-.72.91-.88 1.09-.16.18-.32.2-.6.07-.28-.14-1.19-.44-2.26-1.4-.83-.75-1.4-1.67-1.56-1.95-.17-.28-.02-.44.12-.58.13-.13.28-.34.42-.51.14-.17.18-.29.28-.47.09-.19.05-.35-.02-.49-.07-.14-.63-1.52-.88-2.07-.24-.53-.48-.46-.66-.47-.16-.01-.35-.01-.53-.01Z"/></svg>
+              WhatsApp
+            </a>
+          </div>
+        </div>`;
+      }).join('')}
+      ${clients.length>8?`<p style="font-size:12px;color:#E8A93B;margin-top:8px;text-align:center;">+${clients.length-8} autres clients dans la liste complète</p>`:''}
+    </div>`;
+  }
 
   return `
-  <div class="main-head">
-    <div><h2>Tableau de bord</h2><p>${sousTitre}</p></div>
-  </div>
+  <div class="main-head"><div><h2>Tableau de bord</h2><p>${iAmAdmin?'Vue globale toutes boutiques.':'Vos indicateurs personnels.'}</p></div></div>
 
+  <div style="font-size:11px;font-weight:700;color:#E8A93B;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;">Activité commerciale</div>
   <div class="kpi-row">
-    <div class="kpi"><div class="lbl">${iAmAdmin ? 'CA total' : 'Mon CA'}</div><div class="val" style="font-size:24px;">${fmtFCFA(caTotal)}</div><div class="sub">${v.length} vente(s)</div></div>
-    <div class="kpi ${resteAPayerTotal>0?'warn':''}"><div class="lbl">Reste à payer</div><div class="val" style="font-size:24px;">${fmtFCFA(resteAPayerTotal)}</div><div class="sub">Sur mes ventes</div></div>
-    <div class="kpi"><div class="lbl">${iAmAdmin ? 'Prospects total' : 'Mes prospects'}</div><div class="val">${totalProspects}</div><div class="sub">${convertis} converti(s)</div></div>
-    <div class="kpi"><div class="lbl">Taux de conversion</div><div class="val">${taux}%</div><div class="sub">Prospects → clients</div></div>
-    ${iAmAdmin ? `
-    <div class="kpi ${savOuverts>0?'warn':''}"><div class="lbl">Tickets SAV ouverts</div><div class="val">${savOuverts}</div><div class="sub">Sur ${s.length} au total</div></div>
-    <div class="kpi ${stockBas>0?'warn':''}"><div class="lbl">Articles sous le seuil</div><div class="val">${stockBas}</div><div class="sub">Valeur stock : ${fmtFCFA(valeurStock)}</div></div>
-    ` : ''}
+    ${kpi('CA '+MOIS[moisIdx], fmtFCFA(caMois), ventesMois.length+' vente(s)', false, "state.teamTab='ventes';render();")}
+    ${kpi('CA '+annee, fmtFCFA(caAnnee), ventesAnnee.length+' vente(s)', false, "state.teamTab='analyse';state.analysePeriode='annee';render();")}
+    ${kpi('Reste à encaisser', fmtFCFA(resteTotal), ventesNonSoldees.length+' vente(s) en attente', resteTotal>0, "state.teamTab='ventes';render();")}
+    ${pctMois!==null?`<div class="kpi" style="cursor:pointer;" onclick="state.teamTab='analyse';render();"><div class="lbl">Objectif ${MOIS[moisIdx]}</div><div class="val" style="font-size:20px;">${pctMois}%</div><div style="background:#f0efe9;border-radius:4px;height:6px;margin:4px 0;overflow:hidden;"><div style="background:${pctMois>=100?'#2d7a3a':'#E8A93B'};height:100%;width:${pctMois}%;"></div></div><div class="sub">${fmtFCFA(caMois)} / ${fmtFCFA(objMois)} <span style="color:#E8A93B;font-size:10px;">→ détail</span></div></div>`:''}
   </div>
 
-  <div class="panel">
-    <h3>${iAmAdmin ? 'Dernières ventes' : 'Mes dernières ventes'}</h3>
-    ${renderMiniTable(recentVentes, ['Client','Type','Montant','Boutique','Date'], r=>[
-      escapeHtml(`${r.nom||''} ${r.prenom||''}`.trim()), escapeHtml(r.typeArticle||''), fmtFCFA(venteTotal(r)), escapeHtml(r.businessUnit||''), fmtDate(r.dateMiseEnRelation)
-    ])}
+  <div style="font-size:11px;font-weight:700;color:#68AAD1;text-transform:uppercase;letter-spacing:.06em;margin:16px 0 8px;">Portefeuille clients</div>
+  <div class="kpi-row">
+    ${kpi('Total clients', nbClients, 'ayant acheté au moins une fois', false, "state.teamTab='clients';render();")}
+    ${kpi('Renouvellement urgent', clients24.length, 'lunettes +24 mois', clients24.length>0, null)}
+    ${kpi('À relancer bientôt', clients18.length, 'lunettes 18-24 mois', clients18.length>0, null)}
+    ${kpi('Lentilles à renouveler', clientsLentilles.length, 'achat lentilles +10 mois', clientsLentilles.length>0, null)}
+    ${kpi('Taux de conversion', taux+'%', convertis+' convertis / '+totalProspects+' prospects', false, "state.teamTab='prospects';render();")}
+    ${iAmAdmin?kpi('SAV ouverts', savOuverts, 'tickets en cours', savOuverts>0, "state.teamTab='clients';render();"):''}
   </div>
 
-  <div class="panel">
-    <h3>${iAmAdmin ? 'Derniers prospects' : 'Mes derniers prospects'}</h3>
-    ${renderMiniTable(recentProspects, ['Nom','Boutique','Statut','Date'], r=>[
-      escapeHtml(`${r.nom} ${r.prenom||''}`.trim()), escapeHtml(r.boutique), statutBadge(r.statut,'prospect'), fmtDate(r.dateMiseEnRelation)
-    ])}
+  ${listeRelance(clients24,'🔴 Renouvellement urgent — lunettes de plus de 2 ans','#A6402E','Bonjour {nom}, cela fait plus de 2 ans que vous avez vos lunettes. Chez Jéricho Optique, nous vous recommandons un contrôle de vue. Souhaitez-vous prendre rendez-vous ?')}
+  ${listeRelance(clients18,'🟡 À relancer — lunettes entre 18 et 24 mois','#E8A93B','Bonjour {nom}, vos lunettes auront bientôt 2 ans. Chez Jéricho Optique, nous vous invitons à anticiper votre renouvellement. Voulez-vous en discuter ?')}
+  ${listeRelance(clientsLentilles,'🔵 Renouvellement lentilles','#68AAD1','Bonjour {nom}, il est temps de renouveler vos lentilles de contact. Contactez-nous à Jéricho Optique pour votre prochaine commande.')}
+
+  <div class="panel"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;"><h3 style="margin:0;">${iAmAdmin?'Dernières ventes':'Mes dernières ventes'}</h3><button class="btn-sm btn-ghost" onclick="state.teamTab='ventes';render();">Voir tout →</button></div>
+    ${renderMiniTable(recentVentes,['Client','Type','Montant','Reste','Date'],r=>[escapeHtml(`${r.nom||''} ${r.prenom||''}`.trim()),escapeHtml(r.typeArticle||''),fmtFCFA(venteTotal(r)),venteReste(r)>0?`<span style="color:#A6402E;font-weight:600;">${fmtFCFA(venteReste(r))}</span>`:'<span style="color:#2d7a3a;">Soldé</span>',fmtDate(r.dateMiseEnRelation)])}
   </div>
 
-  ${iAmAdmin ? `
-  <div class="panel">
-    <h3>Derniers tickets SAV</h3>
-    ${renderMiniTable(recentSav, ['Client','Boutique','Type','Statut','Ouvert le'], r=>[
-      escapeHtml(r.clientNom||''), escapeHtml(r.boutique||''), escapeHtml(r.typeDemande||''), statutBadge(r.statut,'sav'), fmtDate(r.dateOuverture)
-    ])}
-  </div>` : ''}
+  <div class="panel"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;"><h3 style="margin:0;">${iAmAdmin?'Derniers prospects':'Mes derniers prospects'}</h3><button class="btn-sm btn-ghost" onclick="state.teamTab='prospects';render();">Voir tout →</button></div>
+    ${renderMiniTable(recentProspects,['Nom','Boutique','Statut','Date'],r=>[escapeHtml(`${r.nom} ${r.prenom||''}`.trim()),escapeHtml(r.boutique),statutBadge(r.statut,'prospect'),fmtDate(r.dateMiseEnRelation)])}
+  </div>
+
+  ${iAmAdmin?`<div class="panel"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;"><h3 style="margin:0;">Derniers tickets SAV</h3><button class="btn-sm btn-ghost" onclick="state.teamTab='clients';render();">Voir tout →</button></div>
+    ${renderMiniTable(recentSav,['Client','Boutique','Type','Statut','Ouvert le'],r=>[escapeHtml(r.clientNom||''),escapeHtml(r.boutique||''),escapeHtml(r.typeDemande||''),statutBadge(r.statut,'sav'),fmtDate(r.dateOuverture)])}
+  </div>`:''}
   `;
 }
+
 
 function renderMiniTable(rows, headers, mapRow){
   if(!rows.length) return `<p style="color:#9a998f;font-size:13.5px;font-style:italic;">Rien à afficher pour l'instant.</p>`;
@@ -1440,35 +1501,122 @@ function clientForm(data){
 }
 
 function clientView(client){
-  const hist = client.historique || [];
-  return `
-  <h3>${escapeHtml(client.nom)} ${escapeHtml(client.prenom||'')}</h3>
-  <p style="font-size:13.5px;color:#6b6a63;margin-bottom:16px;">${escapeHtml(client.telephone||'—')} · ${escapeHtml(client.adresse||'adresse non renseignée')} · ${escapeHtml(client.boutique)} · client depuis le ${fmtDate(client.dateCreation)}</p>
-  ${client.notes ? `<p style="font-size:13.5px;background:var(--sand-light);padding:10px 12px;border-radius:8px;margin-bottom:16px;">${escapeHtml(client.notes)}</p>` : ''}
+  // Toutes les ventes de ce client par téléphone ou nom
+  const tel = String(client.telephone||'').replace(/\s/g,'');
+  const nom = (client.nom||'').toLowerCase();
+  const ventesClient = DB.ventes.filter(v=>{
+    const vt = String(v.telephone||'').replace(/\s/g,'');
+    return (tel && vt===tel) || (v.nom||'').toLowerCase()===nom;
+  }).sort((a,b)=>(b.dateMiseEnRelation||'').localeCompare(a.dateMiseEnRelation||''));
 
-  <h4 style="font-size:14px;margin-bottom:6px;">Historique d'achats</h4>
-  <div class="client-detail">
-    ${hist.length ? hist.map(h=>`
-      <div class="history-item">
-        <span>${escapeHtml(h.produit)} · <b>${fmtFCFA(h.montant)}</b></span>
-        <span class="d">${fmtDate(h.date)} · ${escapeHtml(h.boutique)}</span>
-      </div>`).join('') : `<p style="font-size:13px;color:#9a998f;font-style:italic;">Aucun achat enregistré.</p>`}
+  const savClient = DB.sav.filter(s=>{
+    const st = String(s.telephone||'').replace(/\s/g,'');
+    return (tel && st===tel) || (s.clientNom||'').toLowerCase()===nom;
+  }).sort((a,b)=>(b.dateOuverture||'').localeCompare(a.dateOuverture||''));
+
+  const caTotal = ventesClient.reduce((a,v)=>a+venteTotal(v),0);
+  const resteTotal = ventesClient.reduce((a,v)=>a+venteReste(v),0);
+  const derniereVente = ventesClient[0];
+  const premierAchat = ventesClient.length ? ventesClient[ventesClient.length-1] : null;
+
+  // Dernière prescription
+  const dernPresc = ventesClient.find(v=>v.odSphere||v.ogSphere);
+
+  // Ancienneté lunettes
+  let badgeRenouvellement = '';
+  if(derniereVente){
+    const now = new Date();
+    const last = new Date(derniereVente.dateMiseEnRelation||'');
+    const mois = Math.floor((now-last)/86400000/30);
+    if(mois>=24) badgeRenouvellement = `<span style="background:#A6402E;color:#fff;font-size:11px;padding:2px 8px;border-radius:10px;margin-left:8px;">Renouvellement urgent (${mois} mois)</span>`;
+    else if(mois>=18) badgeRenouvellement = `<span style="background:#E8A93B;color:#fff;font-size:11px;padding:2px 8px;border-radius:10px;margin-left:8px;">À relancer (${mois} mois)</span>`;
+  }
+
+  return `
+  <h3>${escapeHtml(client.nom)} ${escapeHtml(client.prenom||'')}${badgeRenouvellement}</h3>
+  <div style="display:flex;flex-wrap:wrap;gap:16px;margin-bottom:16px;">
+    <div style="font-size:13px;color:#555;">${tel?'📞 '+escapeHtml(tel):''}</div>
+    <div style="font-size:13px;color:#555;">${client.adresse?'📍 '+escapeHtml(client.adresse):''}</div>
+    <div style="font-size:13px;color:#555;">${client.boutique?'🏪 '+escapeHtml(client.boutique):''}</div>
   </div>
 
-  <h4 style="font-size:14px;margin:18px 0 8px;">Ajouter un achat</h4>
-  <form id="form-achat">
-    <div class="form-grid">
-      <div class="field full"><label>Produit</label><input required id="a-produit" placeholder="ex : Monture Ray-Ban + verres"></div>
-      <div class="field"><label>Montant (FCFA)</label><input required type="number" min="0" id="a-montant"></div>
-      <div class="field"><label>Boutique</label><select id="a-boutique">${BOUTIQUES.map(b=>`<option ${client.boutique===b?'selected':''}>${b}</option>`).join('')}</select></div>
+  <!-- KPIs client -->
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:20px;">
+    <div style="background:var(--sand-light);border-radius:10px;padding:12px;text-align:center;">
+      <div style="font-size:10px;font-weight:700;color:#E8A93B;text-transform:uppercase;margin-bottom:4px;">CA total</div>
+      <div style="font-size:18px;font-weight:700;">${fmtFCFA(caTotal)}</div>
+      <div style="font-size:11px;color:#888;">${ventesClient.length} achat(s)</div>
     </div>
-    <div class="modal-actions">
-      <button type="button" class="btn-sm btn-ghost" id="modal-cancel">Fermer</button>
-      <button type="submit" class="btn-sm">Ajouter l'achat</button>
+    ${resteTotal>0?`<div style="background:#fdf0ee;border-radius:10px;padding:12px;text-align:center;">
+      <div style="font-size:10px;font-weight:700;color:#A6402E;text-transform:uppercase;margin-bottom:4px;">Reste à payer</div>
+      <div style="font-size:18px;font-weight:700;color:#A6402E;">${fmtFCFA(resteTotal)}</div>
+    </div>`:''}
+    ${premierAchat?`<div style="background:var(--sand-light);border-radius:10px;padding:12px;text-align:center;">
+      <div style="font-size:10px;font-weight:700;color:#68AAD1;text-transform:uppercase;margin-bottom:4px;">Client depuis</div>
+      <div style="font-size:14px;font-weight:700;">${fmtDate(premierAchat.dateMiseEnRelation)}</div>
+    </div>`:''}
+    ${savClient.length?`<div style="background:var(--sand-light);border-radius:10px;padding:12px;text-align:center;">
+      <div style="font-size:10px;font-weight:700;color:#555;text-transform:uppercase;margin-bottom:4px;">Tickets SAV</div>
+      <div style="font-size:18px;font-weight:700;">${savClient.length}</div>
+      <div style="font-size:11px;color:#888;">${savClient.filter(s=>s.statut!=='Résolu').length} ouvert(s)</div>
+    </div>`:''}
+  </div>
+
+  <!-- Dernière prescription -->
+  ${dernPresc?`<div style="background:#EAF3FE;border-radius:8px;padding:12px 16px;margin-bottom:16px;border-left:3px solid #68AAD1;">
+    <div style="font-size:11px;font-weight:700;color:#68AAD1;text-transform:uppercase;margin-bottom:8px;">Dernière prescription (${fmtDate(dernPresc.dateMiseEnRelation)})</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12px;">
+      <div><b>Oeil droit (OD)</b><br>Sphère : ${escapeHtml(String(dernPresc.odSphere||'—'))} · Cylindre : ${escapeHtml(String(dernPresc.odCylindre||'—'))} · Axe : ${escapeHtml(String(dernPresc.odAxe||'—'))}${dernPresc.odAddition?` · Addition : ${escapeHtml(String(dernPresc.odAddition))}`:''}
+      </div>
+      <div><b>Oeil gauche (OG)</b><br>Sphère : ${escapeHtml(String(dernPresc.ogSphere||'—'))} · Cylindre : ${escapeHtml(String(dernPresc.ogCylindre||'—'))} · Axe : ${escapeHtml(String(dernPresc.ogAxe||'—'))}${dernPresc.ogAddition?` · Addition : ${escapeHtml(String(dernPresc.ogAddition))}`:''}
+      </div>
     </div>
-    <input type="hidden" id="a-client-id" value="${escapeAttr(client.id)}">
-  </form>`;
+    ${dernPresc.laboratoire?`<div style="margin-top:6px;font-size:12px;color:#555;">Laboratoire : <b>${escapeHtml(dernPresc.laboratoire)}</b>${dernPresc.caracteristiqueVerre?' · '+escapeHtml(dernPresc.caracteristiqueVerre):''}</div>`:''}
+  </div>`:''}
+
+  <!-- Historique ventes -->
+  <h4 style="font-size:13px;font-weight:700;margin-bottom:8px;">Historique des achats (${ventesClient.length})</h4>
+  ${ventesClient.length?`<div style="overflow-x:auto;"><table>
+    <thead><tr><th>Date</th><th>Type</th><th>Montant</th><th>Remise</th><th>Avance</th><th>Reste</th><th>RDV</th><th>Commercial</th><th></th></tr></thead>
+    <tbody>
+      ${ventesClient.map(v=>`<tr>
+        <td>${fmtDate(v.dateMiseEnRelation)}</td>
+        <td>${escapeHtml(v.typeArticle||'')}</td>
+        <td style="font-weight:600;">${fmtFCFA(venteTotal(v))}</td>
+        <td>${v.remise&&Number(v.remise)>0?fmtFCFA(Number(v.remise)):'—'}</td>
+        <td>${v.avance&&Number(v.avance)>0?fmtFCFA(Number(v.avance)):'—'}</td>
+        <td>${venteReste(v)>0?`<span style="color:#A6402E;font-weight:600;">${fmtFCFA(venteReste(v))}</span>`:'<span style="color:#2d7a3a;">Soldé</span>'}</td>
+        <td>${fmtDate(v.dateRdv)}</td>
+        <td style="font-size:12px;">${escapeHtml(v.commercial||v.gestionnaire||'')}</td>
+        <td><button class="icon-btn" data-print-vente="${v.id}">🖨️</button></td>
+      </tr>`).join('')}
+    </tbody>
+  </table></div>`
+  :`<p style="font-size:13px;color:#9a998f;font-style:italic;">Aucune vente enregistrée.</p>`}
+
+  <!-- Tickets SAV -->
+  ${savClient.length?`
+  <h4 style="font-size:13px;font-weight:700;margin:16px 0 8px;">Tickets SAV (${savClient.length})</h4>
+  <div style="overflow-x:auto;"><table>
+    <thead><tr><th>Date</th><th>Type</th><th>Description</th><th>Statut</th></tr></thead>
+    <tbody>
+      ${savClient.map(s=>`<tr>
+        <td>${fmtDate(s.dateOuverture)}</td>
+        <td>${escapeHtml(s.typeDemande||'')}</td>
+        <td style="font-size:12px;color:#555;">${escapeHtml((s.description||'').slice(0,60))}${(s.description||'').length>60?'…':''}</td>
+        <td>${statutBadge(s.statut,'sav')}</td>
+      </tr>`).join('')}
+    </tbody>
+  </table></div>`:''}
+
+  ${client.notes?`<div style="margin-top:16px;background:var(--sand-light);border-radius:8px;padding:12px 14px;font-size:13px;"><b>Notes :</b> ${escapeHtml(client.notes)}</div>`:''}
+
+  <div class="modal-actions" style="justify-content:flex-start;margin-top:20px;">
+    <button type="button" class="btn-sm btn-ghost" id="modal-cancel">Fermer</button>
+    <button type="button" class="btn-sm" onclick="state.modal={type:'client',data:DB.clients.find(c=>c.id==='${client.id}')};render();">Modifier la fiche</button>
+  </div>`;
 }
+
 
 function savForm(data){
   const d = data || { id:'', clientNom:'', telephone:'', boutique:BOUTIQUES[0], typeDemande:TYPES_SAV[0], description:'', statut:'Ouvert', commercial: state.commercial };
