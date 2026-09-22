@@ -508,6 +508,7 @@ function buildClientIndex(ventes){
       idx[key] = {
         key,
         telephone: normTel(v.telephone),
+        telephone2: v.telephone2||'',
         nom: v.nom||'',
         prenom: v.prenom||'',
         civilite: v.civilite||'',
@@ -1575,7 +1576,8 @@ function prospectForm(data){
       <div class="field"><label>Nom</label><input required id="p-nom" value="${escapeAttr(d.nom)}"></div>
       <div class="field"><label>Prénom</label><input id="p-prenom" value="${escapeAttr(d.prenom)}"></div>
       <div class="field full"><label>Adresse (résidence)</label><input id="p-adresse" value="${escapeAttr(d.adresse)}"></div>
-      <div class="field full"><label>Contact (téléphone)</label><input id="p-tel" value="${escapeAttr(String(d.telephone||''))}" inputmode="numeric" placeholder="ex: 70 00 00 00"></div>
+      <div class="field"><label>📱 Téléphone WhatsApp</label><input id="p-tel" value="${escapeAttr(String(d.telephone||''))}" inputmode="numeric" placeholder="ex: 70000000" oninput="this.value=this.value.replace(/[^0-9]/g,'')"></div>
+      <div class="field"><label>Téléphone 2 <span style="font-weight:400;color:#9a998f;font-size:11px;">— optionnel</span></label><input id="p-tel2" value="${escapeAttr(String(d.telephone2||''))}" inputmode="numeric" placeholder="ex: 65000000" oninput="this.value=this.value.replace(/[^0-9]/g,'')"></div>
       <div class="field full"><label>Besoin exprimé</label><input id="p-besoin" placeholder="ex : lunettes de vue, solaire..." value="${escapeAttr(d.besoin)}"></div>
       <div class="field"><label>Source</label><select id="p-source">${SOURCES.map(s=>`<option ${d.source===s?'selected':''}>${s}</option>`).join('')}</select></div>
       <div class="field"><label>Statut</label><select id="p-statut">${STATUTS_PROSPECT.map(s=>`<option ${d.statut===s?'selected':''}>${s}</option>`).join('')}</select></div>
@@ -1602,7 +1604,8 @@ function clientForm(data){
       <div class="field"><label>Nom</label><input required id="c-nom" value="${escapeAttr(d.nom)}"></div>
       <div class="field"><label>Prénom</label><input id="c-prenom" value="${escapeAttr(d.prenom)}"></div>
       <div class="field full"><label>Adresse (résidence)</label><input id="c-adresse" value="${escapeAttr(d.adresse)}"></div>
-      <div class="field"><label>Téléphone</label><input id="c-tel" value="${escapeAttr(String(d.telephone||''))}" inputmode="numeric" placeholder="ex: 70 00 00 00"></div>
+      <div class="field"><label>📱 Téléphone WhatsApp</label><input id="c-tel" value="${escapeAttr(String(d.telephone||''))}" inputmode="numeric" placeholder="ex: 70000000" oninput="this.value=this.value.replace(/[^0-9]/g,'')"></div>
+      <div class="field"><label>Téléphone 2 <span style="font-weight:400;color:#9a998f;font-size:11px;">— optionnel</span></label><input id="c-tel2" value="${escapeAttr(String(d.telephone2||''))}" inputmode="numeric" placeholder="ex: 65000000" oninput="this.value=this.value.replace(/[^0-9]/g,'')"></div>
       <div class="field"><label>Email</label><input id="c-email" value="${escapeAttr(d.email)}"></div>
       <div class="field full"><label>Boutique préférée</label><select id="c-boutique">${BOUTIQUES.map(b=>`<option ${d.boutique===b?'selected':''}>${b}</option>`).join('')}</select></div>
       <div class="field full"><label>Notes</label><textarea id="c-notes">${escapeHtml(d.notes)}</textarea></div>
@@ -1652,7 +1655,8 @@ function clientView(client){
   return `
   <h3>${client.civilite?escapeHtml(client.civilite)+' ':''}<span style="font-weight:700;">${escapeHtml(client.nom)}</span> ${escapeHtml(client.prenom||'')}${badgeRenouvellement}</h3>
   <div style="display:flex;flex-wrap:wrap;gap:16px;margin-bottom:16px;">
-    ${telNorm?`<div style="font-size:13px;color:#555;">📞 ${escapeHtml(telNorm)}</div>`:''}
+    ${telNorm?`<div style="font-size:13px;color:#555;">📱 WhatsApp : ${escapeHtml(telNorm)}</div>`:''}
+    ${client.telephone2?`<div style="font-size:13px;color:#555;">📞 Tel 2 : ${escapeHtml(client.telephone2)}</div>`:''}
     ${client.adresse?`<div style="font-size:13px;color:#555;">📍 ${escapeHtml(client.adresse)}</div>`:''}
     ${client.boutique||client.businessUnit?`<div style="font-size:13px;color:#555;">🏪 ${escapeHtml(client.boutique||client.businessUnit)}</div>`:''}
   </div>
@@ -1788,7 +1792,7 @@ function stockForm(data){
 function venteForm(data){
   const d = data || {
     id:'', dateMiseEnRelation: todayISO(), businessUnit: BOUTIQUES[0],
-    nom:'', prenom:'', adresse:'', telephone:'',
+    nom:'', prenom:'', civilite:'', adresse:'', telephone:'', telephone2:'',
     typeArticle: TYPES_ARTICLE[0],
     cout:'',
     fonction:'', assurance:ASSURANCES[0], assuranceAutre:'',
@@ -1810,7 +1814,8 @@ function venteForm(data){
       <div class="form-section-title">Client</div>
       <div class="field"><label>Date de mise en relation</label><input required type="date" id="v-date" value="${escapeAttr(d.dateMiseEnRelation||todayISO())}"></div>
       <div class="field"><label>Boutique (Business Unit)</label><select id="v-bu">${BOUTIQUES.map(b=>`<option ${d.businessUnit===b?'selected':''}>${b}</option>`).join('')}</select></div>
-      <div class="field full"><label>Téléphone <span style="font-weight:400;color:#9a998f;">— saisir d'abord pour retrouver le client</span></label><input id="v-tel" value="${escapeAttr(d.telephone)}" placeholder="ex: 70 00 00 00" inputmode="numeric"></div>
+      <div class="field"><label>📱 Téléphone WhatsApp <span style="font-weight:400;color:#9a998f;font-size:11px;">— saisir en premier</span></label><input id="v-tel" value="${escapeAttr(d.telephone)}" placeholder="ex: 70000000" inputmode="numeric" oninput="this.value=this.value.replace(/[^0-9]/g,'')"></div>
+      <div class="field"><label>Téléphone 2 <span style="font-weight:400;color:#9a998f;font-size:11px;">— optionnel</span></label><input id="v-tel2" value="${escapeAttr(d.telephone2||'')}" placeholder="ex: 65000000" inputmode="numeric" oninput="this.value=this.value.replace(/[^0-9]/g,'')"></div>
       <div class="field"><label>Civilité</label><select id="v-civilite"><option value="">—</option>${CIVILITES.filter(c=>c).map(c=>`<option ${(d.civilite||'')===c?'selected':''}>${c}</option>`).join('')}</select></div>
       <div class="field"><label>Nom</label><input required id="v-nom" value="${escapeAttr(d.nom)}"></div>
       <div class="field"><label>Prénom</label><input id="v-prenom" value="${escapeAttr(d.prenom)}"></div>
@@ -2110,7 +2115,7 @@ function getClientSuggestions(query){
         key,
         label: `<b>${escapeHtml(name)}</b> <span style="color:#888;font-size:12px;">${escapeHtml(tel||telRaw)}</span>`,
         nom: p.nom||'', prenom: p.prenom||'',
-        telephone: tel||telRaw, adresse: p.adresse||'', boutique: p.boutique||p.businessUnit||'', civilite: p.civilite||''
+        telephone: tel||telRaw, telephone2: p.telephone2||'', adresse: p.adresse||'', boutique: p.boutique||p.businessUnit||'', civilite: p.civilite||''
       });
     }
   });
@@ -3167,6 +3172,7 @@ function attachVenteConditionalLogic(){
   setTimeout(()=>{
     setupAutocomplete('v-tel', getClientSuggestions, (s)=>{
       const tel = document.getElementById('v-tel'); if(tel) tel.value = s.telephone;
+      const tel2 = document.getElementById('v-tel2'); if(tel2 && s.telephone2) tel2.value = s.telephone2;
       const n = document.getElementById('v-nom'); if(n) n.value = s.nom;
       const pr = document.getElementById('v-prenom'); if(pr) pr.value = s.prenom;
       const ad = document.getElementById('v-adresse'); if(ad) ad.value = s.adresse;
@@ -3192,7 +3198,8 @@ function attachModalEvents(){
       nom: document.getElementById('p-nom').value.trim(),
       prenom: document.getElementById('p-prenom').value.trim(),
       adresse: document.getElementById('p-adresse').value.trim(),
-      telephone: document.getElementById('p-tel').value.trim(),
+      telephone: document.getElementById('p-tel').value.replace(/[^0-9]/g,''),
+      telephone2: document.getElementById('p-tel2')?.value.replace(/[^0-9]/g,'')||'',
       besoin: document.getElementById('p-besoin').value.trim(),
       boutique: document.getElementById('p-boutique').value,
       source: document.getElementById('p-source').value,
@@ -3221,7 +3228,8 @@ function attachModalEvents(){
       nom: document.getElementById('c-nom').value.trim(),
       prenom: document.getElementById('c-prenom').value.trim(),
       adresse: document.getElementById('c-adresse').value.trim(),
-      telephone: document.getElementById('c-tel').value.trim(),
+      telephone: document.getElementById('c-tel').value.replace(/[^0-9]/g,''),
+      telephone2: document.getElementById('c-tel2')?.value.replace(/[^0-9]/g,'')||'',
       email: document.getElementById('c-email').value.trim(),
       boutique: document.getElementById('c-boutique').value,
       notes: document.getElementById('c-notes').value.trim(),
@@ -3323,7 +3331,9 @@ function attachModalEvents(){
       businessUnit: val('v-bu'),
       nom: val('v-nom').trim(), prenom: val('v-prenom').trim(),
       civilite: val('v-civilite'),
-      adresse: val('v-adresse').trim(), telephone: val('v-tel').trim(),
+      adresse: val('v-adresse').trim(),
+      telephone: val('v-tel').replace(/[^0-9]/g,''),
+      telephone2: val('v-tel2').replace(/[^0-9]/g,''),
       typeArticle: val('v-article'),
       cout: val('v-cout'),
       fonction: val('v-fonction').trim(),
@@ -3364,10 +3374,16 @@ function attachModalEvents(){
       if(total > 0 && !existing){
         client.historique.unshift({ produit: obj.typeArticle, montant: total, boutique: obj.businessUnit, date: obj.dateMiseEnRelation || todayISO() });
       }
-      await apiUpsert('clients', client);
+      // Préparer le client pour Sheets — historique en JSON string
+      const clientToSave = {
+        ...client,
+        civilite: obj.civilite || client.civilite || '',
+        historique: JSON.stringify(client.historique || [])
+      };
+      try{ await apiUpsert('clients', clientToSave); }catch(e){ /* synchro client non bloquante */ }
 
       state.modal=null; render();
-      showToast(idx>=0 ? 'Vente mise à jour.' : 'Vente enregistrée et fiche client synchronisée.');
+      showToast(idx>=0 ? 'Vente mise à jour.' : 'Vente enregistrée.');
     }catch(err){ showToast("Erreur d'enregistrement, réessaie."); }
   });
 
