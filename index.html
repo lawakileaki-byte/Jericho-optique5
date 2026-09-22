@@ -410,9 +410,9 @@ tbody tr:hover{background:var(--sand-light);}
 const API_URL = "https://script.google.com/macros/s/AKfycbxVwZ7D_0pvYcSdZiYEcna8MteG53OnyoP6x-ylMYc8f0tojGi29q9yF8TzneJ3LpWH/exec";
 const API_KEY = "jericho2026"; // doit correspondre à SECRET_KEY dans le script Apps Script
 
-const SHEET_NAMES = { prospects:'Prospects', clients:'Clients', sav:'SAV', stock:'Stock', ventes:'Ventes' };
+const SHEET_NAMES = { prospects:'Prospects', clients:'Clients', sav:'SAV', stock:'Stock', ventes:'Ventes', tickets:'Tickets' };
 
-let DB = { prospects: [], clients: [], sav: [], stock: [], ventes: [] };
+let DB = { prospects: [], clients: [], sav: [], stock: [], ventes: [], tickets: [] };
 let loaded = false;
 
 function normalizeRow(row){
@@ -619,7 +619,7 @@ const state = {
   analysePeriode: 'mois',
   analyseDebut: '',
   analyseFin: '',
-  filters: { prospects:{statut:'', boutique:'', q:''}, clients:{boutique:'', q:''}, sav:{statut:'', boutique:'', q:''}, stock:{boutique:'', categorie:'', q:''}, ventes:{boutique:'', typeArticle:'', q:''} },
+  filters: { prospects:{statut:'', boutique:'', q:''}, clients:{boutique:'', q:''}, sav:{statut:'', boutique:'', q:''}, stock:{boutique:'', categorie:'', q:''}, ventes:{boutique:'', typeArticle:'', q:'', periode:'mois'}, tickets:{q:'',statut:'',type:'',assigne:''} },
   modal: null,
 };
 
@@ -673,6 +673,10 @@ const STATUTS_SAV = ["Ouvert","En cours","En attente de pièce","Résolu"];
 const CATEGORIES_STOCK = ["Monture optique","Monture solaire","Verres correcteurs","Lentilles de contact","Accessoires","Autre"];
 
 const TYPES_ARTICLE = ["Monture / Verres correcteurs","Lentilles","Accessoires","Réparation et entretien"];
+const TYPES_TICKET = ['🔬 Commande labo','🔧 SAV / Réparation','📞 Rappel client','📦 Réception commande','🎯 Tâche libre'];
+const STATUTS_TICKET = ['À faire','En cours','En attente','Terminé'];
+const PRIORITES_TICKET = ['Haute','Normale','Basse'];
+const STAFF_ALL = [...STAFF.filter(s=>s!=='Autre'), 'Directrice'];
 const ASSURANCES = ["UAB Assurance","Ascoma","Raynal Assurance","CARFO","CNSS","Sunu Assurance","Pas d'assurance","SONABEL","ONEA","SONAR","MCI","Vitalis","Autre"];
 const STAFF = ["Paloma","Alima","Ali","Amandine","Amande","Rabi","Autre"];
 const LABOS = ["ZEISS","SIVO","SYNCHRONI","ART'LENS","IDEAL","AFRICALENS","Autre"];
@@ -1020,6 +1024,7 @@ function renderTeam(){
         <button data-tab="clients" class="${state.teamTab==='clients'?'active':''}">Clients</button>
         <button data-tab="ventes" class="${state.teamTab==='ventes'?'active':''}">Ventes</button>
         <button data-tab="stock" class="${state.teamTab==='stock'?'active':''}">Stock</button>
+        <button data-tab="tickets" class="${state.teamTab==='tickets'?'active':''}">🎫 Tickets${(()=>{const mes=DB.tickets.filter(t=>t.assigne===state.commercial&&t.statut!=='Terminé');return mes.length?` <span style="background:#A6402E;color:#fff;font-size:10px;padding:1px 5px;border-radius:8px;margin-left:4px;">${mes.length}</span>`:'';})()} </button>
         <button data-tab="analyse" class="${state.teamTab==='analyse'?'active':''}">Analyse</button>
         ${isAdmin() ? `<button data-tab="admin" class="${state.teamTab==='admin'?'active':''}">Comptes</button>` : ''}
         <div class="out">
@@ -1041,6 +1046,7 @@ function renderTeamTab(){
   if(state.teamTab==='clients') return renderClients();
   if(state.teamTab==='ventes') return renderVentes();
   if(state.teamTab==='stock') return renderStock();
+  if(state.teamTab==='tickets') return renderTickets();
   if(state.teamTab==='admin') return isAdmin() ? renderAdminComptes() : renderProspects();
   if(state.teamTab==='moncompte') return renderMonCompte();
   if(state.teamTab==='analyse') return renderAnalyse();
@@ -1561,7 +1567,7 @@ function modalContent(){
   if(m.type==='sav') return savForm(m.data);
   if(m.type==='stock') return stockForm(m.data);
   if(m.type==='vente') return venteForm(m.data);
-  if(m.type==='user') return userForm(m.data);
+  if(m.type==='ticket') return ticketForm(m.data);
   return '';
 }
 
@@ -1573,7 +1579,7 @@ function prospectForm(data){
   <form id="form-prospect">
     <div class="form-grid">
       <div class="form-section-title">Informations personnelles</div>
-      <div class="field"><label>📱 Téléphone WhatsApp <span style="color:#A6402E;">*</span></label><input required id="p-tel" value="${escapeAttr(String(d.telephone||''))}" inputmode="numeric" placeholder="ex: 70000000" oninput="this.value=this.value.replace(/[^0-9]/g,'')"></div>
+      <div class="field"><label><svg width="14" height="14" viewBox="0 0 24 24" fill="#25D366" style="vertical-align:middle;margin-right:3px;"><path d="M12.04 2c-5.46 0-9.91 4.45-9.91 9.91 0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38c1.45.79 3.08 1.21 4.74 1.21 5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.816 9.816 0 0 0 12.04 2m.01 1.67c2.2 0 4.26.86 5.82 2.42a8.225 8.225 0 0 1 2.41 5.83c0 4.54-3.7 8.23-8.24 8.23-1.48 0-2.93-.39-4.19-1.15l-.3-.17-3.12.82.83-3.04-.2-.32a8.188 8.188 0 0 1-1.26-4.38c.01-4.54 3.7-8.24 8.25-8.24M8.53 7.33c-.16 0-.43.06-.66.31-.22.25-.87.86-.87 2.07 0 1.22.89 2.39 1 2.56.14.17 1.76 2.67 4.25 3.73.59.27 1.05.42 1.41.53.59.19 1.13.16 1.56.1.48-.07 1.46-.6 1.67-1.18.21-.58.21-1.07.14-1.18-.07-.11-.25-.17-.53-.31-.28-.14-1.66-.82-1.92-.91-.26-.09-.44-.14-.63.14-.19.28-.72.91-.88 1.09-.16.18-.32.2-.6.07-.28-.14-1.19-.44-2.26-1.4-.83-.75-1.4-1.67-1.56-1.95-.17-.28-.02-.44.12-.58.13-.13.28-.34.42-.51.14-.17.18-.29.28-.47.09-.19.05-.35-.02-.49-.07-.14-.63-1.52-.88-2.07-.24-.53-.48-.46-.66-.47-.16-.01-.35-.01-.53-.01Z"/></svg> Téléphone WhatsApp <span style="color:#A6402E;">*</span></label><input required id="p-tel" value="${escapeAttr(String(d.telephone||''))}" inputmode="numeric" placeholder="ex: 70000000" oninput="this.value=this.value.replace(/[^0-9]/g,'')"></div>
       <div class="field"><label>📞 Téléphone 2</label><input id="p-tel2" value="${escapeAttr(String(d.telephone2||''))}" inputmode="numeric" placeholder="ex: 65000000" oninput="this.value=this.value.replace(/[^0-9]/g,'')"></div>
       <div class="field"><label>Civilité <span style="color:#A6402E;">*</span></label><select required id="p-civilite"><option value="">— choisir —</option>${CIVILITES.filter(c=>c).map(c=>`<option ${d.civilite===c?'selected':''}>${c}</option>`).join('')}</select></div>
       <div class="field"><label>Nom <span style="color:#A6402E;">*</span></label><input required id="p-nom" value="${escapeAttr(d.nom)}" placeholder="Nom de famille"></div>
@@ -1606,7 +1612,7 @@ function clientForm(data){
   <form id="form-client">
     <div class="form-grid">
       <div class="form-section-title">Informations personnelles</div>
-      <div class="field"><label>📱 Téléphone WhatsApp <span style="color:#A6402E;">*</span></label><input required id="c-tel" value="${escapeAttr(String(d.telephone||''))}" inputmode="numeric" placeholder="ex: 70000000" oninput="this.value=this.value.replace(/[^0-9]/g,'')"></div>
+      <div class="field"><label><svg width="14" height="14" viewBox="0 0 24 24" fill="#25D366" style="vertical-align:middle;margin-right:3px;"><path d="M12.04 2c-5.46 0-9.91 4.45-9.91 9.91 0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38c1.45.79 3.08 1.21 4.74 1.21 5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.816 9.816 0 0 0 12.04 2m.01 1.67c2.2 0 4.26.86 5.82 2.42a8.225 8.225 0 0 1 2.41 5.83c0 4.54-3.7 8.23-8.24 8.23-1.48 0-2.93-.39-4.19-1.15l-.3-.17-3.12.82.83-3.04-.2-.32a8.188 8.188 0 0 1-1.26-4.38c.01-4.54 3.7-8.24 8.25-8.24M8.53 7.33c-.16 0-.43.06-.66.31-.22.25-.87.86-.87 2.07 0 1.22.89 2.39 1 2.56.14.17 1.76 2.67 4.25 3.73.59.27 1.05.42 1.41.53.59.19 1.13.16 1.56.1.48-.07 1.46-.6 1.67-1.18.21-.58.21-1.07.14-1.18-.07-.11-.25-.17-.53-.31-.28-.14-1.66-.82-1.92-.91-.26-.09-.44-.14-.63.14-.19.28-.72.91-.88 1.09-.16.18-.32.2-.6.07-.28-.14-1.19-.44-2.26-1.4-.83-.75-1.4-1.67-1.56-1.95-.17-.28-.02-.44.12-.58.13-.13.28-.34.42-.51.14-.17.18-.29.28-.47.09-.19.05-.35-.02-.49-.07-.14-.63-1.52-.88-2.07-.24-.53-.48-.46-.66-.47-.16-.01-.35-.01-.53-.01Z"/></svg> Téléphone WhatsApp <span style="color:#A6402E;">*</span></label><input required id="c-tel" value="${escapeAttr(String(d.telephone||''))}" inputmode="numeric" placeholder="ex: 70000000" oninput="this.value=this.value.replace(/[^0-9]/g,'')"></div>
       <div class="field"><label>📞 Téléphone 2</label><input id="c-tel2" value="${escapeAttr(String(d.telephone2||''))}" inputmode="numeric" placeholder="ex: 65000000" oninput="this.value=this.value.replace(/[^0-9]/g,'')"></div>
       <div class="field"><label>Civilité <span style="color:#A6402E;">*</span></label><select required id="c-civilite"><option value="">— choisir —</option>${CIVILITES.filter(c=>c).map(c=>`<option ${d.civilite===c?'selected':''}>${c}</option>`).join('')}</select></div>
       <div class="field"><label>Nom <span style="color:#A6402E;">*</span></label><input required id="c-nom" value="${escapeAttr(d.nom)}" placeholder="Nom de famille"></div>
@@ -1693,7 +1699,7 @@ function venteForm(data){
     <div class="form-grid">
 
       <div class="form-section-title">Informations personnelles</div>
-      <div class="field"><label>📱 Téléphone WhatsApp <span style="font-weight:400;color:#9a998f;font-size:11px;">— saisir en premier</span></label><input required id="v-tel" value="${escapeAttr(d.telephone)}" placeholder="ex: 70000000" inputmode="numeric" oninput="this.value=this.value.replace(/[^0-9]/g,'')"></div>
+      <div class="field"><label><svg width="14" height="14" viewBox="0 0 24 24" fill="#25D366" style="vertical-align:middle;margin-right:3px;"><path d="M12.04 2c-5.46 0-9.91 4.45-9.91 9.91 0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38c1.45.79 3.08 1.21 4.74 1.21 5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.816 9.816 0 0 0 12.04 2m.01 1.67c2.2 0 4.26.86 5.82 2.42a8.225 8.225 0 0 1 2.41 5.83c0 4.54-3.7 8.23-8.24 8.23-1.48 0-2.93-.39-4.19-1.15l-.3-.17-3.12.82.83-3.04-.2-.32a8.188 8.188 0 0 1-1.26-4.38c.01-4.54 3.7-8.24 8.25-8.24M8.53 7.33c-.16 0-.43.06-.66.31-.22.25-.87.86-.87 2.07 0 1.22.89 2.39 1 2.56.14.17 1.76 2.67 4.25 3.73.59.27 1.05.42 1.41.53.59.19 1.13.16 1.56.1.48-.07 1.46-.6 1.67-1.18.21-.58.21-1.07.14-1.18-.07-.11-.25-.17-.53-.31-.28-.14-1.66-.82-1.92-.91-.26-.09-.44-.14-.63.14-.19.28-.72.91-.88 1.09-.16.18-.32.2-.6.07-.28-.14-1.19-.44-2.26-1.4-.83-.75-1.4-1.67-1.56-1.95-.17-.28-.02-.44.12-.58.13-.13.28-.34.42-.51.14-.17.18-.29.28-.47.09-.19.05-.35-.02-.49-.07-.14-.63-1.52-.88-2.07-.24-.53-.48-.46-.66-.47-.16-.01-.35-.01-.53-.01Z"/></svg> Téléphone WhatsApp <span style="font-weight:400;color:#9a998f;font-size:11px;">— saisir en premier</span></label><input required id="v-tel" value="${escapeAttr(d.telephone)}" placeholder="ex: 70000000" inputmode="numeric" oninput="this.value=this.value.replace(/[^0-9]/g,'')"></div>
       <div class="field"><label>📞 Téléphone 2</label><input id="v-tel2" value="${escapeAttr(d.telephone2||'')}" placeholder="ex: 65000000" inputmode="numeric" oninput="this.value=this.value.replace(/[^0-9]/g,'')"></div>
       <div class="field"><label>Civilité <span style="color:#A6402E;">*</span></label><select required id="v-civilite"><option value="">— choisir —</option>${CIVILITES.filter(c=>c).map(c=>`<option ${(d.civilite||'')===c?'selected':''}>${c}</option>`).join('')}</select></div>
       <div class="field"><label>Nom <span style="color:#A6402E;">*</span></label><input required id="v-nom" value="${escapeAttr(d.nom)}" placeholder="Nom de famille"></div>
@@ -2037,6 +2043,10 @@ function renderJournee(){
     ? DB.ventes.filter(v=>v.businessUnit===maBoutique)
     : DB.ventes;
 
+  // Mes tickets assignés non terminés
+  const mesTickets = DB.tickets.filter(t=>t.assigne===nom && t.statut!=='Terminé');
+  const ticketsLabo = isAdmin() ? DB.tickets.filter(t=>t.type==='🔬 Commande labo' && t.statut==='À faire') : [];
+
   // Mes prospects
   const mesProspects = isAdmin()
     ? DB.prospects
@@ -2135,7 +2145,7 @@ function renderJournee(){
         </div>
       </div>
       <div style="display:flex;gap:8px;align-items:center;flex-shrink:0;">
-        ${tel ? `<span style="font-size:13px;color:#555;">📱 ${escapeHtml(tel)}</span>` : ''}
+        ${tel ? `<span style="font-size:13px;color:#555;"><svg width="14" height="14" viewBox="0 0 24 24" fill="#25D366" style="vertical-align:middle;margin-right:3px;"><path d="M12.04 2c-5.46 0-9.91 4.45-9.91 9.91 0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38c1.45.79 3.08 1.21 4.74 1.21 5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.816 9.816 0 0 0 12.04 2m.01 1.67c2.2 0 4.26.86 5.82 2.42a8.225 8.225 0 0 1 2.41 5.83c0 4.54-3.7 8.23-8.24 8.23-1.48 0-2.93-.39-4.19-1.15l-.3-.17-3.12.82.83-3.04-.2-.32a8.188 8.188 0 0 1-1.26-4.38c.01-4.54 3.7-8.24 8.25-8.24M8.53 7.33c-.16 0-.43.06-.66.31-.22.25-.87.86-.87 2.07 0 1.22.89 2.39 1 2.56.14.17 1.76 2.67 4.25 3.73.59.27 1.05.42 1.41.53.59.19 1.13.16 1.56.1.48-.07 1.46-.6 1.67-1.18.21-.58.21-1.07.14-1.18-.07-.11-.25-.17-.53-.31-.28-.14-1.66-.82-1.92-.91-.26-.09-.44-.14-.63.14-.19.28-.72.91-.88 1.09-.16.18-.32.2-.6.07-.28-.14-1.19-.44-2.26-1.4-.83-.75-1.4-1.67-1.56-1.95-.17-.28-.02-.44.12-.58.13-.13.28-.34.42-.51.14-.17.18-.29.28-.47.09-.19.05-.35-.02-.49-.07-.14-.63-1.52-.88-2.07-.24-.53-.48-.46-.66-.47-.16-.01-.35-.01-.53-.01Z"/></svg> ${escapeHtml(tel)}</span>` : ''}
         ${v.telephone2 ? `<span style="font-size:13px;color:#555;">📞 ${escapeHtml(v.telephone2)}</span>` : ''}
         ${waBtn(tel, message, 'WhatsApp', v.telephone2||'')}
       </div>
@@ -2163,7 +2173,7 @@ function renderJournee(){
         </div>
       </div>
       <div style="display:flex;gap:8px;align-items:center;flex-shrink:0;">
-        ${tel ? `<span style="font-size:13px;color:#555;">📱 ${escapeHtml(tel)}</span>` : ''}
+        ${tel ? `<span style="font-size:13px;color:#555;"><svg width="14" height="14" viewBox="0 0 24 24" fill="#25D366" style="vertical-align:middle;margin-right:3px;"><path d="M12.04 2c-5.46 0-9.91 4.45-9.91 9.91 0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38c1.45.79 3.08 1.21 4.74 1.21 5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.816 9.816 0 0 0 12.04 2m.01 1.67c2.2 0 4.26.86 5.82 2.42a8.225 8.225 0 0 1 2.41 5.83c0 4.54-3.7 8.23-8.24 8.23-1.48 0-2.93-.39-4.19-1.15l-.3-.17-3.12.82.83-3.04-.2-.32a8.188 8.188 0 0 1-1.26-4.38c.01-4.54 3.7-8.24 8.25-8.24M8.53 7.33c-.16 0-.43.06-.66.31-.22.25-.87.86-.87 2.07 0 1.22.89 2.39 1 2.56.14.17 1.76 2.67 4.25 3.73.59.27 1.05.42 1.41.53.59.19 1.13.16 1.56.1.48-.07 1.46-.6 1.67-1.18.21-.58.21-1.07.14-1.18-.07-.11-.25-.17-.53-.31-.28-.14-1.66-.82-1.92-.91-.26-.09-.44-.14-.63.14-.19.28-.72.91-.88 1.09-.16.18-.32.2-.6.07-.28-.14-1.19-.44-2.26-1.4-.83-.75-1.4-1.67-1.56-1.95-.17-.28-.02-.44.12-.58.13-.13.28-.34.42-.51.14-.17.18-.29.28-.47.09-.19.05-.35-.02-.49-.07-.14-.63-1.52-.88-2.07-.24-.53-.48-.46-.66-.47-.16-.01-.35-.01-.53-.01Z"/></svg> ${escapeHtml(tel)}</span>` : ''}
         ${p.telephone2 ? `<span style="font-size:13px;color:#555;">📞 ${escapeHtml(p.telephone2)}</span>` : ''}
         ${waBtn(tel, message, 'WhatsApp', p.telephone2||'')}
       </div>
@@ -2280,7 +2290,38 @@ function renderJournee(){
     'Aucun ticket SAV ouvert.'
   )}
 
-  <!-- CLIENTS BOUTIQUE À RELANCER (Option C) -->
+  <!-- TICKETS ASSIGNÉS -->
+  ${mesTickets.length ? section(
+    `🎫 Mes tickets (${mesTickets.length})`, '#9b59b6', '🎫',
+    mesTickets.map(t=>`
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--line);flex-wrap:wrap;gap:8px;">
+      <div>
+        <span style="font-size:12px;">${escapeHtml(t.type||'')}</span>
+        <b style="font-size:13px;margin-left:6px;">${escapeHtml(t.titre)}</b>
+        ${t.clientNom?`<div style="font-size:11px;color:#888;">Client : ${escapeHtml(t.clientNom)}${t.labo?' · Labo : '+escapeHtml(t.labo):''}</div>`:''}
+      </div>
+      <div style="display:flex;gap:6px;align-items:center;">
+        <span style="background:${{Haute:'#A6402E',Normale:'#E8A93B',Basse:'#888'}[t.priorite]||'#888'};color:#fff;font-size:10px;padding:1px 6px;border-radius:8px;">${escapeHtml(t.priorite||'')}</span>
+        <span style="background:${'À faire'===t.statut?'#68AAD1':'En cours'===t.statut?'#E8A93B':'#9b59b6'};color:#fff;font-size:10px;padding:1px 6px;border-radius:8px;">${escapeHtml(t.statut)}</span>
+        <button class="icon-btn" data-edit-ticket="${t.id}">Traiter →</button>
+      </div>
+    </div>`).join(''),
+    'Aucun ticket assigné.'
+  ) : ''}
+
+  ${isAdmin() && ticketsLabo.length ? section(
+    `🔬 Commandes labo à passer (${ticketsLabo.length})`, '#A6402E', '🔬',
+    ticketsLabo.slice(0,5).map(t=>`
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--line);flex-wrap:wrap;gap:8px;">
+      <div>
+        <b style="font-size:13px;">${escapeHtml(t.clientNom||'')}</b>
+        <span style="font-size:11px;color:#888;margin-left:6px;">${escapeHtml(t.labo||'Labo non précisé')} · ${fmtDate(t.dateCreation)}</span>
+        ${t.description?`<div style="font-size:11px;color:#555;margin-top:2px;">${escapeHtml(t.description.split('\n')[0]||'')}</div>`:''}
+      </div>
+      <button class="icon-btn" data-edit-ticket="${t.id}">Traiter →</button>
+    </div>`).join(''),
+    ''
+  ) : ''}
   ${boutique24.length||boutique18.length||boutiqueLentilles.length ? `
   <div style="margin-top:8px;font-size:11px;font-weight:700;color:#555;text-transform:uppercase;letter-spacing:.05em;">
     Clients ${maBoutique&&maBoutique!=='Toutes'?escapeHtml(maBoutique):'de ta boutique'} à relancer
@@ -2340,6 +2381,154 @@ function renderJournee(){
   `;
 }
 
+
+/* =========================================================
+   TICKETS
+   ========================================================= */
+function renderTickets(){
+  const f = state.filters.tickets || {};
+  const moi = state.commercial;
+  const today = new Date().toISOString().slice(0,10);
+
+  // Admin voit tout, commercial voit ses tickets + ceux de sa boutique
+  let rows = DB.tickets.filter(t=>{
+    if(!isAdmin() && t.assigne!==moi && t.boutique!==state.boutique) return false;
+    if(f.statut && t.statut!==f.statut) return false;
+    if(f.type && t.type!==f.type) return false;
+    if(f.assigne && t.assigne!==f.assigne) return false;
+    if(f.q){ const q=f.q.toLowerCase(); if(!`${t.titre} ${t.clientNom||''} ${t.description||''}`.toLowerCase().includes(q)) return false; }
+    return true;
+  }).sort((a,b)=>{
+    // Priorité haute en premier, puis date
+    const prio = {Haute:0,Normale:1,Basse:2};
+    if(a.priorite!==b.priorite) return (prio[a.priorite]||1)-(prio[b.priorite]||1);
+    return (b.dateCreation||'').localeCompare(a.dateCreation||'');
+  });
+
+  const mesTickets = rows.filter(t=>t.assigne===moi && t.statut!=='Terminé');
+  const ticketsLabo = rows.filter(t=>t.type==='🔬 Commande labo' && t.statut!=='Terminé');
+
+  function badgePrio(p){ const c={Haute:'#A6402E',Normale:'#E8A93B',Basse:'#888'}[p]||'#888'; return `<span style="background:${c};color:#fff;font-size:10px;padding:1px 6px;border-radius:8px;">${p||'—'}</span>`; }
+  function badgeStatut(s){ const c={'À faire':'#68AAD1','En cours':'#E8A93B','En attente':'#9b59b6','Terminé':'#2d7a3a'}[s]||'#888'; return `<span style="background:${c};color:#fff;font-size:10px;padding:1px 6px;border-radius:8px;">${s}</span>`; }
+  function badgeType(t){ return `<span style="font-size:12px;">${t||'—'}</span>`; }
+
+  return `
+  <div class="main-head">
+    <div><h2>🎫 Tickets</h2><p>${isAdmin()?'Toutes les tâches en cours':'Mes tâches et celles de ma boutique'}</p></div>
+    <button class="btn-sm" id="btn-new-ticket">+ Nouveau ticket</button>
+  </div>
+
+  ${isAdmin() && ticketsLabo.length ? `
+  <div class="panel" style="border-left:4px solid #A6402E;">
+    <h3 style="color:#A6402E;margin-bottom:10px;">🔬 Commandes labo en attente (${ticketsLabo.length})</h3>
+    ${ticketsLabo.slice(0,5).map(t=>`
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--line);flex-wrap:wrap;gap:8px;">
+      <div>
+        <b>${escapeHtml(t.titre)}</b>
+        <span style="font-size:11px;color:#888;margin-left:8px;">${escapeHtml(t.clientNom||'')} · ${fmtDate(t.dateCreation)} · ${escapeHtml(t.labo||'')}</span>
+        ${t.description?`<div style="font-size:11px;color:#666;margin-top:2px;">${escapeHtml(t.description.slice(0,80))}</div>`:''}
+      </div>
+      <div style="display:flex;gap:6px;">
+        ${badgePrio(t.priorite)}
+        <button class="icon-btn" data-edit-ticket="${t.id}">Traiter →</button>
+      </div>
+    </div>`).join('')}
+    ${ticketsLabo.length>5?`<p style="font-size:12px;color:#E8A93B;margin-top:8px;">+${ticketsLabo.length-5} autres dans la liste</p>`:''}
+  </div>` : ''}
+
+  <div class="toolbar">
+    <input type="text" id="f-ticket-q" placeholder="Rechercher..." value="${escapeHtml(f.q||'')}">
+    <select id="f-ticket-statut">
+      <option value="">Tous les statuts</option>
+      ${STATUTS_TICKET.map(s=>`<option ${f.statut===s?'selected':''}>${s}</option>`).join('')}
+    </select>
+    <select id="f-ticket-type">
+      <option value="">Tous les types</option>
+      ${TYPES_TICKET.map(s=>`<option ${f.type===s?'selected':''}>${s}</option>`).join('')}
+    </select>
+    ${isAdmin()?`<select id="f-ticket-assigne">
+      <option value="">Tous</option>
+      ${STAFF_ALL.map(s=>`<option ${f.assigne===s?'selected':''}>${s}</option>`).join('')}
+    </select>`:''}
+  </div>
+
+  <div class="panel" style="padding:0;">
+    <table>
+      <thead><tr><th>Type</th><th>Titre</th><th>Client</th><th>Assigné à</th><th>Priorité</th><th>Statut</th><th>Date</th><th></th></tr></thead>
+      <tbody>
+        ${rows.length ? rows.map(t=>`
+        <tr style="${t.statut==='Terminé'?'opacity:.5;':''}">
+          <td>${badgeType(t.type)}</td>
+          <td><b>${escapeHtml(t.titre)}</b>${t.description?`<div style="font-size:11px;color:#888;">${escapeHtml(t.description.slice(0,50))}${t.description.length>50?'…':''}</div>`:''}</td>
+          <td style="font-size:12px;">${escapeHtml(t.clientNom||'—')}</td>
+          <td><b>${escapeHtml(t.assigne||'—')}</b>${t.creepar?`<div style="font-size:10px;color:#aaa;">par ${escapeHtml(t.creepar)}</div>`:''}</td>
+          <td>${badgePrio(t.priorite)}</td>
+          <td>${badgeStatut(t.statut)}</td>
+          <td style="font-size:11px;color:#888;">${fmtDate(t.dateCreation)}${t.dateLimite?`<br><span style="color:#A6402E;">⏰ ${fmtDate(t.dateLimite)}</span>`:''}</td>
+          <td><div class="row-actions">
+            <button class="icon-btn" data-edit-ticket="${t.id}">Modifier</button>
+            ${isAdmin()?`<button class="icon-btn danger" data-del-ticket="${t.id}">Suppr.</button>`:''}
+          </div></td>
+        </tr>`).join('')
+        : `<tr class="empty-row"><td colspan="8">Aucun ticket. Créez-en un avec "+ Nouveau ticket".</td></tr>`}
+      </tbody>
+    </table>
+  </div>`;
+}
+
+function ticketForm(data){
+  const d = data || { id:'', type:TYPES_TICKET[0], titre:'', description:'', assigne:'Directrice', priorite:'Normale', statut:'À faire', clientNom:'', labo:'', dateLimite:'', venteId:'', boutique:state.boutique||'' };
+  return `
+  <h3>${data?'Modifier le ticket':'Nouveau ticket'}</h3>
+  <form id="form-ticket">
+    <div class="form-grid">
+      <div class="field"><label>Type</label><select id="tk-type">${TYPES_TICKET.map(t=>`<option ${d.type===t?'selected':''}>${t}</option>`).join('')}</select></div>
+      <div class="field"><label>Priorité</label><select id="tk-priorite">${PRIORITES_TICKET.map(p=>`<option ${d.priorite===p?'selected':''}>${p}</option>`).join('')}</select></div>
+      <div class="field full"><label>Titre <span style="color:#A6402E;">*</span></label><input required id="tk-titre" value="${escapeAttr(d.titre)}" placeholder="Ex: Commander verres progressifs pour TRAORE"></div>
+      <div class="field full"><label>Description / Instructions</label><textarea id="tk-desc">${escapeHtml(d.description||'')}</textarea></div>
+      <div class="field"><label>Assigné à <span style="color:#A6402E;">*</span></label><select required id="tk-assigne">${STAFF_ALL.map(s=>`<option ${d.assigne===s?'selected':''}>${s}</option>`).join('')}</select></div>
+      <div class="field"><label>Statut</label><select id="tk-statut">${STATUTS_TICKET.map(s=>`<option ${d.statut===s?'selected':''}>${s}</option>`).join('')}</select></div>
+      <div class="field"><label>Client concerné</label><input id="tk-client" value="${escapeAttr(d.clientNom||'')}" placeholder="Nom du client (optionnel)"></div>
+      <div class="field"><label>Laboratoire</label><input id="tk-labo" value="${escapeAttr(d.labo||'')}" placeholder="Ex: BBGR, Essilor..."></div>
+      <div class="field"><label>Date limite</label><input type="date" id="tk-datelimite" value="${escapeAttr(d.dateLimite||'')}"></div>
+      <div class="field"><label>Boutique</label><select id="tk-boutique">${['Toutes',...BOUTIQUES].map(b=>`<option ${(d.boutique||state.boutique)===b?'selected':''}>${b}</option>`).join('')}</select></div>
+    </div>
+    <div class="modal-actions">
+      <button type="button" class="btn-sm btn-ghost" id="modal-cancel">Annuler</button>
+      <button type="submit" class="btn-sm">${data?'Enregistrer':'Créer le ticket'}</button>
+    </div>
+    <input type="hidden" id="tk-id" value="${escapeAttr(d.id)}">
+    <input type="hidden" id="tk-vente-id" value="${escapeAttr(d.venteId||'')}">
+    <input type="hidden" id="tk-createur" value="${escapeAttr(d.creepar||state.commercial)}">
+  </form>`;
+}
+
+// Créer automatiquement un ticket labo après une vente
+function creerTicketLabo(vente){
+  if(!['Monture / Verres correcteurs','Lentilles de contact','Lentilles'].includes(vente.typeArticle)) return null;
+  const ticket = {
+    id: 'tk_' + Date.now() + '_' + Math.random().toString(36).slice(2,7),
+    type: '🔬 Commande labo',
+    titre: `Commander ${vente.typeArticle} — ${vente.nom||''} ${vente.prenom||''}`.trim(),
+    description: [
+      vente.odSphere||vente.ogSphere ? `OD: Sph ${vente.odSphere||'—'} Cyl ${vente.odCylindre||'—'} Axe ${vente.odAxe||'—'}${vente.odAddition?' Add '+vente.odAddition:''} | OG: Sph ${vente.ogSphere||'—'} Cyl ${vente.ogCylindre||'—'} Axe ${vente.ogAxe||'—'}${vente.ogAddition?' Add '+vente.ogAddition:''}` : '',
+      vente.caracteristiqueVerre ? `Verre : ${vente.caracteristiqueVerre}` : '',
+      vente.assurance && vente.assurance!=="Pas d'assurance" ? `Assurance : ${vente.assurance}` : '',
+      vente.dateRdv ? `RDV client : ${fmtDate(vente.dateRdv)}` : '',
+    ].filter(Boolean).join('\n'),
+    assigne: 'Directrice',
+    priorite: 'Haute',
+    statut: 'À faire',
+    clientNom: `${vente.nom||''} ${vente.prenom||''}`.trim(),
+    labo: vente.laboratoire || '',
+    boutique: vente.businessUnit || state.boutique || '',
+    dateCreation: todayISO(),
+    dateLimite: '',
+    venteId: vente.id,
+    creepar: state.commercial,
+  };
+  return ticket;
+}
 
 function renderAnalyse(){
   const periode = state.analysePeriode || 'mois';
@@ -2833,7 +3022,7 @@ function attachGlobalEvents(){
   const app = document.getElementById('app');
   if(app){
     app.addEventListener('click', async (e)=>{
-      const t = e.target.closest('button, a[data-nav], [data-tab], [data-del-prospect], [data-del-client], [data-del-sav], [data-del-vente], [data-del-stock], [data-edit-prospect], [data-edit-client], [data-edit-sav], [data-edit-vente], [data-edit-stock], [data-view-client], [data-convert-prospect], [data-edit-user], [data-toggle-user], [data-nav], [data-print-vente], [data-view-vente-client], [data-kpi-action], [data-periode]');
+      const t = e.target.closest('button, a[data-nav], [data-tab], [data-del-prospect], [data-del-client], [data-del-sav], [data-del-vente], [data-del-stock], [data-edit-prospect], [data-edit-client], [data-edit-sav], [data-edit-vente], [data-edit-stock], [data-view-client], [data-convert-prospect], [data-edit-user], [data-toggle-user], [data-nav], [data-print-vente], [data-view-vente-client], [data-edit-ticket], [data-del-ticket], [data-kpi-action], [data-periode]');
       if(!t) return;
 
       // Navigation publique
@@ -2886,10 +3075,34 @@ function attachGlobalEvents(){
       // Fiche client depuis une vente
       if(t.dataset.viewVenteClient){
         const v = DB.ventes.find(x=>x.id===t.dataset.viewVenteClient);
-        if(v){ state.modal={type:'client-view', data:{nom:v.nom||'', prenom:v.prenom||'', telephone:v.telephone||'', adresse:v.adresse||'', boutique:v.businessUnit||'', id:''}}; render(); } return;
+        if(v){
+          // Chercher la fiche client existante par téléphone
+          const telN = normTel(v.telephone);
+          const ficheClient = DB.clients.find(c=>normTel(c.telephone)===telN && telN) || null;
+          state.modal={type:'client-view', data:{
+            nom: v.nom||'', prenom: v.prenom||'',
+            civilite: v.civilite||ficheClient?.civilite||'',
+            telephone: v.telephone||'', telephone2: v.telephone2||ficheClient?.telephone2||'',
+            adresse: v.adresse||ficheClient?.adresse||'',
+            boutique: v.businessUnit||ficheClient?.boutique||'',
+            fonction: v.fonction||ficheClient?.fonction||'',
+            entreprise: v.entreprise||ficheClient?.entreprise||'',
+            notes: ficheClient?.notes||'',
+            id: ficheClient?.id||''
+          }};
+          render();
+        }
+        return;
       }
       // Ventes
-      if(t.id==='btn-new-vente'){ state.modal={type:'vente',data:null}; render(); return; }
+      if(t.id==='btn-new-ticket'){ state.modal={type:'ticket',data:null}; render(); return; }
+      if(t.dataset.editTicket){ state.modal={type:'ticket',data:DB.tickets.find(x=>x.id===t.dataset.editTicket)||null}; render(); return; }
+      if(t.dataset.delTicket){
+        if(!confirm('Supprimer ce ticket ?')) return;
+        await apiDelete('tickets', t.dataset.delTicket);
+        DB.tickets = DB.tickets.filter(x=>x.id!==t.dataset.delTicket);
+        render(); return;
+      }
       if(t.id==='btn-export-ventes'){ exportCSV(DB.ventes,['dateMiseEnRelation','civilite','nom','prenom','adresse','telephone','typeArticle','businessUnit','gestionnaire','saisePar','assurance','prixVenteTotalSansRemise','remise','avance','dateRdv','commentaire'],'ventes_jericho.csv'); return; }
       if(t.dataset.editVente){ state.modal={type:'vente',data:DB.ventes.find(v=>v.id===t.dataset.editVente)||null}; render(); return; }
       if(t.dataset.delVente){
@@ -2953,6 +3166,10 @@ function attachGlobalEvents(){
   bindFilter('f-prospect-boutique', v=>state.filters.prospects.boutique=v, 'change');
   bindFilter('f-client-q', v=>state.filters.clients.q=v, 'input');
   bindFilter('f-client-boutique', v=>state.filters.clients.boutique=v, 'change');
+  bindFilter('f-ticket-q', v=>{ if(!state.filters.tickets) state.filters.tickets={}; state.filters.tickets.q=v; }, 'input');
+  bindFilter('f-ticket-statut', v=>{ if(!state.filters.tickets) state.filters.tickets={}; state.filters.tickets.statut=v; }, 'change');
+  bindFilter('f-ticket-type', v=>{ if(!state.filters.tickets) state.filters.tickets={}; state.filters.tickets.type=v; }, 'change');
+  bindFilter('f-ticket-assigne', v=>{ if(!state.filters.tickets) state.filters.tickets={}; state.filters.tickets.assigne=v; }, 'change');
   bindFilter('f-sav-q', v=>state.filters.sav.q=v, 'input');
   bindFilter('f-sav-statut', v=>state.filters.sav.statut=v, 'change');
   bindFilter('f-sav-boutique', v=>state.filters.sav.boutique=v, 'change');
@@ -3285,12 +3502,52 @@ function attachModalEvents(){
       };
       try{ await apiUpsert('clients', clientToSave); }catch(e){ /* synchro client non bloquante */ }
 
+      // Créer ticket labo automatiquement pour montures/lentilles
+      try{
+        const ticket = creerTicketLabo(obj);
+        if(ticket){
+          await apiUpsert('tickets', ticket);
+          DB.tickets.unshift(ticket);
+        }
+      }catch(e){ /* ticket labo non bloquant */ }
+
       state.modal=null; render();
-      showToast(idx>=0 ? 'Vente mise à jour.' : 'Vente enregistrée.');
+      showToast(idx>=0 ? 'Vente mise à jour.' : 'Vente enregistrée. Ticket labo créé automatiquement.');
     }catch(err){ showToast("Erreur d'enregistrement, réessaie."); }
   });
 
   // Formulaire création/modification d'utilisateur
+  // Formulaire ticket
+  const ftk = document.getElementById('form-ticket');
+  if(ftk) ftk.addEventListener('submit', async(e)=>{
+    e.preventDefault();
+    const id = document.getElementById('tk-id')?.value || ('tk_'+Date.now()+'_'+Math.random().toString(36).slice(2,7));
+    const existing = DB.tickets.find(x=>x.id===id);
+    const obj = {
+      id,
+      type: document.getElementById('tk-type').value,
+      titre: document.getElementById('tk-titre').value.trim(),
+      description: document.getElementById('tk-desc').value.trim(),
+      assigne: document.getElementById('tk-assigne').value,
+      priorite: document.getElementById('tk-priorite').value,
+      statut: document.getElementById('tk-statut').value,
+      clientNom: document.getElementById('tk-client').value.trim(),
+      labo: document.getElementById('tk-labo').value.trim(),
+      dateLimite: document.getElementById('tk-datelimite').value,
+      boutique: document.getElementById('tk-boutique').value,
+      venteId: document.getElementById('tk-vente-id').value,
+      creepar: document.getElementById('tk-createur').value || state.commercial,
+      dateCreation: existing?.dateCreation || todayISO(),
+    };
+    try{
+      await apiUpsert('tickets', obj);
+      if(existing){ DB.tickets = DB.tickets.map(x=>x.id===id?obj:x); }
+      else{ DB.tickets.unshift(obj); }
+      state.modal=null; render();
+      showToast('Ticket enregistré.');
+    }catch(err){ showToast("Erreur d'enregistrement, réessaie."); }
+  });
+
   const fu = document.getElementById('form-user');
   if(fu) fu.addEventListener('submit', async (e)=>{
     e.preventDefault();
