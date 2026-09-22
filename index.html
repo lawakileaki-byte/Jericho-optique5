@@ -477,6 +477,69 @@ async function loadAll(){
 
 function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
 function todayISO(){ return new Date().toISOString().slice(0,10); }
+
+// ===== NORMALISATION TÉLÉPHONE =====
+// Identifiant unique d'un client = numéro normalisé (sans espaces, sans 0 initial, sans indicatif 226)
+function normTel(v){
+  if(!v) return '';
+  let s = String(v).replace(/[\s\.\-\(\)]/g,'').split('.')[0];
+  // Retirer l'indicatif Burkina
+  if(s.startsWith('00226')) s = s.slice(5);
+  if(s.startsWith('+226')) s = s.slice(4);
+  if(s.startsWith('226') && s.length > 9) s = s.slice(3);
+  // Retirer le 0 initial
+  if(s.startsWith('0') && s.length > 7) s = s.slice(1);
+  return s;
+}
+
+// Clé client : téléphone normalisé en priorité, sinon NOM+PRENOM
+function clientKey(v){
+  const tel = normTel(v.telephone);
+  if(tel) return 'tel:'+tel;
+  return 'nom:'+(v.nom||'').toLowerCase().trim()+'_'+(v.prenom||'').toLowerCase().trim();
+}
+
+// Index groupé de toutes les ventes par client
+function buildClientIndex(ventes){
+  const idx = {};
+  ventes.forEach(v=>{
+    const key = clientKey(v);
+    if(!idx[key]){
+      idx[key] = {
+        key,
+        telephone: normTel(v.telephone),
+        nom: v.nom||'',
+        prenom: v.prenom||'',
+        adresse: v.adresse||'',
+        boutique: v.businessUnit||'',
+        ventes: [],
+      };
+    }
+    idx[key].ventes.push(v);
+    // Garder le nom le plus récent
+    if((v.dateMiseEnRelation||'') >= (idx[key].lastDate||'')) {
+      idx[key].lastDate = v.dateMiseEnRelation||'';
+      if(v.nom) idx[key].nom = v.nom;
+      if(v.prenom) idx[key].prenom = v.prenom;
+      if(v.adresse) idx[key].adresse = v.adresse;
+    }
+  });
+  // Calculer les stats par client
+  Object.values(idx).forEach(c=>{
+    c.ventes.sort((a,b)=>(b.dateMiseEnRelation||'').localeCompare(a.dateMiseEnRelation||''));
+    c.derniereVente = c.ventes[0];
+    c.premiereVente = c.ventes[c.ventes.length-1];
+    c.caTotal = c.ventes.reduce((a,v)=>a+venteTotal(v),0);
+    c.resteTotal = c.ventes.reduce((a,v)=>a+venteReste(v),0);
+    c.nbVentes = c.ventes.length;
+    c.derniereDate = (c.derniereVente?.dateMiseEnRelation||'').slice(0,10);
+    c.dernierType = c.derniereVente?.typeArticle||'';
+    // Dernière prescription
+    c.prescription = c.ventes.find(v=>v.odSphere||v.ogSphere) || null;
+  });
+  return idx;
+}
+
 function fmtDate(d){
   if(!d) return '—';
   const dt = new Date(d);
@@ -562,7 +625,7 @@ function setCommercial(nom, role, userId, boutique){
   state.role = role;
   state.userId = userId;
   state.boutique = boutique || '';
-  state.teamTab = role==='admin' ? 'dashboard' : 'journee';
+  state.teamTab = 'dashboard';
   try{
     sessionStorage.setItem('jo_commercial', nom);
     sessionStorage.setItem('jo_role', role);
@@ -926,7 +989,7 @@ function renderTeam(){
     <div class="team-shell">
       <div class="sidebar">
         <div class="who"><div class="lbl">Connecté(e) en tant que</div><div class="name">${escapeHtml(state.commercial)}</div><div class="role-badge ${isAdmin()?'is-admin':''}">${isAdmin()?'Directrice · Admin':'Commercial(e)'}</div></div>
-        ${isAdmin() ? `<button data-tab="dashboard" class="${state.teamTab==='dashboard'?'active':''}">Tableau de bord</button>` : ''}
+        <button data-tab="dashboard" class="${state.teamTab==='dashboard'?'active':''}">Tableau de bord</button>
         <button data-tab="prospects" class="${state.teamTab==='prospects'?'active':''}">Prospects</button>
         <button data-tab="clients" class="${state.teamTab==='clients'?'active':''}">Clients &amp; SAV</button>
         <button data-tab="ventes" class="${state.teamTab==='ventes'?'active':''}">Ventes</button>
@@ -945,7 +1008,6 @@ function renderTeam(){
 }
 
 function renderTeamTab(){
-  if(state.teamTab==='dashboard' && !isAdmin()) state.teamTab = 'journee';
   if(state.teamTab==='dashboard') return renderDashboard();
   if(state.teamTab==='journee') return renderJournee();
   if(state.teamTab==='prospects') return renderProspects();
@@ -982,16 +1044,9 @@ function renderDashboard(){
   const resteTotal = mesVentes.reduce((a,v)=>a+venteReste(v),0);
   const ventesNonSoldees = mesVentes.filter(v=>venteReste(v)>0);
 
-  // Portefeuille — dernière vente par téléphone
-  const dvt = {};
-  mesVentes.forEach(v=>{
-    const tel = String(v.telephone||'').replace(/\s/g,'');
-    if(!tel) return;
-    const d = (v.dateMiseEnRelation||'').slice(0,10);
-    if(!dvt[tel] || d > dvt[tel].date)
-      dvt[tel] = {date:d, nom:`${v.nom||''} ${v.prenom||''}`.trim(), telephone:tel, type:v.typeArticle||''};
-  });
-  const tousClients = Object.values(dvt);
+  // Portefeuille — index agrégé par téléphone normalisé
+  const clientIndex = buildClientIndex(mesVentes);
+  const tousClients = Object.values(clientIndex);
   const nbClients = tousClients.length;
 
   const d18 = new Date(now); d18.setMonth(d18.getMonth()-18);
@@ -1001,9 +1056,9 @@ function renderDashboard(){
   const s24 = d24.toISOString().slice(0,10);
   const s10 = d10.toISOString().slice(0,10);
 
-  const clients24 = tousClients.filter(c=>c.date<=s24 && c.type.toLowerCase().includes('monture'));
-  const clients18 = tousClients.filter(c=>c.date<=s18 && c.date>s24 && c.type.toLowerCase().includes('monture'));
-  const clientsLentilles = tousClients.filter(c=>c.date<=s10 && c.type.toLowerCase().includes('lentille'));
+  const clients24 = tousClients.filter(c=>c.derniereDate<=s24 && c.dernierType.toLowerCase().includes('monture'));
+  const clients18 = tousClients.filter(c=>c.derniereDate<=s18 && c.derniereDate>s24 && c.dernierType.toLowerCase().includes('monture'));
+  const clientsLentilles = tousClients.filter(c=>c.derniereDate<=s10 && c.dernierType.toLowerCase().includes('lentille'));
 
   const totalProspects = myProspects.length;
   const convertis = myProspects.filter(x=>x.statut==='Converti en client').length;
@@ -1030,10 +1085,10 @@ function renderDashboard(){
     return `<div class="panel" style="border-left:4px solid ${couleur};">
       <h3 style="color:${couleur};margin-bottom:10px;">${titre} (${clients.length})</h3>
       ${clients.slice(0,8).map(cl=>{
-        const num = cl.telephone.startsWith('226')?cl.telephone:'226'+cl.telephone;
-        const msg = encodeURIComponent(msgWA.replace('{nom}',cl.nom));
+        const num = cl.telephone && cl.telephone.startsWith('226')?cl.telephone:'226'+(cl.telephone||'');
+        const msg = encodeURIComponent(msgWA.replace('{nom}',`${cl.nom} ${cl.prenom||''}`.trim()));
         return `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--line);flex-wrap:wrap;gap:8px;">
-          <div><b style="font-size:13px;">${escapeHtml(cl.nom)}</b><span style="font-size:11px;color:#888;margin-left:8px;">Dernier achat : ${fmtDate(cl.date)}</span></div>
+          <div><b style="font-size:13px;">${escapeHtml(cl.nom)} ${escapeHtml(cl.prenom||'')}</b><span style="font-size:11px;color:#888;margin-left:8px;">Dernier achat : ${fmtDate(cl.derniereDate)} · ${cl.nbVentes} achat(s}</span></div>
           <div style="display:flex;gap:8px;align-items:center;">
             <span style="font-size:12px;color:#555;">${escapeHtml(cl.telephone)}</span>
             <a href="https://wa.me/${num}?text=${msg}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:5px;background:#25D366;color:#fff;text-decoration:none;padding:5px 10px;border-radius:6px;font-size:11px;font-weight:600;">
@@ -1284,9 +1339,25 @@ function venteReste(v){
 
 function renderVentes(){
   const f = state.filters.ventes;
-  // Un commercial ne voit que ses propres ventes
+  const now = new Date();
+  const today = now.toISOString().slice(0,10);
+  const annee = now.getFullYear();
+  const moisIdx = now.getMonth();
+
+  // Période par défaut : mois en cours
+  if(!f.periode) f.periode = 'mois';
+  let debutPeriode = '';
+  if(f.periode==='mois') debutPeriode = `${annee}-${String(moisIdx+1).padStart(2,'0')}-01`;
+  else if(f.periode==='annee') debutPeriode = `${annee}-01-01`;
+  else if(f.periode==='semaine'){
+    const d = new Date(now); d.setDate(d.getDate()-d.getDay()+(d.getDay()===0?-6:1));
+    debutPeriode = d.toISOString().slice(0,10);
+  }
+  else if(f.periode==='tout') debutPeriode = '';
+
   let rows = DB.ventes.filter(v=>{
     if(!isAdmin() && v.commercial !== state.commercial && v.gestionnaire !== state.commercial) return false;
+    if(debutPeriode && (v.dateMiseEnRelation||'').slice(0,10) < debutPeriode) return false;
     if(f.boutique && v.businessUnit!==f.boutique) return false;
     if(f.typeArticle && v.typeArticle!==f.typeArticle) return false;
     if(f.q){
@@ -1299,18 +1370,28 @@ function renderVentes(){
 
   const caTotal = rows.reduce((a,v)=>a+venteTotal(v),0);
   const resteTotal = rows.reduce((a,v)=>a+venteReste(v),0);
+  const periodeLabel = {mois:'Ce mois', semaine:'Cette semaine', annee:'Cette année', tout:'Tout l\'historique'};
   const titre = isAdmin() ? 'Toutes les ventes' : `Mes ventes : ${escapeHtml(state.commercial)}`;
 
   return `
   <div class="main-head">
-    <div><h2>Ventes</h2><p>${titre}</p></div>
+    <div><h2>Ventes</h2><p>${titre} · ${periodeLabel[f.periode]}</p></div>
     <button class="btn-sm" id="btn-new-vente">+ Nouvelle vente</button>
   </div>
 
+  <!-- Filtre période -->
+  <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
+    ${['semaine','mois','annee','tout'].map(p=>`
+      <button onclick="state.filters.ventes.periode='${p}';render();"
+        style="padding:6px 14px;border-radius:16px;border:2px solid ${f.periode===p?'#E8A93B':'#ddd'};background:${f.periode===p?'#E8A93B':'#fff'};color:${f.periode===p?'#26282B':'#666'};font-weight:${f.periode===p?'700':'400'};font-size:12px;cursor:pointer;">
+        ${{semaine:'Cette semaine',mois:'Ce mois',annee:'Cette année',tout:'Tout l\'historique'}[p]}
+      </button>`).join('')}
+  </div>
+
   <div class="kpi-row">
-    <div class="kpi"><div class="lbl">Ventes (filtre actif)</div><div class="val">${rows.length}</div></div>
-    <div class="kpi"><div class="lbl">Chiffre d'affaires</div><div class="val" style="font-size:22px;">${fmtFCFA(caTotal)}</div></div>
-    <div class="kpi ${resteTotal>0?'warn':''}"><div class="lbl">Reste à payer (total)</div><div class="val" style="font-size:22px;">${fmtFCFA(resteTotal)}</div></div>
+    <div class="kpi"><div class="lbl">Ventes</div><div class="val">${rows.length}</div><div class="sub">${periodeLabel[f.periode]}</div></div>
+    <div class="kpi"><div class="lbl">CA ${periodeLabel[f.periode].toLowerCase()}</div><div class="val" style="font-size:${caTotal>9999999?'16px':'22px'};">${fmtFCFA(caTotal)}</div></div>
+    <div class="kpi ${resteTotal>0?'warn':''}"><div class="lbl">Reste à encaisser</div><div class="val" style="font-size:${resteTotal>9999999?'16px':'22px'};">${fmtFCFA(resteTotal)}</div></div>
   </div>
 
   <div class="toolbar">
@@ -1335,7 +1416,7 @@ function renderVentes(){
           const reste = venteReste(v);
           return `
           <tr>
-            <td><b>${escapeHtml(v.nom)} ${escapeHtml(v.prenom||'')}</b></td>
+            <td><b>${escapeHtml(v.nom)} ${escapeHtml(v.prenom||'')}</b><div style="font-size:11px;color:#888;">${fmtDate(v.dateMiseEnRelation)}</div></td>
             <td>${escapeHtml(v.telephone||'—')}</td>
             <td>${escapeHtml(v.typeArticle)}</td>
             <td>${escapeHtml(v.businessUnit||'—')}</td>
@@ -1349,7 +1430,7 @@ function renderVentes(){
               ${isAdmin() ? `<button class="icon-btn danger" data-del-vente="${v.id}">Suppr.</button>` : ''}
             </div></td>
           </tr>`;
-        }).join('') : `<tr class="empty-row"><td colspan="9">Aucune vente pour ces filtres. Ajoute la première avec « + Nouvelle vente ».</td></tr>`}
+        }).join('') : `<tr class="empty-row"><td colspan="9">Aucune vente sur cette période. Change la période ou ajoute une nouvelle vente.</td></tr>`}
       </tbody>
     </table>
   </div>
@@ -1501,30 +1582,32 @@ function clientForm(data){
 }
 
 function clientView(client){
-  // Toutes les ventes de ce client par téléphone ou nom
-  const tel = String(client.telephone||'').replace(/\s/g,'');
-  const nom = (client.nom||'').toLowerCase();
+  // Agréger TOUTES les ventes de ce client par téléphone normalisé
+  const telNorm = normTel(client.telephone);
+  const nomNorm = (client.nom||'').toLowerCase().trim();
+
   const ventesClient = DB.ventes.filter(v=>{
-    const vt = String(v.telephone||'').replace(/\s/g,'');
-    return (tel && vt===tel) || (v.nom||'').toLowerCase()===nom;
+    const vt = normTel(v.telephone);
+    if(telNorm && vt && vt===telNorm) return true;
+    if(!telNorm || !vt) return (v.nom||'').toLowerCase().trim()===nomNorm;
+    return false;
   }).sort((a,b)=>(b.dateMiseEnRelation||'').localeCompare(a.dateMiseEnRelation||''));
 
   const savClient = DB.sav.filter(s=>{
-    const st = String(s.telephone||'').replace(/\s/g,'');
-    return (tel && st===tel) || (s.clientNom||'').toLowerCase()===nom;
+    const st = normTel(s.telephone);
+    if(telNorm && st && st===telNorm) return true;
+    return (s.clientNom||'').toLowerCase().trim()===nomNorm;
   }).sort((a,b)=>(b.dateOuverture||'').localeCompare(a.dateOuverture||''));
 
   const caTotal = ventesClient.reduce((a,v)=>a+venteTotal(v),0);
   const resteTotal = ventesClient.reduce((a,v)=>a+venteReste(v),0);
   const derniereVente = ventesClient[0];
-  const premierAchat = ventesClient.length ? ventesClient[ventesClient.length-1] : null;
-
-  // Dernière prescription
+  const premiereVente = ventesClient.length ? ventesClient[ventesClient.length-1] : null;
   const dernPresc = ventesClient.find(v=>v.odSphere||v.ogSphere);
 
   // Ancienneté lunettes
   let badgeRenouvellement = '';
-  if(derniereVente){
+  if(derniereVente && derniereVente.typeArticle && derniereVente.typeArticle.toLowerCase().includes('monture')){
     const now = new Date();
     const last = new Date(derniereVente.dateMiseEnRelation||'');
     const mois = Math.floor((now-last)/86400000/30);
@@ -1535,9 +1618,9 @@ function clientView(client){
   return `
   <h3>${escapeHtml(client.nom)} ${escapeHtml(client.prenom||'')}${badgeRenouvellement}</h3>
   <div style="display:flex;flex-wrap:wrap;gap:16px;margin-bottom:16px;">
-    <div style="font-size:13px;color:#555;">${tel?'📞 '+escapeHtml(tel):''}</div>
-    <div style="font-size:13px;color:#555;">${client.adresse?'📍 '+escapeHtml(client.adresse):''}</div>
-    <div style="font-size:13px;color:#555;">${client.boutique?'🏪 '+escapeHtml(client.boutique):''}</div>
+    ${telNorm?`<div style="font-size:13px;color:#555;">📞 ${escapeHtml(telNorm)}</div>`:''}
+    ${client.adresse?`<div style="font-size:13px;color:#555;">📍 ${escapeHtml(client.adresse)}</div>`:''}
+    ${client.boutique||client.businessUnit?`<div style="font-size:13px;color:#555;">🏪 ${escapeHtml(client.boutique||client.businessUnit)}</div>`:''}
   </div>
 
   <!-- KPIs client -->
@@ -1551,9 +1634,9 @@ function clientView(client){
       <div style="font-size:10px;font-weight:700;color:#A6402E;text-transform:uppercase;margin-bottom:4px;">Reste à payer</div>
       <div style="font-size:18px;font-weight:700;color:#A6402E;">${fmtFCFA(resteTotal)}</div>
     </div>`:''}
-    ${premierAchat?`<div style="background:var(--sand-light);border-radius:10px;padding:12px;text-align:center;">
+    ${premiereVente?`<div style="background:var(--sand-light);border-radius:10px;padding:12px;text-align:center;">
       <div style="font-size:10px;font-weight:700;color:#68AAD1;text-transform:uppercase;margin-bottom:4px;">Client depuis</div>
-      <div style="font-size:14px;font-weight:700;">${fmtDate(premierAchat.dateMiseEnRelation)}</div>
+      <div style="font-size:14px;font-weight:700;">${fmtDate(premiereVente.dateMiseEnRelation)}</div>
     </div>`:''}
     ${savClient.length?`<div style="background:var(--sand-light);border-radius:10px;padding:12px;text-align:center;">
       <div style="font-size:10px;font-weight:700;color:#555;text-transform:uppercase;margin-bottom:4px;">Tickets SAV</div>
@@ -1566,33 +1649,41 @@ function clientView(client){
   ${dernPresc?`<div style="background:#EAF3FE;border-radius:8px;padding:12px 16px;margin-bottom:16px;border-left:3px solid #68AAD1;">
     <div style="font-size:11px;font-weight:700;color:#68AAD1;text-transform:uppercase;margin-bottom:8px;">Dernière prescription (${fmtDate(dernPresc.dateMiseEnRelation)})</div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12px;">
-      <div><b>Oeil droit (OD)</b><br>Sphère : ${escapeHtml(String(dernPresc.odSphere||'—'))} · Cylindre : ${escapeHtml(String(dernPresc.odCylindre||'—'))} · Axe : ${escapeHtml(String(dernPresc.odAxe||'—'))}${dernPresc.odAddition?` · Addition : ${escapeHtml(String(dernPresc.odAddition))}`:''}
+      <div><b>Oeil droit (OD)</b><br>
+        Sphère : ${escapeHtml(String(dernPresc.odSphere||'—'))} &nbsp;
+        Cylindre : ${escapeHtml(String(dernPresc.odCylindre||'—'))} &nbsp;
+        Axe : ${escapeHtml(String(dernPresc.odAxe||'—'))}
+        ${dernPresc.odAddition?` &nbsp; Addition : ${escapeHtml(String(dernPresc.odAddition))}`:''}
       </div>
-      <div><b>Oeil gauche (OG)</b><br>Sphère : ${escapeHtml(String(dernPresc.ogSphere||'—'))} · Cylindre : ${escapeHtml(String(dernPresc.ogCylindre||'—'))} · Axe : ${escapeHtml(String(dernPresc.ogAxe||'—'))}${dernPresc.ogAddition?` · Addition : ${escapeHtml(String(dernPresc.ogAddition))}`:''}
+      <div><b>Oeil gauche (OG)</b><br>
+        Sphère : ${escapeHtml(String(dernPresc.ogSphere||'—'))} &nbsp;
+        Cylindre : ${escapeHtml(String(dernPresc.ogCylindre||'—'))} &nbsp;
+        Axe : ${escapeHtml(String(dernPresc.ogAxe||'—'))}
+        ${dernPresc.ogAddition?` &nbsp; Addition : ${escapeHtml(String(dernPresc.ogAddition))}`:''}
       </div>
     </div>
     ${dernPresc.laboratoire?`<div style="margin-top:6px;font-size:12px;color:#555;">Laboratoire : <b>${escapeHtml(dernPresc.laboratoire)}</b>${dernPresc.caracteristiqueVerre?' · '+escapeHtml(dernPresc.caracteristiqueVerre):''}</div>`:''}
   </div>`:''}
 
   <!-- Historique ventes -->
-  <h4 style="font-size:13px;font-weight:700;margin-bottom:8px;">Historique des achats (${ventesClient.length})</h4>
+  <h4 style="font-size:13px;font-weight:700;margin-bottom:8px;">Historique complet (${ventesClient.length} achat${ventesClient.length>1?'s':''})</h4>
   ${ventesClient.length?`<div style="overflow-x:auto;"><table>
     <thead><tr><th>Date</th><th>Type</th><th>Montant</th><th>Remise</th><th>Avance</th><th>Reste</th><th>RDV</th><th>Commercial</th><th></th></tr></thead>
     <tbody>
       ${ventesClient.map(v=>`<tr>
-        <td>${fmtDate(v.dateMiseEnRelation)}</td>
+        <td style="white-space:nowrap;">${fmtDate(v.dateMiseEnRelation)}</td>
         <td>${escapeHtml(v.typeArticle||'')}</td>
         <td style="font-weight:600;">${fmtFCFA(venteTotal(v))}</td>
         <td>${v.remise&&Number(v.remise)>0?fmtFCFA(Number(v.remise)):'—'}</td>
         <td>${v.avance&&Number(v.avance)>0?fmtFCFA(Number(v.avance)):'—'}</td>
         <td>${venteReste(v)>0?`<span style="color:#A6402E;font-weight:600;">${fmtFCFA(venteReste(v))}</span>`:'<span style="color:#2d7a3a;">Soldé</span>'}</td>
-        <td>${fmtDate(v.dateRdv)}</td>
+        <td style="white-space:nowrap;">${fmtDate(v.dateRdv)}</td>
         <td style="font-size:12px;">${escapeHtml(v.commercial||v.gestionnaire||'')}</td>
         <td><button class="icon-btn" data-print-vente="${v.id}">🖨️</button></td>
       </tr>`).join('')}
     </tbody>
   </table></div>`
-  :`<p style="font-size:13px;color:#9a998f;font-style:italic;">Aucune vente enregistrée.</p>`}
+  :`<p style="font-size:13px;color:#9a998f;font-style:italic;">Aucune vente trouvée pour ce client.</p>`}
 
   <!-- Tickets SAV -->
   ${savClient.length?`
@@ -1603,7 +1694,7 @@ function clientView(client){
       ${savClient.map(s=>`<tr>
         <td>${fmtDate(s.dateOuverture)}</td>
         <td>${escapeHtml(s.typeDemande||'')}</td>
-        <td style="font-size:12px;color:#555;">${escapeHtml((s.description||'').slice(0,60))}${(s.description||'').length>60?'…':''}</td>
+        <td style="font-size:12px;color:#555;">${escapeHtml((s.description||'').slice(0,80))}${(s.description||'').length>80?'…':''}</td>
         <td>${statutBadge(s.statut,'sav')}</td>
       </tr>`).join('')}
     </tbody>
@@ -1616,7 +1707,6 @@ function clientView(client){
     <button type="button" class="btn-sm" onclick="state.modal={type:'client',data:DB.clients.find(c=>c.id==='${client.id}')};render();">Modifier la fiche</button>
   </div>`;
 }
-
 
 function savForm(data){
   const d = data || { id:'', clientNom:'', telephone:'', boutique:BOUTIQUES[0], typeDemande:TYPES_SAV[0], description:'', statut:'Ouvert', commercial: state.commercial };
@@ -1964,20 +2054,22 @@ function setupAutocomplete(inputId, getSuggestions, onSelect){
 
 function getClientSuggestions(query){
   const q = query.toLowerCase().replace(/\s/g,'');
+  const seen = new Set();
   const results = [];
-  [...DB.clients, ...DB.prospects].forEach(p=>{
+  [...DB.clients, ...DB.ventes].forEach(p=>{
     const name = `${p.nom||''} ${p.prenom||''}`.trim();
-    const tel = String(p.telephone||'').replace(/\s/g,'');
-    if(name.toLowerCase().includes(q) || tel.includes(q)){
-      const key = `${p.nom}|${tel}`;
-      if(!results.find(r=>r.key===key)){
-        results.push({
-          key,
-          label: `<b>${escapeHtml(name)}</b> <span style="color:#888;font-size:12px;">${escapeHtml(tel)}</span>`,
-          nom: p.nom||'', prenom: p.prenom||'',
-          telephone: tel, adresse: p.adresse||'', boutique: p.boutique||''
-        });
-      }
+    const tel = normTel(p.telephone);
+    const telRaw = String(p.telephone||'');
+    if(name.toLowerCase().includes(q) || tel.includes(q) || telRaw.replace(/\s/g,'').includes(q)){
+      const key = tel || name.toLowerCase();
+      if(seen.has(key)) return;
+      seen.add(key);
+      results.push({
+        key,
+        label: `<b>${escapeHtml(name)}</b> <span style="color:#888;font-size:12px;">${escapeHtml(tel||telRaw)}</span>`,
+        nom: p.nom||'', prenom: p.prenom||'',
+        telephone: tel||telRaw, adresse: p.adresse||'', boutique: p.boutique||p.businessUnit||''
+      });
     }
   });
   return results.slice(0, 8);
