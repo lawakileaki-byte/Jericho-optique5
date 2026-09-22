@@ -1116,7 +1116,8 @@ function renderDashboard(){
     return `<div class="panel" style="border-left:4px solid ${couleur};">
       <h3 style="color:${couleur};margin-bottom:10px;">${titre} (${clients.length})</h3>
       ${clients.slice(0,8).map(cl=>{
-        const num = cl.telephone && cl.telephone.startsWith('226')?cl.telephone:'226'+(cl.telephone||'');
+        const effTel = cl.telephone || cl.telephone2 || '';
+        const num = effTel.startsWith('226') ? effTel : '226'+effTel;
         const msg = encodeURIComponent(msgWA.replace('{nom}', bonjourClient(cl.nom,cl.prenom,cl.civilite)));
         return `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--line);flex-wrap:wrap;gap:8px;">
           <div><b style="font-size:13px;">${escapeHtml(cl.nom)} ${escapeHtml(cl.prenom||'')}</b><span style="font-size:11px;color:#888;margin-left:8px;">Dernier achat : ${fmtDate(cl.derniereDate)} · ${cl.nbVentes} achat(s}</span></div>
@@ -1564,20 +1565,24 @@ function modalContent(){
 }
 
 function prospectForm(data){
-  const d = data || { id:'', nom:'', prenom:'', adresse:'', telephone:'', besoin:'', source:SOURCES[0], boutique:BOUTIQUES[0], statut:'Nouveau', commercial: state.commercial, notes:'', dateMiseEnRelation: todayISO() };
+  const d = data || { id:'', civilite:'', nom:'', prenom:'', adresse:'', telephone:'', telephone2:'', fonction:'', entreprise:'', besoin:'', source:SOURCES[0], boutique:BOUTIQUES[0], statut:'Nouveau', commercial: state.commercial, notes:'', dateMiseEnRelation: todayISO() };
   return `
   <h3>${data ? 'Modifier le prospect' : 'Nouveau prospect'}</h3>
-  <p style="font-size:12.5px;color:#8a8980;margin:-8px 0 18px;">Base Jéricho, en remplacement de la collecte via Google Form.</p>
+  <p style="font-size:12.5px;color:#8a8980;margin:-8px 0 18px;">Base Jéricho — remplacement du formulaire Google Form.</p>
   <form id="form-prospect">
     <div class="form-grid">
+      <div class="form-section-title">Informations personnelles</div>
+      <div class="field"><label>📱 Téléphone WhatsApp <span style="color:#A6402E;">*</span></label><input required id="p-tel" value="${escapeAttr(String(d.telephone||''))}" inputmode="numeric" placeholder="ex: 70000000" oninput="this.value=this.value.replace(/[^0-9]/g,'')"></div>
+      <div class="field"><label>📞 Téléphone 2</label><input id="p-tel2" value="${escapeAttr(String(d.telephone2||''))}" inputmode="numeric" placeholder="ex: 65000000" oninput="this.value=this.value.replace(/[^0-9]/g,'')"></div>
+      <div class="field"><label>Civilité <span style="color:#A6402E;">*</span></label><select required id="p-civilite"><option value="">— choisir —</option>${CIVILITES.filter(c=>c).map(c=>`<option ${d.civilite===c?'selected':''}>${c}</option>`).join('')}</select></div>
+      <div class="field"><label>Nom <span style="color:#A6402E;">*</span></label><input required id="p-nom" value="${escapeAttr(d.nom)}" placeholder="Nom de famille"></div>
+      <div class="field"><label>Prénom</label><input id="p-prenom" value="${escapeAttr(d.prenom)}" placeholder="Prénom"></div>
+      <div class="field"><label>Fonction / Poste</label><input id="p-fonction" value="${escapeAttr(d.fonction||'')}" placeholder="ex: Comptable..."></div>
+      <div class="field"><label>Entreprise / Employeur</label><input id="p-entreprise" value="${escapeAttr(d.entreprise||'')}" placeholder="ex: CNSS, BCEAO..."></div>
+      <div class="field full"><label>Adresse de résidence</label><input id="p-adresse" value="${escapeAttr(d.adresse)}" placeholder="Quartier, secteur..."></div>
+      <div class="form-section-title">Suivi commercial</div>
       <div class="field"><label>Date de mise en relation</label><input required type="date" id="p-date" value="${escapeAttr(d.dateMiseEnRelation || todayISO())}"></div>
       <div class="field"><label>Boutique</label><select id="p-boutique">${BOUTIQUES.map(b=>`<option ${d.boutique===b?'selected':''}>${b}</option>`).join('')}</select></div>
-      <div class="field"><label>Civilité</label><select id="p-civilite"><option value="">—</option>${CIVILITES.filter(c=>c).map(c=>`<option ${d.civilite===c?'selected':''}>${c}</option>`).join('')}</select></div>
-      <div class="field"><label>Nom</label><input required id="p-nom" value="${escapeAttr(d.nom)}"></div>
-      <div class="field"><label>Prénom</label><input id="p-prenom" value="${escapeAttr(d.prenom)}"></div>
-      <div class="field full"><label>Adresse (résidence)</label><input id="p-adresse" value="${escapeAttr(d.adresse)}"></div>
-      <div class="field"><label>📱 Téléphone WhatsApp</label><input id="p-tel" value="${escapeAttr(String(d.telephone||''))}" inputmode="numeric" placeholder="ex: 70000000" oninput="this.value=this.value.replace(/[^0-9]/g,'')"></div>
-      <div class="field"><label>Téléphone 2 <span style="font-weight:400;color:#9a998f;font-size:11px;">— optionnel</span></label><input id="p-tel2" value="${escapeAttr(String(d.telephone2||''))}" inputmode="numeric" placeholder="ex: 65000000" oninput="this.value=this.value.replace(/[^0-9]/g,'')"></div>
       <div class="field full"><label>Besoin exprimé</label><input id="p-besoin" placeholder="ex : lunettes de vue, solaire..." value="${escapeAttr(d.besoin)}"></div>
       <div class="field"><label>Source</label><select id="p-source">${SOURCES.map(s=>`<option ${d.source===s?'selected':''}>${s}</option>`).join('')}</select></div>
       <div class="field"><label>Statut</label><select id="p-statut">${STATUTS_PROSPECT.map(s=>`<option ${d.statut===s?'selected':''}>${s}</option>`).join('')}</select></div>
@@ -1592,159 +1597,34 @@ function prospectForm(data){
   </form>`;
 }
 
+
 function clientForm(data){
-  const isEdit = !!(data && data.id);
-  const d = data || { id:'', nom:'', prenom:'', adresse:'', telephone:'', email:'', boutique:BOUTIQUES[0], notes:'' };
+  const d = data || { id:'', civilite:'', nom:'', prenom:'', adresse:'', telephone:'', telephone2:'', email:'', boutique:BOUTIQUES[0], fonction:'', entreprise:'', notes:'', dateCreation: todayISO() };
   return `
-  <h3>${isEdit?'Modifier le client':'Nouveau client'}</h3>
-  ${state.modal && state.modal.sourceProspectId ? `<p style="font-size:12.5px;color:#8a8980;margin:-8px 0 18px;">Pré-rempli depuis le prospect : vérifie les informations avant d'enregistrer.</p>` : ''}
+  <h3>${data ? 'Modifier la fiche client' : 'Nouveau client'}</h3>
   <form id="form-client">
     <div class="form-grid">
-      <div class="field"><label>Civilité</label><select id="c-civilite"><option value="">—</option>${CIVILITES.filter(c=>c).map(c=>`<option ${d.civilite===c?'selected':''}>${c}</option>`).join('')}</select></div>
-      <div class="field"><label>Nom</label><input required id="c-nom" value="${escapeAttr(d.nom)}"></div>
-      <div class="field"><label>Prénom</label><input id="c-prenom" value="${escapeAttr(d.prenom)}"></div>
-      <div class="field full"><label>Adresse (résidence)</label><input id="c-adresse" value="${escapeAttr(d.adresse)}"></div>
-      <div class="field"><label>📱 Téléphone WhatsApp</label><input id="c-tel" value="${escapeAttr(String(d.telephone||''))}" inputmode="numeric" placeholder="ex: 70000000" oninput="this.value=this.value.replace(/[^0-9]/g,'')"></div>
-      <div class="field"><label>Téléphone 2 <span style="font-weight:400;color:#9a998f;font-size:11px;">— optionnel</span></label><input id="c-tel2" value="${escapeAttr(String(d.telephone2||''))}" inputmode="numeric" placeholder="ex: 65000000" oninput="this.value=this.value.replace(/[^0-9]/g,'')"></div>
-      <div class="field"><label>Email</label><input id="c-email" value="${escapeAttr(d.email)}"></div>
-      <div class="field full"><label>Boutique préférée</label><select id="c-boutique">${BOUTIQUES.map(b=>`<option ${d.boutique===b?'selected':''}>${b}</option>`).join('')}</select></div>
-      <div class="field full"><label>Notes</label><textarea id="c-notes">${escapeHtml(d.notes)}</textarea></div>
+      <div class="form-section-title">Informations personnelles</div>
+      <div class="field"><label>📱 Téléphone WhatsApp <span style="color:#A6402E;">*</span></label><input required id="c-tel" value="${escapeAttr(String(d.telephone||''))}" inputmode="numeric" placeholder="ex: 70000000" oninput="this.value=this.value.replace(/[^0-9]/g,'')"></div>
+      <div class="field"><label>📞 Téléphone 2</label><input id="c-tel2" value="${escapeAttr(String(d.telephone2||''))}" inputmode="numeric" placeholder="ex: 65000000" oninput="this.value=this.value.replace(/[^0-9]/g,'')"></div>
+      <div class="field"><label>Civilité <span style="color:#A6402E;">*</span></label><select required id="c-civilite"><option value="">— choisir —</option>${CIVILITES.filter(c=>c).map(c=>`<option ${d.civilite===c?'selected':''}>${c}</option>`).join('')}</select></div>
+      <div class="field"><label>Nom <span style="color:#A6402E;">*</span></label><input required id="c-nom" value="${escapeAttr(d.nom)}" placeholder="Nom de famille"></div>
+      <div class="field"><label>Prénom</label><input id="c-prenom" value="${escapeAttr(d.prenom)}" placeholder="Prénom"></div>
+      <div class="field"><label>Fonction / Poste</label><input id="c-fonction" value="${escapeAttr(d.fonction||'')}" placeholder="ex: Infirmier..."></div>
+      <div class="field"><label>Entreprise / Employeur</label><input id="c-entreprise" value="${escapeAttr(d.entreprise||'')}" placeholder="ex: CHU, Ministère..."></div>
+      <div class="field full"><label>Adresse de résidence</label><input id="c-adresse" value="${escapeAttr(d.adresse)}" placeholder="Quartier, secteur..."></div>
+      <div class="field"><label>Email</label><input id="c-email" value="${escapeAttr(d.email)}" placeholder="optionnel"></div>
+      <div class="field"><label>Boutique</label><select id="c-boutique">${BOUTIQUES.map(b=>`<option ${d.boutique===b?'selected':''}>${b}</option>`).join('')}</select></div>
+      <div class="field full"><label>Notes</label><textarea id="c-notes">${escapeHtml(d.notes||'')}</textarea></div>
     </div>
     <div class="modal-actions">
       <button type="button" class="btn-sm btn-ghost" id="modal-cancel">Annuler</button>
-      <button type="submit" class="btn-sm">${isEdit?'Enregistrer':'Ajouter le client'}</button>
+      <button type="submit" class="btn-sm">${data?'Enregistrer':'Ajouter le client'}</button>
     </div>
     <input type="hidden" id="c-id" value="${escapeAttr(d.id)}">
   </form>`;
 }
 
-function clientView(client){
-  // Agréger TOUTES les ventes de ce client par téléphone normalisé
-  const telNorm = normTel(client.telephone);
-  const nomNorm = (client.nom||'').toLowerCase().trim();
-
-  const ventesClient = DB.ventes.filter(v=>{
-    const vt = normTel(v.telephone);
-    if(telNorm && vt && vt===telNorm) return true;
-    if(!telNorm || !vt) return (v.nom||'').toLowerCase().trim()===nomNorm;
-    return false;
-  }).sort((a,b)=>(b.dateMiseEnRelation||'').localeCompare(a.dateMiseEnRelation||''));
-
-  const savClient = DB.sav.filter(s=>{
-    const st = normTel(s.telephone);
-    if(telNorm && st && st===telNorm) return true;
-    return (s.clientNom||'').toLowerCase().trim()===nomNorm;
-  }).sort((a,b)=>(b.dateOuverture||'').localeCompare(a.dateOuverture||''));
-
-  const caTotal = ventesClient.reduce((a,v)=>a+venteTotal(v),0);
-  const resteTotal = ventesClient.reduce((a,v)=>a+venteReste(v),0);
-  const derniereVente = ventesClient[0];
-  const premiereVente = ventesClient.length ? ventesClient[ventesClient.length-1] : null;
-  const dernPresc = ventesClient.find(v=>v.odSphere||v.ogSphere);
-
-  // Ancienneté lunettes
-  let badgeRenouvellement = '';
-  if(derniereVente && derniereVente.typeArticle && derniereVente.typeArticle.toLowerCase().includes('monture')){
-    const now = new Date();
-    const last = new Date(derniereVente.dateMiseEnRelation||'');
-    const mois = Math.floor((now-last)/86400000/30);
-    if(mois>=24) badgeRenouvellement = `<span style="background:#A6402E;color:#fff;font-size:11px;padding:2px 8px;border-radius:10px;margin-left:8px;">Renouvellement urgent (${mois} mois)</span>`;
-    else if(mois>=18) badgeRenouvellement = `<span style="background:#E8A93B;color:#fff;font-size:11px;padding:2px 8px;border-radius:10px;margin-left:8px;">À relancer (${mois} mois)</span>`;
-  }
-
-  return `
-  <h3>${client.civilite?escapeHtml(client.civilite)+' ':''}<span style="font-weight:700;">${escapeHtml(client.nom)}</span> ${escapeHtml(client.prenom||'')}${badgeRenouvellement}</h3>
-  <div style="display:flex;flex-wrap:wrap;gap:16px;margin-bottom:16px;">
-    ${telNorm?`<div style="font-size:13px;color:#555;">📱 WhatsApp : ${escapeHtml(telNorm)}</div>`:''}
-    ${client.telephone2?`<div style="font-size:13px;color:#555;">📞 Tel 2 : ${escapeHtml(client.telephone2)}</div>`:''}
-    ${client.adresse?`<div style="font-size:13px;color:#555;">📍 ${escapeHtml(client.adresse)}</div>`:''}
-    ${client.boutique||client.businessUnit?`<div style="font-size:13px;color:#555;">🏪 ${escapeHtml(client.boutique||client.businessUnit)}</div>`:''}
-  </div>
-
-  <!-- KPIs client -->
-  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:20px;">
-    <div style="background:var(--sand-light);border-radius:10px;padding:12px;text-align:center;">
-      <div style="font-size:10px;font-weight:700;color:#E8A93B;text-transform:uppercase;margin-bottom:4px;">CA total</div>
-      <div style="font-size:18px;font-weight:700;">${fmtFCFA(caTotal)}</div>
-      <div style="font-size:11px;color:#888;">${ventesClient.length} achat(s)</div>
-    </div>
-    ${resteTotal>0?`<div style="background:#fdf0ee;border-radius:10px;padding:12px;text-align:center;">
-      <div style="font-size:10px;font-weight:700;color:#A6402E;text-transform:uppercase;margin-bottom:4px;">Reste à payer</div>
-      <div style="font-size:18px;font-weight:700;color:#A6402E;">${fmtFCFA(resteTotal)}</div>
-    </div>`:''}
-    ${premiereVente?`<div style="background:var(--sand-light);border-radius:10px;padding:12px;text-align:center;">
-      <div style="font-size:10px;font-weight:700;color:#68AAD1;text-transform:uppercase;margin-bottom:4px;">Client depuis</div>
-      <div style="font-size:14px;font-weight:700;">${fmtDate(premiereVente.dateMiseEnRelation)}</div>
-    </div>`:''}
-    ${savClient.length?`<div style="background:var(--sand-light);border-radius:10px;padding:12px;text-align:center;">
-      <div style="font-size:10px;font-weight:700;color:#555;text-transform:uppercase;margin-bottom:4px;">Tickets SAV</div>
-      <div style="font-size:18px;font-weight:700;">${savClient.length}</div>
-      <div style="font-size:11px;color:#888;">${savClient.filter(s=>s.statut!=='Résolu').length} ouvert(s)</div>
-    </div>`:''}
-  </div>
-
-  <!-- Dernière prescription -->
-  ${dernPresc?`<div style="background:#EAF3FE;border-radius:8px;padding:12px 16px;margin-bottom:16px;border-left:3px solid #68AAD1;">
-    <div style="font-size:11px;font-weight:700;color:#68AAD1;text-transform:uppercase;margin-bottom:8px;">Dernière prescription (${fmtDate(dernPresc.dateMiseEnRelation)})</div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12px;">
-      <div><b>Oeil droit (OD)</b><br>
-        Sphère : ${escapeHtml(String(dernPresc.odSphere||'—'))} &nbsp;
-        Cylindre : ${escapeHtml(String(dernPresc.odCylindre||'—'))} &nbsp;
-        Axe : ${escapeHtml(String(dernPresc.odAxe||'—'))}
-        ${dernPresc.odAddition?` &nbsp; Addition : ${escapeHtml(String(dernPresc.odAddition))}`:''}
-      </div>
-      <div><b>Oeil gauche (OG)</b><br>
-        Sphère : ${escapeHtml(String(dernPresc.ogSphere||'—'))} &nbsp;
-        Cylindre : ${escapeHtml(String(dernPresc.ogCylindre||'—'))} &nbsp;
-        Axe : ${escapeHtml(String(dernPresc.ogAxe||'—'))}
-        ${dernPresc.ogAddition?` &nbsp; Addition : ${escapeHtml(String(dernPresc.ogAddition))}`:''}
-      </div>
-    </div>
-    ${dernPresc.laboratoire?`<div style="margin-top:6px;font-size:12px;color:#555;">Laboratoire : <b>${escapeHtml(dernPresc.laboratoire)}</b>${dernPresc.caracteristiqueVerre?' · '+escapeHtml(dernPresc.caracteristiqueVerre):''}</div>`:''}
-  </div>`:''}
-
-  <!-- Historique ventes -->
-  <h4 style="font-size:13px;font-weight:700;margin-bottom:8px;">Historique complet (${ventesClient.length} achat${ventesClient.length>1?'s':''})</h4>
-  ${ventesClient.length?`<div style="overflow-x:auto;"><table>
-    <thead><tr><th>Date</th><th>Type</th><th>Montant</th><th>Remise</th><th>Avance</th><th>Reste</th><th>RDV</th><th>Commercial</th><th></th></tr></thead>
-    <tbody>
-      ${ventesClient.map(v=>`<tr>
-        <td style="white-space:nowrap;">${fmtDate(v.dateMiseEnRelation)}</td>
-        <td>${escapeHtml(v.typeArticle||'')}</td>
-        <td style="font-weight:600;">${fmtFCFA(venteTotal(v))}</td>
-        <td>${v.remise&&Number(v.remise)>0?fmtFCFA(Number(v.remise)):'—'}</td>
-        <td>${v.avance&&Number(v.avance)>0?fmtFCFA(Number(v.avance)):'—'}</td>
-        <td>${venteReste(v)>0?`<span style="color:#A6402E;font-weight:600;">${fmtFCFA(venteReste(v))}</span>`:'<span style="color:#2d7a3a;">Soldé</span>'}</td>
-        <td style="white-space:nowrap;">${fmtDate(v.dateRdv)}</td>
-        <td style="font-size:12px;">${escapeHtml(v.commercial||v.gestionnaire||'')}</td>
-        <td><button class="icon-btn" data-print-vente="${v.id}">🖨️</button></td>
-      </tr>`).join('')}
-    </tbody>
-  </table></div>`
-  :`<p style="font-size:13px;color:#9a998f;font-style:italic;">Aucune vente trouvée pour ce client.</p>`}
-
-  <!-- Tickets SAV -->
-  ${savClient.length?`
-  <h4 style="font-size:13px;font-weight:700;margin:16px 0 8px;">Tickets SAV (${savClient.length})</h4>
-  <div style="overflow-x:auto;"><table>
-    <thead><tr><th>Date</th><th>Type</th><th>Description</th><th>Statut</th></tr></thead>
-    <tbody>
-      ${savClient.map(s=>`<tr>
-        <td>${fmtDate(s.dateOuverture)}</td>
-        <td>${escapeHtml(s.typeDemande||'')}</td>
-        <td style="font-size:12px;color:#555;">${escapeHtml((s.description||'').slice(0,80))}${(s.description||'').length>80?'…':''}</td>
-        <td>${statutBadge(s.statut,'sav')}</td>
-      </tr>`).join('')}
-    </tbody>
-  </table></div>`:''}
-
-  ${client.notes?`<div style="margin-top:16px;background:var(--sand-light);border-radius:8px;padding:12px 14px;font-size:13px;"><b>Notes :</b> ${escapeHtml(client.notes)}</div>`:''}
-
-  <div class="modal-actions" style="justify-content:flex-start;margin-top:20px;">
-    <button type="button" class="btn-sm btn-ghost" id="modal-cancel">Fermer</button>
-    <button type="button" class="btn-sm" data-edit-client="${client.id}">Modifier la fiche</button>
-  </div>`;
-}
 
 function savForm(data){
   const d = data || { id:'', clientNom:'', telephone:'', boutique:BOUTIQUES[0], typeDemande:TYPES_SAV[0], description:'', statut:'Ouvert', commercial: state.commercial };
@@ -1795,7 +1675,7 @@ function venteForm(data){
     nom:'', prenom:'', civilite:'', adresse:'', telephone:'', telephone2:'',
     typeArticle: TYPES_ARTICLE[0],
     cout:'',
-    fonction:'', assurance:ASSURANCES[0], assuranceAutre:'',
+    fonction:'', entreprise:'', assurance:ASSURANCES[0], assuranceAutre:'',
     apporteurAffaire:STAFF[0], apporteurAffaireAutre:'',
     gestionnaire:STAFF[0], gestionnaireAutre:'',
     odSphere:'', odCylindre:'', odAxe:'', odAddition:'',
@@ -1811,15 +1691,19 @@ function venteForm(data){
   <form id="form-vente">
     <div class="form-grid">
 
-      <div class="form-section-title">Client</div>
+      <div class="form-section-title">Informations personnelles</div>
+      <div class="field"><label>📱 Téléphone WhatsApp <span style="font-weight:400;color:#9a998f;font-size:11px;">— saisir en premier</span></label><input required id="v-tel" value="${escapeAttr(d.telephone)}" placeholder="ex: 70000000" inputmode="numeric" oninput="this.value=this.value.replace(/[^0-9]/g,'')"></div>
+      <div class="field"><label>📞 Téléphone 2</label><input id="v-tel2" value="${escapeAttr(d.telephone2||'')}" placeholder="ex: 65000000" inputmode="numeric" oninput="this.value=this.value.replace(/[^0-9]/g,'')"></div>
+      <div class="field"><label>Civilité <span style="color:#A6402E;">*</span></label><select required id="v-civilite"><option value="">— choisir —</option>${CIVILITES.filter(c=>c).map(c=>`<option ${(d.civilite||'')===c?'selected':''}>${c}</option>`).join('')}</select></div>
+      <div class="field"><label>Nom <span style="color:#A6402E;">*</span></label><input required id="v-nom" value="${escapeAttr(d.nom)}" placeholder="Nom de famille"></div>
+      <div class="field"><label>Prénom</label><input id="v-prenom" value="${escapeAttr(d.prenom)}" placeholder="Prénom"></div>
+      <div class="field"><label>Fonction / Poste</label><input id="v-fonction" value="${escapeAttr(d.fonction||'')}" placeholder="ex: Comptable, Médecin..."></div>
+      <div class="field"><label>Entreprise / Employeur</label><input id="v-entreprise" value="${escapeAttr(d.entreprise||'')}" placeholder="ex: CNSS, BCEAO..."></div>
+      <div class="field full"><label>Adresse de résidence</label><input id="v-adresse" value="${escapeAttr(d.adresse)}" placeholder="Quartier, secteur..."></div>
+
+      <div class="form-section-title">Vente</div>
       <div class="field"><label>Date de mise en relation</label><input required type="date" id="v-date" value="${escapeAttr(d.dateMiseEnRelation||todayISO())}"></div>
       <div class="field"><label>Boutique (Business Unit)</label><select id="v-bu">${BOUTIQUES.map(b=>`<option ${d.businessUnit===b?'selected':''}>${b}</option>`).join('')}</select></div>
-      <div class="field"><label>📱 Téléphone WhatsApp <span style="font-weight:400;color:#9a998f;font-size:11px;">— saisir en premier</span></label><input id="v-tel" value="${escapeAttr(d.telephone)}" placeholder="ex: 70000000" inputmode="numeric" oninput="this.value=this.value.replace(/[^0-9]/g,'')"></div>
-      <div class="field"><label>Téléphone 2 <span style="font-weight:400;color:#9a998f;font-size:11px;">— optionnel</span></label><input id="v-tel2" value="${escapeAttr(d.telephone2||'')}" placeholder="ex: 65000000" inputmode="numeric" oninput="this.value=this.value.replace(/[^0-9]/g,'')"></div>
-      <div class="field"><label>Civilité</label><select id="v-civilite"><option value="">—</option>${CIVILITES.filter(c=>c).map(c=>`<option ${(d.civilite||'')===c?'selected':''}>${c}</option>`).join('')}</select></div>
-      <div class="field"><label>Nom</label><input required id="v-nom" value="${escapeAttr(d.nom)}"></div>
-      <div class="field"><label>Prénom</label><input id="v-prenom" value="${escapeAttr(d.prenom)}"></div>
-      <div class="field full"><label>Adresse (résidence)</label><input id="v-adresse" value="${escapeAttr(d.adresse)}"></div>
 
       <div class="form-section-title">Article vendu</div>
       <div class="field full"><label>Quel article vendez-vous ?</label><select id="v-article">${TYPES_ARTICLE.map(t=>`<option ${d.typeArticle===t?'selected':''}>${t}</option>`).join('')}</select></div>
@@ -1827,7 +1711,6 @@ function venteForm(data){
       <div id="sec-reparation" class="field full" style="display:none;"><label>Coût</label><input type="number" min="0" id="v-cout" value="${escapeAttr(d.cout)}"></div>
 
       <div id="sec-assurance" class="form-grid" style="display:none;grid-column:1/-1;">
-        <div class="field"><label>Fonction</label><input id="v-fonction" value="${escapeAttr(d.fonction)}"></div>
         <div class="field"><label>Assurance</label><select id="v-assurance">${ASSURANCES.map(a=>`<option ${d.assurance===a?'selected':''}>${a}</option>`).join('')}</select></div>
         <div class="field full" id="wrap-assurance-autre" style="display:none;"><label>Précisez l'assurance</label><input id="v-assurance-autre" value="${escapeAttr(d.assuranceAutre)}"></div>
       </div>
@@ -2106,8 +1989,10 @@ function getClientSuggestions(query){
   [...DB.clients, ...DB.ventes].forEach(p=>{
     const name = `${p.nom||''} ${p.prenom||''}`.trim();
     const tel = normTel(p.telephone);
+    const tel2 = normTel(p.telephone2);
     const telRaw = String(p.telephone||'');
-    if(name.toLowerCase().includes(q) || tel.includes(q) || telRaw.replace(/\s/g,'').includes(q)){
+    const tel2Raw = String(p.telephone2||'');
+    if(name.toLowerCase().includes(q) || tel.includes(q) || tel2.includes(q) || telRaw.replace(/\s/g,'').includes(q) || tel2Raw.replace(/\s/g,'').includes(q)){
       const key = tel || name.toLowerCase();
       if(seen.has(key)) return;
       seen.add(key);
@@ -2115,7 +2000,7 @@ function getClientSuggestions(query){
         key,
         label: `<b>${escapeHtml(name)}</b> <span style="color:#888;font-size:12px;">${escapeHtml(tel||telRaw)}</span>`,
         nom: p.nom||'', prenom: p.prenom||'',
-        telephone: tel||telRaw, telephone2: p.telephone2||'', adresse: p.adresse||'', boutique: p.boutique||p.businessUnit||'', civilite: p.civilite||''
+        telephone: tel||telRaw, telephone2: p.telephone2||'', adresse: p.adresse||'', boutique: p.boutique||p.businessUnit||'', civilite: p.civilite||'', fonction: p.fonction||'', entreprise: p.entreprise||''
       });
     }
   });
@@ -2212,9 +2097,10 @@ function renderJournee(){
   const boutiqueLentilles = Object.values(clientsBoutique).filter(c=>c.derniereDate<=s10b && c.dernierType.toLowerCase().includes('lentille'));
 
   // Fonction bouton WhatsApp
-  function waBtn(tel, message, label='WhatsApp'){
-    if(!tel) return '<span style="color:#ccc;font-size:12px;">Pas de numéro</span>';
-    const num = String(tel).replace(/\s/g,'');
+  function waBtn(tel, message, label='WhatsApp', tel2=''){
+    const telEff = tel || tel2;
+    if(!telEff) return '<span style="color:#ccc;font-size:12px;">Pas de numéro</span>';
+    const num = String(telEff).replace(/\s/g,'');
     const fullNum = num.startsWith('226') ? num : '226'+num;
     const msg = encodeURIComponent(message);
     return `<a href="https://wa.me/${fullNum}?text=${msg}" target="_blank" rel="noopener"
@@ -2247,8 +2133,9 @@ function renderJournee(){
         </div>
       </div>
       <div style="display:flex;gap:8px;align-items:center;flex-shrink:0;">
-        ${tel ? `<span style="font-size:13px;color:#555;">${escapeHtml(tel)}</span>` : ''}
-        ${waBtn(tel, message)}
+        ${tel ? `<span style="font-size:13px;color:#555;">📱 ${escapeHtml(tel)}</span>` : ''}
+        ${v.telephone2 ? `<span style="font-size:13px;color:#555;">📞 ${escapeHtml(v.telephone2)}</span>` : ''}
+        ${waBtn(tel, message, 'WhatsApp', v.telephone2||'')}
       </div>
     </div>`;
   }
@@ -2274,8 +2161,9 @@ function renderJournee(){
         </div>
       </div>
       <div style="display:flex;gap:8px;align-items:center;flex-shrink:0;">
-        ${tel ? `<span style="font-size:13px;color:#555;">${escapeHtml(tel)}</span>` : ''}
-        ${waBtn(tel, message)}
+        ${tel ? `<span style="font-size:13px;color:#555;">📱 ${escapeHtml(tel)}</span>` : ''}
+        ${p.telephone2 ? `<span style="font-size:13px;color:#555;">📞 ${escapeHtml(p.telephone2)}</span>` : ''}
+        ${waBtn(tel, message, 'WhatsApp', p.telephone2||'')}
       </div>
     </div>`;
   }
@@ -3178,6 +3066,8 @@ function attachVenteConditionalLogic(){
       const ad = document.getElementById('v-adresse'); if(ad) ad.value = s.adresse;
       const bu = document.getElementById('v-bu'); if(bu && s.boutique) bu.value = s.boutique;
       const cv = document.getElementById('v-civilite'); if(cv && s.civilite) cv.value = s.civilite;
+      const fo = document.getElementById('v-fonction'); if(fo && s.fonction) fo.value = s.fonction;
+      const en = document.getElementById('v-entreprise'); if(en && s.entreprise) en.value = s.entreprise;
     });
   }, 100);
   bindAutre('v-assurance','wrap-assurance-autre');
@@ -3199,6 +3089,8 @@ function attachModalEvents(){
       prenom: document.getElementById('p-prenom').value.trim(),
       adresse: document.getElementById('p-adresse').value.trim(),
       telephone: document.getElementById('p-tel').value.replace(/[^0-9]/g,''),
+      fonction: document.getElementById('p-fonction')?.value.trim()||'',
+      entreprise: document.getElementById('p-entreprise')?.value.trim()||'',
       telephone2: document.getElementById('p-tel2')?.value.replace(/[^0-9]/g,'')||'',
       besoin: document.getElementById('p-besoin').value.trim(),
       boutique: document.getElementById('p-boutique').value,
@@ -3229,6 +3121,8 @@ function attachModalEvents(){
       prenom: document.getElementById('c-prenom').value.trim(),
       adresse: document.getElementById('c-adresse').value.trim(),
       telephone: document.getElementById('c-tel').value.replace(/[^0-9]/g,''),
+      fonction: document.getElementById('c-fonction')?.value.trim()||'',
+      entreprise: document.getElementById('c-entreprise')?.value.trim()||'',
       telephone2: document.getElementById('c-tel2')?.value.replace(/[^0-9]/g,'')||'',
       email: document.getElementById('c-email').value.trim(),
       boutique: document.getElementById('c-boutique').value,
@@ -3337,6 +3231,7 @@ function attachModalEvents(){
       typeArticle: val('v-article'),
       cout: val('v-cout'),
       fonction: val('v-fonction').trim(),
+      entreprise: val('v-entreprise').trim(),
       assurance: val('v-assurance'), assuranceAutre: val('v-assurance-autre').trim(),
       apporteurAffaire: val('v-apporteur'), apporteurAffaireAutre: val('v-apporteur-autre').trim(),
       gestionnaire: val('v-gestionnaire'), gestionnaireAutre: val('v-gestionnaire-autre').trim(),
