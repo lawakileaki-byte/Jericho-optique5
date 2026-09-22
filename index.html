@@ -550,6 +550,9 @@ const state = {
   role: sessionStorageSafe('jo_role') || '',
   boutique: sessionStorageSafe('jo_boutique') || '',
   teamTab: sessionStorageSafe('jo_tab') || 'prospects',
+  analysePeriode: 'mois',
+  analyseDebut: '',
+  analyseFin: '',
   filters: { prospects:{statut:'', boutique:'', q:''}, clients:{boutique:'', q:''}, sav:{statut:'', boutique:'', q:''}, stock:{boutique:'', categorie:'', q:''}, ventes:{boutique:'', typeArticle:'', q:''} },
   modal: null,
 };
@@ -925,6 +928,7 @@ function renderTeam(){
         <button data-tab="clients" class="${state.teamTab==='clients'?'active':''}">Clients &amp; SAV</button>
         <button data-tab="ventes" class="${state.teamTab==='ventes'?'active':''}">Ventes</button>
         <button data-tab="stock" class="${state.teamTab==='stock'?'active':''}">Stock</button>
+        <button data-tab="analyse" class="${state.teamTab==='analyse'?'active':''}">📊 Analyse</button>
         ${isAdmin() ? `<button data-tab="admin" class="${state.teamTab==='admin'?'active':''}">Gestion comptes</button>` : ''}
         <button data-tab="moncompte" class="${state.teamTab==='moncompte'?'active':''}">Mon compte</button>
         <div class="out"><button id="btn-logout">Changer de compte</button></div>
@@ -945,6 +949,7 @@ function renderTeamTab(){
   if(state.teamTab==='stock') return renderStock();
   if(state.teamTab==='admin') return isAdmin() ? renderAdminComptes() : renderProspects();
   if(state.teamTab==='moncompte') return renderMonCompte();
+  if(state.teamTab==='analyse') return renderAnalyse();
   return '';
 }
 
@@ -1745,8 +1750,255 @@ function getClientSuggestions(query){
 }
 
 /* =========================================================
-   IMPRESSION REÇU PDF
+   ONGLET ANALYSE
    ========================================================= */
+function renderAnalyse(){
+  const periode = state.analysePeriode || 'mois';
+  const dateDebut = state.analyseDebut || '';
+  const dateFin = state.analyseFin || '';
+
+  // Calcul des bornes de dates
+  const now = new Date();
+  const today = now.toISOString().slice(0,10);
+  function startOf(p){
+    if(p==='jour') return today;
+    if(p==='semaine'){
+      const d = new Date(now);
+      d.setDate(d.getDate() - d.getDay() + (d.getDay()===0?-6:1));
+      return d.toISOString().slice(0,10);
+    }
+    if(p==='mois') return today.slice(0,7)+'-01';
+    if(p==='annee') return today.slice(0,4)+'-01-01';
+    if(p==='custom') return dateDebut;
+    return today.slice(0,7)+'-01';
+  }
+  const debut = startOf(periode);
+  const fin = periode==='custom' ? dateFin : today;
+
+  // Filtre par commercial si non admin
+  const mesVentes = isAdmin()
+    ? DB.ventes
+    : DB.ventes.filter(v=>v.commercial===state.commercial||v.gestionnaire===state.commercial);
+  const mesProspects = isAdmin()
+    ? DB.prospects
+    : DB.prospects.filter(p=>p.commercial===state.commercial);
+
+  // Ventes de la période
+  const ventesP = mesVentes.filter(v=>{
+    const d = (v.dateMiseEnRelation||'').slice(0,10);
+    return d>=debut && d<=fin;
+  });
+  // Période précédente (même durée)
+  const dureeMs = new Date(fin) - new Date(debut);
+  const debutPrec = new Date(new Date(debut)-dureeMs-86400000).toISOString().slice(0,10);
+  const finPrec = new Date(new Date(debut)-86400000).toISOString().slice(0,10);
+  const ventesPrec = mesVentes.filter(v=>{
+    const d=(v.dateMiseEnRelation||'').slice(0,10);
+    return d>=debutPrec && d<=finPrec;
+  });
+
+  // KPIs principaux
+  const ca = ventesP.reduce((a,v)=>a+venteTotal(v),0);
+  const caPrec = ventesPrec.reduce((a,v)=>a+venteTotal(v),0);
+  const evolCa = caPrec>0 ? Math.round((ca-caPrec)/caPrec*100) : null;
+  const nb = ventesP.length;
+  const nbPrec = ventesPrec.length;
+  const panier = nb>0 ? Math.round(ca/nb) : 0;
+  const reste = ventesP.reduce((a,v)=>a+venteReste(v),0);
+  const prospP = mesProspects.filter(p=>{const d=(p.dateMiseEnRelation||'').slice(0,10);return d>=debut&&d<=fin;});
+  const convertisP = prospP.filter(p=>p.statut==='Converti en client').length;
+  const txConv = prospP.length>0?Math.round(convertisP/prospP.length*100):0;
+  const bonTotal = ventesP.filter(v=>v.assurance&&v.assurance!=="Pas d'assurance").reduce((a,v)=>a+(Number(v.montantBonNonEncaisse)||0),0);
+
+  // CA par type
+  const parType = {};
+  ventesP.forEach(v=>{const t=v.typeArticle||'Autre'; parType[t]=(parType[t]||0)+venteTotal(v);});
+  const typesOrder = Object.entries(parType).sort((a,b)=>b[1]-a[1]);
+
+  // CA par boutique
+  const parBoutique = {};
+  ventesP.forEach(v=>{const b=v.businessUnit||'?'; parBoutique[b]=(parBoutique[b]||0)+venteTotal(v);});
+
+  // CA par jour (graphe linéaire)
+  const jours = {};
+  ventesP.forEach(v=>{const d=(v.dateMiseEnRelation||'').slice(0,10); jours[d]=(jours[d]||0)+venteTotal(v);});
+  const joursArr = Object.entries(jours).sort((a,b)=>a[0].localeCompare(b[0]));
+
+  // CA par commercial (admin seulement)
+  const parCommercial = {};
+  if(isAdmin()){
+    DB.ventes.filter(v=>{const d=(v.dateMiseEnRelation||'').slice(0,10);return d>=debut&&d<=fin;})
+      .forEach(v=>{const c=v.commercial||v.gestionnaire||'?'; parCommercial[c]=(parCommercial[c]||0)+venteTotal(v);});
+  }
+
+  // Assurances
+  const avecAss = ventesP.filter(v=>v.assurance&&v.assurance!=="Pas d'assurance").length;
+  const sansAss = ventesP.length - avecAss;
+
+  // Graphe barres CA par jour
+  function svgBarres(data, couleur='#E8A93B'){
+    if(!data.length) return '<p style="color:#9a998f;font-style:italic;font-size:13px;">Pas encore de données sur cette période.</p>';
+    const max = Math.max(...data.map(d=>d[1]),1);
+    const W=520, H=160, padL=10, padR=10, padT=10, padB=30;
+    const bw = Math.max(4, Math.floor((W-padL-padR)/data.length)-2);
+    const bars = data.map((d,i)=>{
+      const x = padL + i*((W-padL-padR)/data.length) + ((W-padL-padR)/data.length - bw)/2;
+      const bh = Math.round((d[1]/max)*(H-padT-padB));
+      const y = H-padB-bh;
+      const label = d[0].slice(5); // MM-DD
+      return `<rect x="${x}" y="${y}" width="${bw}" height="${bh}" fill="${couleur}" rx="3" opacity="0.9">
+        <title>${d[0]} : ${fmtFCFA(d[1])}</title></rect>
+        ${data.length<=14?`<text x="${x+bw/2}" y="${H-padB+14}" text-anchor="middle" font-size="9" fill="#888">${label}</text>`:''}`;
+    }).join('');
+    return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block;">
+      <line x1="${padL}" y1="${H-padB}" x2="${W-padR}" y2="${H-padB}" stroke="#ddd" stroke-width="1"/>
+      ${bars}
+    </svg>`;
+  }
+
+  // Graphe donut type article
+  function svgDonut(data){
+    if(!data.length) return '';
+    const total = data.reduce((a,d)=>a+d[1],0);
+    const COLORS = ['#E8A93B','#68AAD1','#26282B','#A6402E','#5a9e6f','#9b59b6'];
+    let angle = -90;
+    const cx=70,cy=70,r=55,ri=30;
+    const slices = data.map((d,i)=>{
+      const pct = d[1]/total;
+      const sweep = pct*360;
+      const a1 = angle*Math.PI/180;
+      const a2 = (angle+sweep)*Math.PI/180;
+      const x1=cx+r*Math.cos(a1),y1=cy+r*Math.sin(a1);
+      const x2=cx+r*Math.cos(a2),y2=cy+r*Math.sin(a2);
+      const xi1=cx+ri*Math.cos(a1),yi1=cy+ri*Math.sin(a1);
+      const xi2=cx+ri*Math.cos(a2),yi2=cy+ri*Math.sin(a2);
+      const lg = sweep>180?1:0;
+      const path=`M${x1},${y1} A${r},${r} 0 ${lg},1 ${x2},${y2} L${xi2},${yi2} A${ri},${ri} 0 ${lg},0 ${xi1},${yi1} Z`;
+      angle+=sweep;
+      return `<path d="${path}" fill="${COLORS[i%COLORS.length]}" opacity="0.9"><title>${d[0]}: ${fmtFCFA(d[1])} (${Math.round(pct*100)}%)</title></path>`;
+    }).join('');
+    const legend = data.map((d,i)=>`<div style="display:flex;align-items:center;gap:6px;font-size:12px;margin-bottom:4px;"><span style="width:12px;height:12px;border-radius:2px;background:${COLORS[i%COLORS.length]};flex-shrink:0;"></span><span style="color:#555;">${escapeHtml(d[0])}</span><span style="margin-left:auto;font-weight:600;">${Math.round(d[1]/total*100)}%</span></div>`).join('');
+    return `<div style="display:flex;align-items:center;gap:20px;">
+      <svg viewBox="0 0 140 140" style="width:140px;height:140px;flex-shrink:0;">${slices}</svg>
+      <div style="flex:1;">${legend}</div>
+    </div>`;
+  }
+
+  // Graphe barres horizontales commerciaux
+  function svgCommerciaux(data){
+    if(!data.length) return '';
+    const max=Math.max(...data.map(d=>d[1]),1);
+    return data.map(([nom,val])=>`
+      <div style="margin-bottom:10px;">
+        <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px;">
+          <span style="font-weight:600;">${escapeHtml(nom)}</span>
+          <span style="color:#E8A93B;font-weight:600;">${fmtFCFA(val)}</span>
+        </div>
+        <div style="background:#f0efe9;border-radius:4px;height:10px;overflow:hidden;">
+          <div style="background:linear-gradient(90deg,#E8A93B,#f4c96a);height:100%;width:${Math.round(val/max*100)}%;border-radius:4px;transition:width .5s;"></div>
+        </div>
+      </div>`).join('');
+  }
+
+  function evol(val, prec){
+    if(prec===null) return '';
+    const sign = val>=0?'+':'';
+    const color = val>=0?'#2d7a3a':'#A6402E';
+    return `<span style="font-size:12px;color:${color};font-weight:600;">${sign}${val}% vs période préc.</span>`;
+  }
+
+  const periodeLabel = {jour:'Aujourd\'hui',semaine:'Cette semaine',mois:'Ce mois',annee:'Cette année',custom:'Période personnalisée'};
+
+  return `
+  <div class="main-head">
+    <div><h2>Analyse</h2><p>${isAdmin()?'Vue globale de l\'activité':'Mes performances — '+escapeHtml(state.commercial)}</p></div>
+  </div>
+
+  <!-- FILTRES -->
+  <div class="panel" style="padding:16px 20px;margin-bottom:0;">
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+      ${['jour','semaine','mois','annee','custom'].map(p=>`
+        <button onclick="state.analysePeriode='${p}';render();" style="padding:7px 16px;border-radius:20px;border:2px solid ${periode===p?'#E8A93B':'#ddd'};background:${periode===p?'#E8A93B':'#fff'};color:${periode===p?'#26282B':'#555'};font-weight:${periode===p?'700':'400'};font-size:13px;cursor:pointer;">${{jour:'Aujourd\'hui',semaine:'Cette semaine',mois:'Ce mois',annee:'Cette année',custom:'Personnalisé'}[p]}</button>
+      `).join('')}
+      ${periode==='custom'?`
+        <input type="date" id="an-debut" value="${dateDebut}" max="${today}" onchange="state.analyseDebut=this.value;render();" style="padding:6px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;">
+        <span style="color:#888;">→</span>
+        <input type="date" id="an-fin" value="${dateFin||today}" max="${today}" onchange="state.analyseFin=this.value;render();" style="padding:6px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;">
+      `:''}
+    </div>
+    <div style="margin-top:8px;font-size:12px;color:#9a998f;">Période : <b>${debut}</b> → <b>${fin}</b></div>
+  </div>
+
+  <!-- KPIs -->
+  <div class="kpi-row" style="margin-top:12px;">
+    <div class="kpi"><div class="lbl">Chiffre d'affaires</div><div class="val" style="font-size:22px;">${fmtFCFA(ca)}</div>${evolCa!==null?evol(evolCa,0):''}</div>
+    <div class="kpi"><div class="lbl">Nombre de ventes</div><div class="val">${nb}</div><div class="sub">${nbPrec} sur la période préc.</div></div>
+    <div class="kpi"><div class="lbl">Panier moyen</div><div class="val" style="font-size:18px;">${fmtFCFA(panier)}</div></div>
+    <div class="kpi ${reste>0?'warn':''}"><div class="lbl">Reste à encaisser</div><div class="val" style="font-size:18px;">${fmtFCFA(reste)}</div></div>
+    <div class="kpi"><div class="lbl">Nouveaux prospects</div><div class="val">${prospP.length}</div><div class="sub">Taux conv. : ${txConv}%</div></div>
+    ${bonTotal>0?`<div class="kpi warn"><div class="lbl">Bons assurance à récupérer</div><div class="val" style="font-size:18px;">${fmtFCFA(bonTotal)}</div></div>`:''}
+  </div>
+
+  <!-- GRAPHE CA PAR JOUR -->
+  <div class="panel">
+    <h3 style="margin-bottom:14px;">Évolution du CA sur la période</h3>
+    ${svgBarres(joursArr)}
+  </div>
+
+  <!-- LIGNE 2 : TYPE + BOUTIQUE -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+    <div class="panel">
+      <h3 style="margin-bottom:14px;">Répartition par type d'article</h3>
+      ${svgDonut(typesOrder)}
+    </div>
+    <div class="panel">
+      <h3 style="margin-bottom:14px;">CA par boutique</h3>
+      ${svgDonut(Object.entries(parBoutique).sort((a,b)=>b[1]-a[1]))}
+    </div>
+  </div>
+
+  <!-- ASSURANCES -->
+  <div class="panel">
+    <h3 style="margin-bottom:14px;">Ventes avec assurance vs sans assurance</h3>
+    <div style="display:flex;gap:24px;flex-wrap:wrap;align-items:center;">
+      ${svgDonut([[`Avec assurance (${avecAss})`, avecAss],[`Sans assurance (${sansAss})`, sansAss]].filter(d=>d[1]>0))}
+      <div style="flex:1;min-width:200px;">
+        <div style="font-size:13px;color:#555;margin-bottom:8px;">Bons assurance en attente de remboursement :</div>
+        <div style="font-size:22px;font-weight:700;color:${bonTotal>0?'#A6402E':'#2d7a3a'};">${fmtFCFA(bonTotal)}</div>
+        <div style="font-size:12px;color:#9a998f;margin-top:4px;">${avecAss} vente(s) avec assurance sur ${nb} au total</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CLASSEMENT COMMERCIAUX (admin seulement) -->
+  ${isAdmin() && Object.keys(parCommercial).length ? `
+  <div class="panel">
+    <h3 style="margin-bottom:14px;">CA par commercial sur la période</h3>
+    ${svgCommerciaux(Object.entries(parCommercial).sort((a,b)=>b[1]-a[1]))}
+  </div>` : ''}
+
+  <!-- PROSPECTS & CONVERSION -->
+  <div class="panel">
+    <h3 style="margin-bottom:14px;">Entonnoir prospects → clients</h3>
+    <div style="display:flex;gap:0;flex-direction:column;max-width:360px;">
+      ${[
+        ['Nouveaux prospects', prospP.length, '#68AAD1'],
+        ['Contactés', prospP.filter(p=>p.statut!=='Nouveau').length, '#E8A93B'],
+        ['Convertis en clients', convertisP, '#2d7a3a'],
+      ].map(([label,val,col])=>`
+        <div style="margin-bottom:8px;">
+          <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px;"><span>${label}</span><b style="color:${col};">${val}</b></div>
+          <div style="background:#f0efe9;border-radius:4px;height:12px;overflow:hidden;">
+            <div style="background:${col};height:100%;width:${prospP.length>0?Math.round(val/prospP.length*100):0}%;border-radius:4px;"></div>
+          </div>
+        </div>`).join('')}
+      <div style="text-align:right;font-size:13px;margin-top:4px;"><b>Taux de conversion : <span style="color:#E8A93B;">${txConv}%</span></b></div>
+    </div>
+  </div>
+  `;
+}
+
+
 function imprimerRecu(v){
   if(!v){ showToast("Vente introuvable."); return; }
   const total = venteTotal(v);
