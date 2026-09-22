@@ -625,7 +625,7 @@ function setCommercial(nom, role, userId, boutique){
   state.role = role;
   state.userId = userId;
   state.boutique = boutique || '';
-  state.teamTab = 'dashboard';
+  state.teamTab = role==='admin' ? 'dashboard' : 'journee';
   try{
     sessionStorage.setItem('jo_commercial', nom);
     sessionStorage.setItem('jo_role', role);
@@ -989,12 +989,12 @@ function renderTeam(){
     <div class="team-shell">
       <div class="sidebar">
         <div class="who"><div class="lbl">Connecté(e) en tant que</div><div class="name">${escapeHtml(state.commercial)}</div><div class="role-badge ${isAdmin()?'is-admin':''}">${isAdmin()?'Directrice · Admin':'Commercial(e)'}</div></div>
-        <button data-tab="dashboard" class="${state.teamTab==='dashboard'?'active':''}">Tableau de bord</button>
+        ${isAdmin() ? `<button data-tab="dashboard" class="${state.teamTab==='dashboard'?'active':''}">Tableau de bord</button>` : ''}
+        <button data-tab="journee" class="${state.teamTab==='journee'?'active':''}">☀️ Ma journée</button>
         <button data-tab="prospects" class="${state.teamTab==='prospects'?'active':''}">Prospects</button>
         <button data-tab="clients" class="${state.teamTab==='clients'?'active':''}">Clients &amp; SAV</button>
         <button data-tab="ventes" class="${state.teamTab==='ventes'?'active':''}">Ventes</button>
         <button data-tab="stock" class="${state.teamTab==='stock'?'active':''}">Stock</button>
-        <button data-tab="journee" class="${state.teamTab==='journee'?'active':''}">☀️ Ma journée</button>
         <button data-tab="analyse" class="${state.teamTab==='analyse'?'active':''}">📊 Analyse</button>
         ${isAdmin() ? `<button data-tab="admin" class="${state.teamTab==='admin'?'active':''}">Gestion comptes</button>` : ''}
         <button data-tab="moncompte" class="${state.teamTab==='moncompte'?'active':''}">Mon compte</button>
@@ -1431,6 +1431,7 @@ function renderVentes(){
             <td>${reste>0 ? `<span class="badge b-lowstock">${fmtFCFA(reste)}</span>` : `<span class="badge b-okstock">Soldé</span>`}</td>
             <td>${fmtDate(v.dateRdv)}</td>
             <td><div class="row-actions">
+              <button class="icon-btn" data-view-vente-client="${v.id}">Fiche</button>
               <button class="icon-btn" data-edit-vente="${v.id}">Modifier</button>
               <button class="icon-btn" data-print-vente="${v.id}">🖨️ Reçu</button>
               ${isAdmin() ? `<button class="icon-btn danger" data-del-vente="${v.id}">Suppr.</button>` : ''}
@@ -2909,7 +2910,7 @@ function attachGlobalEvents(){
   const app = document.getElementById('app');
   if(app){
     app.addEventListener('click', async (e)=>{
-      const t = e.target.closest('button, a[data-nav], [data-tab], [data-del-prospect], [data-del-client], [data-del-sav], [data-del-vente], [data-del-stock], [data-edit-prospect], [data-edit-client], [data-edit-sav], [data-edit-vente], [data-edit-stock], [data-view-client], [data-convert-prospect], [data-edit-user], [data-toggle-user], [data-nav], [data-print-vente]');
+      const t = e.target.closest('button, a[data-nav], [data-tab], [data-del-prospect], [data-del-client], [data-del-sav], [data-del-vente], [data-del-stock], [data-edit-prospect], [data-edit-client], [data-edit-sav], [data-edit-vente], [data-edit-stock], [data-view-client], [data-convert-prospect], [data-edit-user], [data-toggle-user], [data-nav], [data-print-vente], [data-view-vente-client], [data-kpi-action], [data-periode]');
       if(!t) return;
 
       // Navigation publique
@@ -2959,6 +2960,11 @@ function attachGlobalEvents(){
       // KPIs cliquables
       if(t.dataset.kpiAction){ new Function(t.dataset.kpiAction)(); return; }
       if(t.dataset.printVente){ imprimerRecu(DB.ventes.find(v=>v.id===t.dataset.printVente)); return; }
+      // Fiche client depuis une vente
+      if(t.dataset.viewVenteClient){
+        const v = DB.ventes.find(x=>x.id===t.dataset.viewVenteClient);
+        if(v){ state.modal={type:'client-view', data:{nom:v.nom||'', prenom:v.prenom||'', telephone:v.telephone||'', adresse:v.adresse||'', boutique:v.businessUnit||'', id:''}}; render(); } return;
+      }
       if(t.id==='btn-export-ventes'){ exportCSV(DB.ventes,['dateMiseEnRelation','nom','prenom','adresse','telephone','typeArticle','businessUnit','gestionnaire','apporteurAffaire','assurance','prixVenteTotalSansRemise','remise','avance','dateRdv','commentaire'],'ventes_jericho.csv'); return; }
       if(t.dataset.editVente){ state.modal={type:'vente',data:DB.ventes.find(v=>v.id===t.dataset.editVente)||null}; render(); return; }
       if(t.dataset.delVente){
