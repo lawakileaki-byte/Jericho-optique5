@@ -562,7 +562,7 @@ function setCommercial(nom, role, userId, boutique){
   state.role = role;
   state.userId = userId;
   state.boutique = boutique || '';
-  state.teamTab = role==='admin' ? 'dashboard' : 'prospects';
+  state.teamTab = role==='admin' ? 'dashboard' : 'journee';
   try{
     sessionStorage.setItem('jo_commercial', nom);
     sessionStorage.setItem('jo_role', role);
@@ -931,6 +931,7 @@ function renderTeam(){
         <button data-tab="clients" class="${state.teamTab==='clients'?'active':''}">Clients &amp; SAV</button>
         <button data-tab="ventes" class="${state.teamTab==='ventes'?'active':''}">Ventes</button>
         <button data-tab="stock" class="${state.teamTab==='stock'?'active':''}">Stock</button>
+        <button data-tab="journee" class="${state.teamTab==='journee'?'active':''}">☀️ Ma journée</button>
         <button data-tab="analyse" class="${state.teamTab==='analyse'?'active':''}">📊 Analyse</button>
         ${isAdmin() ? `<button data-tab="admin" class="${state.teamTab==='admin'?'active':''}">Gestion comptes</button>` : ''}
         <button data-tab="moncompte" class="${state.teamTab==='moncompte'?'active':''}">Mon compte</button>
@@ -944,8 +945,9 @@ function renderTeam(){
 }
 
 function renderTeamTab(){
-  if(state.teamTab==='dashboard' && !isAdmin()) state.teamTab = 'prospects';
+  if(state.teamTab==='dashboard' && !isAdmin()) state.teamTab = 'journee';
   if(state.teamTab==='dashboard') return renderDashboard();
+  if(state.teamTab==='journee') return renderJournee();
   if(state.teamTab==='prospects') return renderProspects();
   if(state.teamTab==='clients') return renderClients();
   if(state.teamTab==='ventes') return renderVentes();
@@ -1834,8 +1836,234 @@ function getClientSuggestions(query){
 }
 
 /* =========================================================
-   ONGLET ANALYSE
+   MA JOURNEE
    ========================================================= */
+function renderJournee(){
+  const now = new Date();
+  const today = now.toISOString().slice(0,10);
+  const tomorrow = new Date(now.getTime()+86400000).toISOString().slice(0,10);
+  const hier = new Date(now.getTime()-86400000).toISOString().slice(0,10);
+
+  const nom = state.commercial;
+  const heure = now.getHours();
+  const salut = heure<12 ? 'Bonjour' : heure<18 ? 'Bon après-midi' : 'Bonsoir';
+
+  // Mes ventes (filtrées par commercial)
+  const mesVentes = isAdmin()
+    ? DB.ventes
+    : DB.ventes.filter(v=>v.commercial===nom||v.gestionnaire===nom);
+
+  // Mes prospects
+  const mesProspects = isAdmin()
+    ? DB.prospects
+    : DB.prospects.filter(p=>p.commercial===nom);
+
+  // Mes tickets SAV
+  const mesSAV = DB.sav.filter(s=>
+    (s.commercial===nom||isAdmin()) && s.statut!=='Résolu'
+  );
+
+  // 1. RDV demain (à rappeler aujourd'hui)
+  const rdvDemain = mesVentes.filter(v=>v.dateRdv===tomorrow && venteReste(v)>0);
+
+  // 2. RDV aujourd'hui (clients attendus)
+  const rdvAujourdHui = mesVentes.filter(v=>v.dateRdv===today);
+
+  // 3. RDV passés non soldés (à relancer)
+  const rdvDepasses = mesVentes.filter(v=>
+    v.dateRdv && v.dateRdv < today && venteReste(v)>0
+  ).sort((a,b)=>b.dateRdv.localeCompare(a.dateRdv)).slice(0,5);
+
+  // 4. Prospects à relancer
+  const prospRdvPris = mesProspects.filter(p=>{
+    if(p.statut!=='Rendez-vous pris') return false;
+    const jours = Math.floor((now - new Date(p.dateMiseEnRelation)) / 86400000);
+    return jours >= 2;
+  });
+  const prospContactes = mesProspects.filter(p=>{
+    if(p.statut!=='Contacté') return false;
+    const jours = Math.floor((now - new Date(p.dateMiseEnRelation)) / 86400000);
+    return jours >= 7;
+  });
+  const prospNouveaux = mesProspects.filter(p=>{
+    if(p.statut!=='Nouveau') return false;
+    const jours = Math.floor((now - new Date(p.dateMiseEnRelation)) / 86400000);
+    return jours >= 3;
+  });
+
+  // 5. Objectif du mois
+  const user = USERS_CACHE.find(u=>u.id===state.userId);
+  let objMensuels = {};
+  if(user?.objectifsMensuels){ try{ objMensuels=JSON.parse(user.objectifsMensuels); }catch(e){} }
+  const moisIdx = now.getMonth();
+  const annee = now.getFullYear();
+  const objMois = Number(objMensuels[moisIdx])||0;
+  const debutMois = `${annee}-${String(moisIdx+1).padStart(2,'0')}-01`;
+  const caMois = mesVentes.filter(v=>{
+    const d=(v.dateMiseEnRelation||'').slice(0,10);
+    return d>=debutMois && d<=today;
+  }).reduce((a,v)=>a+venteTotal(v),0);
+  const pctMois = objMois>0 ? Math.min(Math.round(caMois/objMois*100),100) : null;
+  const joursRestants = new Date(annee, moisIdx+1, 0).getDate() - now.getDate();
+
+  // Fonction bouton WhatsApp
+  function waBtn(tel, message, label='WhatsApp'){
+    if(!tel) return '<span style="color:#ccc;font-size:12px;">Pas de numéro</span>';
+    const num = String(tel).replace(/\s/g,'');
+    const fullNum = num.startsWith('226') ? num : '226'+num;
+    const msg = encodeURIComponent(message);
+    return `<a href="https://wa.me/${fullNum}?text=${msg}" target="_blank" rel="noopener"
+      style="display:inline-flex;align-items:center;gap:6px;background:#25D366;color:#fff;text-decoration:none;padding:6px 12px;border-radius:6px;font-size:12px;font-weight:600;">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="#fff"><path d="M12.04 2c-5.46 0-9.91 4.45-9.91 9.91 0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38c1.45.79 3.08 1.21 4.74 1.21 5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.816 9.816 0 0 0 12.04 2m.01 1.67c2.2 0 4.26.86 5.82 2.42a8.225 8.225 0 0 1 2.41 5.83c0 4.54-3.7 8.23-8.24 8.23-1.48 0-2.93-.39-4.19-1.15l-.3-.17-3.12.82.83-3.04-.2-.32a8.188 8.188 0 0 1-1.26-4.38c.01-4.54 3.7-8.24 8.25-8.24M8.53 7.33c-.16 0-.43.06-.66.31-.22.25-.87.86-.87 2.07 0 1.22.89 2.39 1 2.56.14.17 1.76 2.67 4.25 3.73.59.27 1.05.42 1.41.53.59.19 1.13.16 1.56.1.48-.07 1.46-.6 1.67-1.18.21-.58.21-1.07.14-1.18-.07-.11-.25-.17-.53-.31-.28-.14-1.66-.82-1.92-.91-.26-.09-.44-.14-.63.14-.19.28-.72.91-.88 1.09-.16.18-.32.2-.6.07-.28-.14-1.19-.44-2.26-1.4-.83-.75-1.4-1.67-1.56-1.95-.17-.28-.02-.44.12-.58.13-.13.28-.34.42-.51.14-.17.18-.29.28-.47.09-.19.05-.35-.02-.49-.07-.14-.63-1.52-.88-2.07-.24-.53-.48-.46-.66-.47-.16-.01-.35-.01-.53-.01Z"/></svg>
+      ${escapeHtml(label)}
+    </a>`;
+  }
+
+  function carteVente(v, contexte){
+    const client = `${v.nom||''} ${v.prenom||''}`.trim();
+    const tel = String(v.telephone||'').replace(/\s/g,'');
+    const reste = venteReste(v);
+    let message = '';
+    if(contexte==='rappel-rdv'){
+      message = `Bonjour ${v.prenom||v.nom||''}, nous vous rappelons votre rendez-vous demain à Jéricho Optique ${v.businessUnit||''}. Merci de confirmer votre venue.`;
+    } else if(contexte==='relance-paiement'){
+      message = `Bonjour ${v.prenom||v.nom||''}, nous vous contactons de Jéricho Optique concernant votre dossier. Il reste un solde de ${fmtFCFA(reste)} à régler. Pouvez-vous nous confirmer une date de passage en boutique ?`;
+    } else {
+      message = `Bonjour ${v.prenom||v.nom||''}, nous vous attendons aujourd'hui à Jéricho Optique ${v.businessUnit||''} pour votre rendez-vous. À tout à l'heure !`;
+    }
+    return `
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--line);gap:12px;flex-wrap:wrap;">
+      <div style="flex:1;min-width:180px;">
+        <div style="font-weight:600;font-size:14px;">${escapeHtml(client)}</div>
+        <div style="font-size:12px;color:#888;margin-top:2px;">
+          ${escapeHtml(v.typeArticle||'')} · ${escapeHtml(v.businessUnit||'')}
+          ${v.dateRdv ? ` · RDV ${fmtDate(v.dateRdv)}` : ''}
+          ${reste>0 ? ` · <span style="color:#A6402E;font-weight:600;">Reste : ${fmtFCFA(reste)}</span>` : ' · <span style="color:#2d7a3a;">Soldé</span>'}
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;flex-shrink:0;">
+        ${tel ? `<span style="font-size:13px;color:#555;">${escapeHtml(tel)}</span>` : ''}
+        ${waBtn(tel, message)}
+      </div>
+    </div>`;
+  }
+
+  function carteProspect(p, contexte){
+    const nom = `${p.nom||''} ${p.prenom||''}`.trim();
+    const tel = String(p.telephone||'').replace(/\s/g,'');
+    const jours = Math.floor((now - new Date(p.dateMiseEnRelation)) / 86400000);
+    let message = '';
+    if(contexte==='rdv'){
+      message = `Bonjour ${p.prenom||p.nom||''}, nous vous contactons de Jéricho Optique pour confirmer votre rendez-vous. Êtes-vous toujours disponible ?`;
+    } else {
+      message = `Bonjour ${p.prenom||p.nom||''}, nous sommes Jéricho Optique. Nous souhaitions vous recontacter concernant votre besoin en optique. Êtes-vous toujours intéressé(e) ?`;
+    }
+    return `
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--line);gap:12px;flex-wrap:wrap;">
+      <div style="flex:1;min-width:180px;">
+        <div style="font-weight:600;font-size:14px;">${escapeHtml(nom)}</div>
+        <div style="font-size:12px;color:#888;margin-top:2px;">
+          <span class="badge b-${p.statut==='Rendez-vous pris'?'rdv':'contact'}">${escapeHtml(p.statut)}</span>
+          · ${escapeHtml(p.boutique||'')} · il y a ${jours} jour${jours>1?'s':''}
+          ${p.besoin ? ` · ${escapeHtml(p.besoin)}` : ''}
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;flex-shrink:0;">
+        ${tel ? `<span style="font-size:13px;color:#555;">${escapeHtml(tel)}</span>` : ''}
+        ${waBtn(tel, message)}
+      </div>
+    </div>`;
+  }
+
+  function section(titre, couleur, emoji, contenu, vide='Rien à faire ici aujourd\'hui ✓'){
+    return `
+    <div class="panel" style="border-left:4px solid ${couleur};">
+      <h3 style="color:${couleur};margin-bottom:${contenu?'4px':'0'};">${emoji} ${titre}</h3>
+      ${contenu || `<p style="color:#9a998f;font-size:13px;font-style:italic;margin-top:8px;">${vide}</p>`}
+    </div>`;
+  }
+
+  return `
+  <div class="main-head">
+    <div>
+      <h2>${salut}, ${escapeHtml(nom)} 👋</h2>
+      <p>Voici ta journée du ${now.toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long',year:'numeric'})}.</p>
+    </div>
+  </div>
+
+  <!-- OBJECTIF DU MOIS -->
+  ${objMois>0 ? `
+  <div class="panel" style="background:linear-gradient(135deg,#26282B,#3a3d40);color:#fff;border:none;margin-bottom:0;">
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
+      <div>
+        <div style="font-size:11px;font-weight:700;color:#E8A93B;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px;">Objectif ${['Jan','Fév','Mar','Avr','Mai','Jun','Jul','Aoû','Sep','Oct','Nov','Déc'][moisIdx]}</div>
+        <div style="font-size:22px;font-weight:700;">${fmtFCFA(caMois)} <span style="font-size:14px;font-weight:400;color:#aaa;">/ ${fmtFCFA(objMois)}</span></div>
+        <div style="font-size:12px;color:#aaa;margin-top:4px;">${joursRestants} jour${joursRestants>1?'s':''} restants ce mois</div>
+      </div>
+      <div style="flex:1;min-width:180px;max-width:280px;">
+        <div style="background:rgba(255,255,255,0.15);border-radius:8px;height:16px;overflow:hidden;">
+          <div style="background:#E8A93B;height:100%;width:${pctMois}%;border-radius:8px;"></div>
+        </div>
+        <div style="text-align:right;font-size:13px;font-weight:700;color:#E8A93B;margin-top:4px;">${pctMois}%</div>
+        ${pctMois<100 ? `<div style="font-size:12px;color:#aaa;">Il reste ${fmtFCFA(objMois-caMois)} à réaliser</div>` : '<div style="font-size:12px;color:#4ade80;">🎉 Objectif atteint !</div>'}
+      </div>
+    </div>
+  </div>` : ''}
+
+  <!-- RDV DEMAIN — à rappeler aujourd'hui -->
+  ${section(
+    `RDV demain à confirmer (${rdvDemain.length})`,
+    '#E8A93B', '📞',
+    rdvDemain.length ? rdvDemain.map(v=>carteVente(v,'rappel-rdv')).join('') : null,
+    'Aucun RDV demain — profites-en pour prospecter !'
+  )}
+
+  <!-- RDV AUJOURD'HUI — clients attendus -->
+  ${section(
+    `Clients attendus aujourd'hui (${rdvAujourdHui.length})`,
+    '#68AAD1', '🏪',
+    rdvAujourdHui.length ? rdvAujourdHui.map(v=>carteVente(v,'accueil')).join('') : null,
+    'Personne d\'attendu aujourd\'hui.'
+  )}
+
+  <!-- PROSPECTS RDV PRIS — à confirmer -->
+  ${(prospRdvPris.length+prospContactes.length+prospNouveaux.length)>0 ? section(
+    `Prospects à relancer (${prospRdvPris.length+prospContactes.length+prospNouveaux.length})`,
+    '#9b59b6', '🎯',
+    [
+      ...prospRdvPris.map(p=>carteProspect(p,'rdv')),
+      ...prospContactes.map(p=>carteProspect(p,'relance')),
+      ...prospNouveaux.map(p=>carteProspect(p,'relance'))
+    ].join('')
+  ) : section('Prospects à relancer', '#9b59b6', '🎯', null, 'Tous tes prospects sont à jour.')}
+
+  <!-- RDV DÉPASSÉS NON SOLDÉS -->
+  ${section(
+    `Soldes en attente (${rdvDepasses.length})`,
+    '#A6402E', '💰',
+    rdvDepasses.length ? rdvDepasses.map(v=>carteVente(v,'relance-paiement')).join('') : null,
+    'Aucun solde en attente — bravo !'
+  )}
+
+  <!-- SAV EN COURS -->
+  ${section(
+    `Tickets SAV ouverts (${mesSAV.length})`,
+    '#555', '🔧',
+    mesSAV.length ? mesSAV.map(s=>`
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--line);flex-wrap:wrap;gap:8px;">
+        <div>
+          <div style="font-weight:600;font-size:14px;">${escapeHtml(s.clientNom||'Client')}</div>
+          <div style="font-size:12px;color:#888;">${escapeHtml(s.typeDemande||'')} · ${escapeHtml(s.boutique||'')} · <span class="badge b-open">${escapeHtml(s.statut)}</span></div>
+          ${s.description?`<div style="font-size:12px;color:#666;margin-top:3px;font-style:italic;">${escapeHtml(s.description.slice(0,80))}${s.description.length>80?'…':''}</div>`:''}
+        </div>
+        ${waBtn(s.telephone, `Bonjour ${s.clientNom||''}, nous vous contactons de Jéricho Optique concernant votre dossier SAV (${s.typeDemande||''}). Pouvez-vous nous donner des nouvelles ?`)}
+      </div>`).join('') : null,
+    'Aucun ticket SAV ouvert.'
+  )}
+  `;
+}
+
+
 function renderAnalyse(){
   const periode = state.analysePeriode || 'mois';
   const dateDebut = state.analyseDebut || '';
