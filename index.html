@@ -1034,7 +1034,7 @@ function renderDashboard(){
   const debutMois = `${annee}-${String(moisIdx+1).padStart(2,'0')}-01`;
   const debutAnnee = `${annee}-01-01`;
 
-  const mesVentes = iAmAdmin ? DB.ventes : DB.ventes.filter(v=>v.commercial===myName||v.gestionnaire===myName);
+  const mesVentes = iAmAdmin ? DB.ventes : DB.ventes.filter(v=>v.gestionnaire===myName); // CA porté par le gestionnaire
   const myProspects = iAmAdmin ? p : p.filter(x=>x.commercial===myName);
 
   const ventesMois = mesVentes.filter(v=>(v.dateMiseEnRelation||'').slice(0,10)>=debutMois);
@@ -1077,7 +1077,12 @@ function renderDashboard(){
   const recentSav = [...s].sort((a,b)=>(b.dateOuverture||'').localeCompare(a.dateOuverture||'')).slice(0,5);
 
   function kpi(label, val, sub, warn, action){
-    return `<div class="kpi ${warn?'warn':''}" ${action?`style="cursor:pointer;" onclick="${action}"`:''}><div class="lbl">${label}</div><div class="val" style="font-size:${String(val).length>9?'16px':'22px'};">${val}</div><div class="sub">${sub}${action?` <span style="color:#E8A93B;font-size:10px;">→ détail</span>`:''}</div></div>`;
+    const warnClass = warn ? 'warn' : '';
+    const cursor = action ? 'cursor:pointer;' : '';
+    const click = action ? ' data-kpi-action="' + action + '"' : '';
+    const arrow = action ? '<span style="color:#E8A93B;font-size:10px;">→ détail</span>' : '';
+    const fs = String(val).length > 9 ? '16px' : '22px';
+    return '<div class="kpi ' + warnClass + '" style="' + cursor + '"' + click + '><div class="lbl">' + label + '</div><div class="val" style="font-size:' + fs + ';">' + val + '</div><div class="sub">' + sub + ' ' + arrow + '</div></div>';
   }
 
   function listeRelance(clients, titre, couleur, msgWA){
@@ -1110,7 +1115,7 @@ function renderDashboard(){
     ${kpi('CA '+MOIS[moisIdx], fmtFCFA(caMois), ventesMois.length+' vente(s)', false, "state.teamTab='ventes';render();")}
     ${kpi('CA '+annee, fmtFCFA(caAnnee), ventesAnnee.length+' vente(s)', false, "state.teamTab='analyse';state.analysePeriode='annee';render();")}
     ${kpi('Reste à encaisser', fmtFCFA(resteTotal), ventesNonSoldees.length+' vente(s) en attente', resteTotal>0, "state.teamTab='ventes';render();")}
-    ${pctMois!==null?`<div class="kpi" style="cursor:pointer;" onclick="state.teamTab='analyse';render();"><div class="lbl">Objectif ${MOIS[moisIdx]}</div><div class="val" style="font-size:20px;">${pctMois}%</div><div style="background:#f0efe9;border-radius:4px;height:6px;margin:4px 0;overflow:hidden;"><div style="background:${pctMois>=100?'#2d7a3a':'#E8A93B'};height:100%;width:${pctMois}%;"></div></div><div class="sub">${fmtFCFA(caMois)} / ${fmtFCFA(objMois)} <span style="color:#E8A93B;font-size:10px;">→ détail</span></div></div>`:''}
+    ${pctMois!==null?kpi('Objectif '+MOIS[moisIdx], pctMois+'%', fmtFCFA(caMois)+' / '+fmtFCFA(objMois), false, 'state.teamTab=\"analyse\";render();'):''}
   </div>
 
   <div style="font-size:11px;font-weight:700;color:#68AAD1;text-transform:uppercase;letter-spacing:.06em;margin:16px 0 8px;">Portefeuille clients</div>
@@ -1127,15 +1132,15 @@ function renderDashboard(){
   ${listeRelance(clients18,'🟡 À relancer — lunettes entre 18 et 24 mois','#E8A93B','Bonjour {nom}, vos lunettes auront bientôt 2 ans. Chez Jéricho Optique, nous vous invitons à anticiper votre renouvellement. Voulez-vous en discuter ?')}
   ${listeRelance(clientsLentilles,'🔵 Renouvellement lentilles','#68AAD1','Bonjour {nom}, il est temps de renouveler vos lentilles de contact. Contactez-nous à Jéricho Optique pour votre prochaine commande.')}
 
-  <div class="panel"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;"><h3 style="margin:0;">${iAmAdmin?'Dernières ventes':'Mes dernières ventes'}</h3><button class="btn-sm btn-ghost" onclick="state.teamTab='ventes';render();">Voir tout →</button></div>
+  <div class="panel"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;"><h3 style="margin:0;">${iAmAdmin?'Dernières ventes':'Mes dernières ventes'}</h3><button class="btn-sm btn-ghost" data-kpi-action="state.teamTab='ventes';render();">Voir tout →</button></div>
     ${renderMiniTable(recentVentes,['Client','Type','Montant','Reste','Date'],r=>[escapeHtml(`${r.nom||''} ${r.prenom||''}`.trim()),escapeHtml(r.typeArticle||''),fmtFCFA(venteTotal(r)),venteReste(r)>0?`<span style="color:#A6402E;font-weight:600;">${fmtFCFA(venteReste(r))}</span>`:'<span style="color:#2d7a3a;">Soldé</span>',fmtDate(r.dateMiseEnRelation)])}
   </div>
 
-  <div class="panel"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;"><h3 style="margin:0;">${iAmAdmin?'Derniers prospects':'Mes derniers prospects'}</h3><button class="btn-sm btn-ghost" onclick="state.teamTab='prospects';render();">Voir tout →</button></div>
+  <div class="panel"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;"><h3 style="margin:0;">${iAmAdmin?'Derniers prospects':'Mes derniers prospects'}</h3><button class="btn-sm btn-ghost" data-kpi-action="state.teamTab='prospects';render();">Voir tout →</button></div>
     ${renderMiniTable(recentProspects,['Nom','Boutique','Statut','Date'],r=>[escapeHtml(`${r.nom} ${r.prenom||''}`.trim()),escapeHtml(r.boutique),statutBadge(r.statut,'prospect'),fmtDate(r.dateMiseEnRelation)])}
   </div>
 
-  ${iAmAdmin?`<div class="panel"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;"><h3 style="margin:0;">Derniers tickets SAV</h3><button class="btn-sm btn-ghost" onclick="state.teamTab='clients';render();">Voir tout →</button></div>
+  ${iAmAdmin?`<div class="panel"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;"><h3 style="margin:0;">Derniers tickets SAV</h3><button class="btn-sm btn-ghost" data-kpi-action="state.teamTab='clients';render();">Voir tout →</button></div>
     ${renderMiniTable(recentSav,['Client','Boutique','Type','Statut','Ouvert le'],r=>[escapeHtml(r.clientNom||''),escapeHtml(r.boutique||''),escapeHtml(r.typeDemande||''),statutBadge(r.statut,'sav'),fmtDate(r.dateOuverture)])}
   </div>`:''}
   `;
@@ -1356,7 +1361,7 @@ function renderVentes(){
   else if(f.periode==='tout') debutPeriode = '';
 
   let rows = DB.ventes.filter(v=>{
-    if(!isAdmin() && v.commercial !== state.commercial && v.gestionnaire !== state.commercial) return false;
+    if(!isAdmin() && v.gestionnaire !== state.commercial) return false; // CA = gestionnaire
     if(debutPeriode && (v.dateMiseEnRelation||'').slice(0,10) < debutPeriode) return false;
     if(f.boutique && v.businessUnit!==f.boutique) return false;
     if(f.typeArticle && v.typeArticle!==f.typeArticle) return false;
@@ -1382,7 +1387,7 @@ function renderVentes(){
   <!-- Filtre période -->
   <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
     ${['semaine','mois','annee','tout'].map(p=>`
-      <button onclick="state.filters.ventes.periode='${p}';render();"
+      <button onclick="state.filters.ventes.periode=\`${p}\`;render();"
         style="padding:6px 14px;border-radius:16px;border:2px solid ${f.periode===p?'#E8A93B':'#ddd'};background:${f.periode===p?'#E8A93B':'#fff'};color:${f.periode===p?'#26282B':'#666'};font-weight:${f.periode===p?'700':'400'};font-size:12px;cursor:pointer;">
         ${{semaine:'Cette semaine',mois:'Ce mois',annee:'Cette année',tout:'Tout l\'historique'}[p]}
       </button>`).join('')}
@@ -1410,7 +1415,7 @@ function renderVentes(){
 
   <div class="panel" style="padding:0;">
     <table>
-      <thead><tr><th>Client</th><th>Contact</th><th>Article</th><th>Boutique</th><th>Gestionnaire</th><th>Total</th><th>Reste à payer</th><th>RDV</th><th></th></tr></thead>
+      <thead><tr><th>Client</th><th>Contact</th><th>Article</th><th>Boutique</th><th>Gestionnaire</th><th>Saisi par</th><th>Total</th><th>Reste à payer</th><th>RDV</th><th></th></tr></thead>
       <tbody>
         ${rows.length ? rows.map(v=>{
           const reste = venteReste(v);
@@ -1421,6 +1426,7 @@ function renderVentes(){
             <td>${escapeHtml(v.typeArticle)}</td>
             <td>${escapeHtml(v.businessUnit||'—')}</td>
             <td>${escapeHtml(v.gestionnaire==='Autre'?(v.gestionnaireAutre||'—'):(v.gestionnaire||'—'))}</td>
+            <td style="font-size:11px;color:#888;">${escapeHtml(v.saisePar||v.commercial||'—')}</td>
             <td>${fmtFCFA(venteTotal(v))}</td>
             <td>${reste>0 ? `<span class="badge b-lowstock">${fmtFCFA(reste)}</span>` : `<span class="badge b-okstock">Soldé</span>`}</td>
             <td>${fmtDate(v.dateRdv)}</td>
@@ -1704,7 +1710,7 @@ function clientView(client){
 
   <div class="modal-actions" style="justify-content:flex-start;margin-top:20px;">
     <button type="button" class="btn-sm btn-ghost" id="modal-cancel">Fermer</button>
-    <button type="button" class="btn-sm" onclick="state.modal={type:'client',data:DB.clients.find(c=>c.id==='${client.id}')};render();">Modifier la fiche</button>
+    <button type="button" class="btn-sm" data-edit-client="${client.id}">Modifier la fiche</button>
   </div>`;
 }
 
@@ -1795,8 +1801,15 @@ function venteForm(data){
       <div id="sec-staff" class="form-grid" style="display:none;grid-column:1/-1;">
         <div class="field"><label>Apporteur d'affaire</label><select id="v-apporteur">${STAFF.map(s=>`<option ${d.apporteurAffaire===s?'selected':''}>${s}</option>`).join('')}</select></div>
         <div class="field" id="wrap-apporteur-autre" style="display:none;"><label>Précisez</label><input id="v-apporteur-autre" value="${escapeAttr(d.apporteurAffaireAutre)}"></div>
-        <div class="field"><label>Gestionnaire</label><select id="v-gestionnaire">${STAFF.map(s=>`<option ${d.gestionnaire===s?'selected':''}>${s}</option>`).join('')}</select></div>
+        <div class="field">
+          <label>Gestionnaire <span style="font-weight:400;color:#9a998f;font-size:11px;">— propriétaire du client, porte le CA</span></label>
+          <select id="v-gestionnaire">${STAFF.map(s=>`<option ${(d.gestionnaire||state.commercial)===s?'selected':''}>${s}</option>`).join('')}</select>
+        </div>
         <div class="field" id="wrap-gestionnaire-autre" style="display:none;"><label>Précisez</label><input id="v-gestionnaire-autre" value="${escapeAttr(d.gestionnaireAutre)}"></div>
+        <div class="field">
+          <label>Saisi par <span style="font-weight:400;color:#9a998f;font-size:11px;">— commercial connecté, non modifiable</span></label>
+          <input id="v-saisi-par" value="${escapeAttr(state.commercial)}" readonly style="background:#f5f4f0;color:#888;cursor:not-allowed;">
+        </div>
       </div>
 
       <div id="sec-prescription" style="display:none;grid-column:1/-1;">
@@ -1856,7 +1869,7 @@ function venteForm(data){
 
       <div class="form-section-title">Suivi</div>
       <div class="field"><label>Date de RDV</label><input type="date" id="v-rdv" value="${escapeAttr(d.dateRdv)}"></div>
-      <div class="field"><label>Commercial</label><input id="v-commercial" value="${escapeAttr(d.commercial||state.commercial)}"></div>
+      <div class="field"><label>Saisi par</label><input value="${escapeAttr(d.saisePar||state.commercial)}" readonly style="background:#f5f4f0;color:#888;cursor:not-allowed;"></div>
       <div class="field full"><label>Commentaire</label><textarea id="v-commentaire">${escapeHtml(d.commentaire)}</textarea></div>
     </div>
     <div class="modal-actions">
@@ -2087,11 +2100,21 @@ function renderJournee(){
   const nom = state.commercial;
   const heure = now.getHours();
   const salut = heure<12 ? 'Bonjour' : heure<18 ? 'Bon après-midi' : 'Bonsoir';
+  const annee = now.getFullYear();
+  const moisIdx = now.getMonth();
+  const debutMois = `${annee}-${String(moisIdx+1).padStart(2,'0')}-01`;
+  const debutAnnee = `${annee}-01-01`;
 
-  // Mes ventes (filtrées par commercial)
+  // Mes ventes = gestionnaire (porte le CA)
   const mesVentes = isAdmin()
     ? DB.ventes
-    : DB.ventes.filter(v=>v.commercial===nom||v.gestionnaire===nom);
+    : DB.ventes.filter(v=>v.gestionnaire===nom);
+
+  // Ventes boutique = tous les clients de ma boutique (pour les relances)
+  const maBoutique = state.boutique;
+  const ventesBoutique = maBoutique && maBoutique!=='Toutes'
+    ? DB.ventes.filter(v=>v.businessUnit===maBoutique)
+    : DB.ventes;
 
   // Mes prospects
   const mesProspects = isAdmin()
@@ -2135,16 +2158,24 @@ function renderJournee(){
   const user = USERS_CACHE.find(u=>u.id===state.userId);
   let objMensuels = {};
   if(user?.objectifsMensuels){ try{ objMensuels=JSON.parse(user.objectifsMensuels); }catch(e){} }
-  const moisIdx = now.getMonth();
-  const annee = now.getFullYear();
   const objMois = Number(objMensuels[moisIdx])||0;
-  const debutMois = `${annee}-${String(moisIdx+1).padStart(2,'0')}-01`;
-  const caMois = mesVentes.filter(v=>{
-    const d=(v.dateMiseEnRelation||'').slice(0,10);
-    return d>=debutMois && d<=today;
-  }).reduce((a,v)=>a+venteTotal(v),0);
+  const caMois = mesVentes.filter(v=>(v.dateMiseEnRelation||'').slice(0,10)>=debutMois).reduce((a,v)=>a+venteTotal(v),0);
+  const caAnnee = mesVentes.filter(v=>(v.dateMiseEnRelation||'').slice(0,10)>=debutAnnee).reduce((a,v)=>a+venteTotal(v),0);
+  const resteTotal = mesVentes.reduce((a,v)=>a+venteReste(v),0);
   const pctMois = objMois>0 ? Math.min(Math.round(caMois/objMois*100),100) : null;
   const joursRestants = new Date(annee, moisIdx+1, 0).getDate() - now.getDate();
+
+  // 6. Clients boutique à relancer (Option C — vue boutique partagée)
+  const clientsBoutique = buildClientIndex(ventesBoutique);
+  const d18b = new Date(now); d18b.setMonth(d18b.getMonth()-18);
+  const d24b = new Date(now); d24b.setMonth(d24b.getMonth()-24);
+  const d10b = new Date(now); d10b.setMonth(d10b.getMonth()-10);
+  const s18b = d18b.toISOString().slice(0,10);
+  const s24b = d24b.toISOString().slice(0,10);
+  const s10b = d10b.toISOString().slice(0,10);
+  const boutique24 = Object.values(clientsBoutique).filter(c=>c.derniereDate<=s24b && c.dernierType.toLowerCase().includes('monture'));
+  const boutique18 = Object.values(clientsBoutique).filter(c=>c.derniereDate<=s18b && c.derniereDate>s24b && c.dernierType.toLowerCase().includes('monture'));
+  const boutiqueLentilles = Object.values(clientsBoutique).filter(c=>c.derniereDate<=s10b && c.dernierType.toLowerCase().includes('lentille'));
 
   // Fonction bouton WhatsApp
   function waBtn(tel, message, label='WhatsApp'){
@@ -2231,7 +2262,31 @@ function renderJournee(){
     </div>
   </div>
 
-  <!-- OBJECTIF DU MOIS -->
+  <!-- MINI TABLEAU DE BORD PERSONNEL -->
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:20px;">
+    <div style="background:#26282B;border-radius:10px;padding:14px;color:#fff;">
+      <div style="font-size:10px;font-weight:700;color:#E8A93B;text-transform:uppercase;margin-bottom:4px;">CA ${MOIS[moisIdx]}</div>
+      <div style="font-size:20px;font-weight:700;">${fmtFCFA(caMois)}</div>
+      ${pctMois!==null?`<div style="background:rgba(255,255,255,.15);border-radius:4px;height:5px;margin:6px 0;overflow:hidden;"><div style="background:#E8A93B;height:100%;width:${pctMois}%;"></div></div>
+      <div style="font-size:11px;color:#aaa;">${pctMois}% de l'objectif · ${joursRestants}j restants</div>`
+      :`<div style="font-size:11px;color:#aaa;margin-top:4px;">Objectif non défini</div>`}
+    </div>
+    <div style="background:var(--sand-light);border-radius:10px;padding:14px;cursor:pointer;" onclick="state.teamTab=&quot;analyse&quot;;state.analysePeriode=&quot;annee&quot;;render();">
+      <div style="font-size:10px;font-weight:700;color:#68AAD1;text-transform:uppercase;margin-bottom:4px;">CA ${annee}</div>
+      <div style="font-size:20px;font-weight:700;">${fmtFCFA(caAnnee)}</div>
+      <div style="font-size:11px;color:#888;margin-top:4px;">${mesVentes.filter(v=>(v.dateMiseEnRelation||'').slice(0,10)>=debutAnnee).length} vente(s)</div>
+    </div>
+    ${resteTotal>0?`<div style="background:#fdf0ee;border-radius:10px;padding:14px;">
+      <div style="font-size:10px;font-weight:700;color:#A6402E;text-transform:uppercase;margin-bottom:4px;">Reste à encaisser</div>
+      <div style="font-size:20px;font-weight:700;color:#A6402E;">${fmtFCFA(resteTotal)}</div>
+      <div style="font-size:11px;color:#A6402E;margin-top:4px;">${mesVentes.filter(v=>venteReste(v)>0).length} vente(s) en attente</div>
+    </div>`:''}
+    <div style="background:var(--sand-light);border-radius:10px;padding:14px;">
+      <div style="font-size:10px;font-weight:700;color:#555;text-transform:uppercase;margin-bottom:4px;">Ma boutique</div>
+      <div style="font-size:20px;font-weight:700;">${Object.keys(clientsBoutique).length}</div>
+      <div style="font-size:11px;color:#888;margin-top:4px;">clients ${maBoutique&&maBoutique!=='Toutes'?escapeHtml(maBoutique):'(toutes boutiques)'}</div>
+    </div>
+  </div>
   ${objMois>0 ? `
   <div class="panel" style="background:linear-gradient(135deg,#26282B,#3a3d40);color:#fff;border:none;margin-bottom:0;">
     <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
@@ -2300,6 +2355,64 @@ function renderJournee(){
       </div>`).join('') : null,
     'Aucun ticket SAV ouvert.'
   )}
+
+  <!-- CLIENTS BOUTIQUE À RELANCER (Option C) -->
+  ${boutique24.length||boutique18.length||boutiqueLentilles.length ? `
+  <div style="margin-top:8px;font-size:11px;font-weight:700;color:#555;text-transform:uppercase;letter-spacing:.05em;">
+    Clients ${maBoutique&&maBoutique!=='Toutes'?escapeHtml(maBoutique):'de ta boutique'} à relancer
+  </div>` : ''}
+
+  ${boutique24.length ? section(
+    `Renouvellement urgent (${boutique24.length})`, '#A6402E', '🔴',
+    boutique24.slice(0,6).map(cl=>{
+      const num = (cl.telephone||'').startsWith('226')?cl.telephone:'226'+(cl.telephone||'');
+      const msg = encodeURIComponent(`Bonjour ${cl.nom} ${cl.prenom||''}, cela fait plus de 2 ans que vous avez vos lunettes. Chez Jéricho Optique, nous vous recommandons un contrôle de vue. Souhaitez-vous prendre rendez-vous ?`);
+      return `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--line);flex-wrap:wrap;gap:8px;">
+        <div><b style="font-size:13px;">${escapeHtml(cl.nom)} ${escapeHtml(cl.prenom||'')}</b>
+        <span style="font-size:11px;color:#888;margin-left:8px;">Dernier achat : ${fmtDate(cl.derniereDate)} · Gest. : ${escapeHtml(cl.derniereVente?.gestionnaire||'')}</span></div>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <span style="font-size:12px;color:#555;">${escapeHtml(cl.telephone||'')}</span>
+          ${waBtn(cl.telephone, decodeURIComponent(msg))}
+        </div>
+      </div>`;
+    }).join('')+
+    (boutique24.length>6?`<p style="font-size:12px;color:#E8A93B;margin-top:8px;text-align:center;">+${boutique24.length-6} autres dans le Tableau de bord</p>`:''),
+    'Aucun client en renouvellement urgent.'
+  ) : ''}
+
+  ${boutique18.length ? section(
+    `À relancer bientôt — 18 à 24 mois (${boutique18.length})`, '#E8A93B', '🟡',
+    boutique18.slice(0,4).map(cl=>{
+      const msg = encodeURIComponent(`Bonjour ${cl.nom} ${cl.prenom||''}, vos lunettes auront bientôt 2 ans. Chez Jéricho Optique, nous vous invitons à anticiper votre renouvellement. Voulez-vous en discuter ?`);
+      return `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--line);flex-wrap:wrap;gap:8px;">
+        <div><b style="font-size:13px;">${escapeHtml(cl.nom)} ${escapeHtml(cl.prenom||'')}</b>
+        <span style="font-size:11px;color:#888;margin-left:8px;">Dernier achat : ${fmtDate(cl.derniereDate)}</span></div>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <span style="font-size:12px;color:#555;">${escapeHtml(cl.telephone||'')}</span>
+          ${waBtn(cl.telephone, decodeURIComponent(msg))}
+        </div>
+      </div>`;
+    }).join('')+
+    (boutique18.length>4?`<p style="font-size:12px;color:#E8A93B;margin-top:8px;text-align:center;">+${boutique18.length-4} autres dans le Tableau de bord</p>`:''),
+    'Aucun client à relancer.'
+  ) : ''}
+
+  ${boutiqueLentilles.length ? section(
+    `Renouvellement lentilles (${boutiqueLentilles.length})`, '#68AAD1', '🔵',
+    boutiqueLentilles.slice(0,4).map(cl=>{
+      const msg = encodeURIComponent(`Bonjour ${cl.nom} ${cl.prenom||''}, il est temps de renouveler vos lentilles de contact. Contactez-nous à Jéricho Optique pour votre prochaine commande.`);
+      return `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--line);flex-wrap:wrap;gap:8px;">
+        <div><b style="font-size:13px;">${escapeHtml(cl.nom)} ${escapeHtml(cl.prenom||'')}</b>
+        <span style="font-size:11px;color:#888;margin-left:8px;">Dernier achat : ${fmtDate(cl.derniereDate)}</span></div>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <span style="font-size:12px;color:#555;">${escapeHtml(cl.telephone||'')}</span>
+          ${waBtn(cl.telephone, decodeURIComponent(msg))}
+        </div>
+      </div>`;
+    }).join('')+
+    (boutiqueLentilles.length>4?`<p style="font-size:12px;color:#E8A93B;margin-top:8px;text-align:center;">+${boutiqueLentilles.length-4} autres dans le Tableau de bord</p>`:''),
+    'Aucun renouvellement lentilles.'
+  ) : ''}
   `;
 }
 
@@ -2330,7 +2443,7 @@ function renderAnalyse(){
   // Filtre par commercial si non admin
   const mesVentes = isAdmin()
     ? DB.ventes
-    : DB.ventes.filter(v=>v.commercial===state.commercial||v.gestionnaire===state.commercial);
+    : DB.ventes.filter(v=>v.gestionnaire===state.commercial); // CA = gestionnaire
   const mesProspects = isAdmin()
     ? DB.prospects
     : DB.prospects.filter(p=>p.commercial===state.commercial);
@@ -2470,7 +2583,7 @@ function renderAnalyse(){
   <div class="panel" style="padding:16px 20px;margin-bottom:0;">
     <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
       ${['jour','semaine','mois','annee','custom'].map(p=>`
-        <button onclick="state.analysePeriode='${p}';render();" style="padding:7px 16px;border-radius:20px;border:2px solid ${periode===p?'#E8A93B':'#ddd'};background:${periode===p?'#E8A93B':'#fff'};color:${periode===p?'#26282B':'#555'};font-weight:${periode===p?'700':'400'};font-size:13px;cursor:pointer;">${{jour:'Aujourd\'hui',semaine:'Cette semaine',mois:'Ce mois',annee:'Cette année',custom:'Personnalisé'}[p]}</button>
+        <button data-periode="${p}" onclick="state.analysePeriode=this.dataset.periode;render();" style="padding:7px 16px;border-radius:20px;border:2px solid ${periode===p?'#E8A93B':'#ddd'};background:${periode===p?'#E8A93B':'#fff'};color:${periode===p?'#26282B':'#555'};font-weight:${periode===p?'700':'400'};font-size:13px;cursor:pointer;">${{jour:'Aujourd\'hui',semaine:'Cette semaine',mois:'Ce mois',annee:'Cette année',custom:'Personnalisé'}[p]}</button>
       `).join('')}
       ${periode==='custom'?`
         <input type="date" id="an-debut" value="${dateDebut}" max="${today}" onchange="state.analyseDebut=this.value;render();" style="padding:6px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;">
@@ -2843,6 +2956,8 @@ function attachGlobalEvents(){
       }
 
       // Ventes
+      // KPIs cliquables
+      if(t.dataset.kpiAction){ new Function(t.dataset.kpiAction)(); return; }
       if(t.dataset.printVente){ imprimerRecu(DB.ventes.find(v=>v.id===t.dataset.printVente)); return; }
       if(t.id==='btn-export-ventes'){ exportCSV(DB.ventes,['dateMiseEnRelation','nom','prenom','adresse','telephone','typeArticle','businessUnit','gestionnaire','apporteurAffaire','assurance','prixVenteTotalSansRemise','remise','avance','dateRdv','commentaire'],'ventes_jericho.csv'); return; }
       if(t.dataset.editVente){ state.modal={type:'vente',data:DB.ventes.find(v=>v.id===t.dataset.editVente)||null}; render(); return; }
@@ -3164,6 +3279,7 @@ function attachModalEvents(){
       assurance: val('v-assurance'), assuranceAutre: val('v-assurance-autre').trim(),
       apporteurAffaire: val('v-apporteur'), apporteurAffaireAutre: val('v-apporteur-autre').trim(),
       gestionnaire: val('v-gestionnaire'), gestionnaireAutre: val('v-gestionnaire-autre').trim(),
+      saisePar: data?.saisePar || state.commercial, // figé à la création, jamais modifié
       odSphere: val('v-od-sphere').trim(), odCylindre: val('v-od-cyl').trim(), odAxe: val('v-od-axe').trim(), odAddition: val('v-od-add').trim(),
       ogSphere: val('v-og-sphere').trim(), ogCylindre: val('v-og-cyl').trim(), ogAxe: val('v-og-axe').trim(), ogAddition: val('v-og-add').trim(),
       laboratoire: val('v-labo'), laboratoireAutre: val('v-labo-autre').trim(),
