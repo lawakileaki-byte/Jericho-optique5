@@ -510,6 +510,7 @@ function buildClientIndex(ventes){
         telephone: normTel(v.telephone),
         nom: v.nom||'',
         prenom: v.prenom||'',
+        civilite: v.civilite||'',
         adresse: v.adresse||'',
         boutique: v.businessUnit||'',
         ventes: [],
@@ -612,7 +613,7 @@ const state = {
   userId: sessionStorageSafe('jo_userId') || '',
   role: sessionStorageSafe('jo_role') || '',
   boutique: sessionStorageSafe('jo_boutique') || '',
-  teamTab: sessionStorageSafe('jo_tab') || 'prospects',
+  teamTab: 'prospects', // sera redéfini par setCommercial selon le rôle
   analysePeriode: 'mois',
   analyseDebut: '',
   analyseFin: '',
@@ -645,7 +646,23 @@ function isAdmin(){ return state.role==='admin'; }
 
 const BOUTIQUES = ["Patte d'Oie","Tanghin"];
 const SOURCES = ["Passage en boutique","Page Facebook","Recommandation","Appel téléphonique","Autre"];
+const CIVILITES = ["", "Madame", "Monsieur"];
 const MOIS = ["Janvier","Février","Mars","Avril","Mai","Juin","Juillet","Août","Septembre","Octobre","Novembre","Décembre"];
+
+// Génère l'appellation personnalisée : "Madame Traoré", "Monsieur Ali", ou juste "Fatou"
+function appelation(nom, prenom, civilite){
+  const c = civilite || '';
+  const p = prenom || '';
+  const n = nom || '';
+  if(c && n) return `${c} ${n}`;
+  if(p) return p;
+  return n;
+}
+
+// Génère le message WhatsApp avec la bonne formule de politesse
+function bonjourClient(nom, prenom, civilite){
+  return 'Bonjour ' + appelation(nom, prenom, civilite);
+}
 const MOIS_COURTS = ["jan","fev","mar","avr","mai","jun","jul","aou","sep","oct","nov","dec"];
 const STATUTS_PROSPECT = ["Nouveau","Contacté","Rendez-vous pris","Converti en client","Perdu"];
 const TYPES_SAV = ["Réparation","Garantie","Réclamation","Ajustement / réglage","Autre"];
@@ -1086,7 +1103,7 @@ function renderDashboard(){
       <h3 style="color:${couleur};margin-bottom:10px;">${titre} (${clients.length})</h3>
       ${clients.slice(0,8).map(cl=>{
         const num = cl.telephone && cl.telephone.startsWith('226')?cl.telephone:'226'+(cl.telephone||'');
-        const msg = encodeURIComponent(msgWA.replace('{nom}',`${cl.nom} ${cl.prenom||''}`.trim()));
+        const msg = encodeURIComponent(msgWA.replace('{nom}', bonjourClient(cl.nom,cl.prenom,cl.civilite)));
         return `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--line);flex-wrap:wrap;gap:8px;">
           <div><b style="font-size:13px;">${escapeHtml(cl.nom)} ${escapeHtml(cl.prenom||'')}</b><span style="font-size:11px;color:#888;margin-left:8px;">Dernier achat : ${fmtDate(cl.derniereDate)} · ${cl.nbVentes} achat(s}</span></div>
           <div style="display:flex;gap:8px;align-items:center;">
@@ -1416,7 +1433,7 @@ function renderVentes(){
           const reste = venteReste(v);
           return `
           <tr>
-            <td><b>${escapeHtml(v.nom)} ${escapeHtml(v.prenom||'')}</b><div style="font-size:11px;color:#888;">${fmtDate(v.dateMiseEnRelation)}</div></td>
+            <td><div style="font-size:11px;color:#888;margin-bottom:1px;">${v.civilite?escapeHtml(v.civilite):''}</div><b>${escapeHtml(v.nom)} ${escapeHtml(v.prenom||'')}</b><div style="font-size:11px;color:#888;">${fmtDate(v.dateMiseEnRelation)}</div></td>
             <td>${escapeHtml(v.telephone||'—')}</td>
             <td>${escapeHtml(v.typeArticle)}</td>
             <td>${escapeHtml(v.businessUnit||'—')}</td>
@@ -1541,6 +1558,7 @@ function prospectForm(data){
     <div class="form-grid">
       <div class="field"><label>Date de mise en relation</label><input required type="date" id="p-date" value="${escapeAttr(d.dateMiseEnRelation || todayISO())}"></div>
       <div class="field"><label>Boutique</label><select id="p-boutique">${BOUTIQUES.map(b=>`<option ${d.boutique===b?'selected':''}>${b}</option>`).join('')}</select></div>
+      <div class="field"><label>Civilité</label><select id="p-civilite"><option value="">—</option>${CIVILITES.filter(c=>c).map(c=>`<option ${d.civilite===c?'selected':''}>${c}</option>`).join('')}</select></div>
       <div class="field"><label>Nom</label><input required id="p-nom" value="${escapeAttr(d.nom)}"></div>
       <div class="field"><label>Prénom</label><input id="p-prenom" value="${escapeAttr(d.prenom)}"></div>
       <div class="field full"><label>Adresse (résidence)</label><input id="p-adresse" value="${escapeAttr(d.adresse)}"></div>
@@ -1567,6 +1585,7 @@ function clientForm(data){
   ${state.modal && state.modal.sourceProspectId ? `<p style="font-size:12.5px;color:#8a8980;margin:-8px 0 18px;">Pré-rempli depuis le prospect : vérifie les informations avant d'enregistrer.</p>` : ''}
   <form id="form-client">
     <div class="form-grid">
+      <div class="field"><label>Civilité</label><select id="c-civilite"><option value="">—</option>${CIVILITES.filter(c=>c).map(c=>`<option ${d.civilite===c?'selected':''}>${c}</option>`).join('')}</select></div>
       <div class="field"><label>Nom</label><input required id="c-nom" value="${escapeAttr(d.nom)}"></div>
       <div class="field"><label>Prénom</label><input id="c-prenom" value="${escapeAttr(d.prenom)}"></div>
       <div class="field full"><label>Adresse (résidence)</label><input id="c-adresse" value="${escapeAttr(d.adresse)}"></div>
@@ -1618,7 +1637,7 @@ function clientView(client){
   }
 
   return `
-  <h3>${escapeHtml(client.nom)} ${escapeHtml(client.prenom||'')}${badgeRenouvellement}</h3>
+  <h3>${client.civilite?escapeHtml(client.civilite)+' ':''}<span style="font-weight:700;">${escapeHtml(client.nom)}</span> ${escapeHtml(client.prenom||'')}${badgeRenouvellement}</h3>
   <div style="display:flex;flex-wrap:wrap;gap:16px;margin-bottom:16px;">
     ${telNorm?`<div style="font-size:13px;color:#555;">📞 ${escapeHtml(telNorm)}</div>`:''}
     ${client.adresse?`<div style="font-size:13px;color:#555;">📍 ${escapeHtml(client.adresse)}</div>`:''}
@@ -1779,6 +1798,7 @@ function venteForm(data){
       <div class="field"><label>Date de mise en relation</label><input required type="date" id="v-date" value="${escapeAttr(d.dateMiseEnRelation||todayISO())}"></div>
       <div class="field"><label>Boutique (Business Unit)</label><select id="v-bu">${BOUTIQUES.map(b=>`<option ${d.businessUnit===b?'selected':''}>${b}</option>`).join('')}</select></div>
       <div class="field full"><label>Téléphone <span style="font-weight:400;color:#9a998f;">— saisir d'abord pour retrouver le client</span></label><input id="v-tel" value="${escapeAttr(d.telephone)}" placeholder="ex: 70 00 00 00" inputmode="numeric"></div>
+      <div class="field"><label>Civilité</label><select id="v-civilite"><option value="">—</option>${CIVILITES.filter(c=>c).map(c=>`<option ${(d.civilite||'')===c?'selected':''}>${c}</option>`).join('')}</select></div>
       <div class="field"><label>Nom</label><input required id="v-nom" value="${escapeAttr(d.nom)}"></div>
       <div class="field"><label>Prénom</label><input id="v-prenom" value="${escapeAttr(d.prenom)}"></div>
       <div class="field full"><label>Adresse (résidence)</label><input id="v-adresse" value="${escapeAttr(d.adresse)}"></div>
@@ -2077,7 +2097,7 @@ function getClientSuggestions(query){
         key,
         label: `<b>${escapeHtml(name)}</b> <span style="color:#888;font-size:12px;">${escapeHtml(tel||telRaw)}</span>`,
         nom: p.nom||'', prenom: p.prenom||'',
-        telephone: tel||telRaw, adresse: p.adresse||'', boutique: p.boutique||p.businessUnit||''
+        telephone: tel||telRaw, adresse: p.adresse||'', boutique: p.boutique||p.businessUnit||'', civilite: p.civilite||''
       });
     }
   });
@@ -2192,11 +2212,11 @@ function renderJournee(){
     const reste = venteReste(v);
     let message = '';
     if(contexte==='rappel-rdv'){
-      message = `Bonjour ${v.prenom||v.nom||''}, nous vous rappelons votre rendez-vous demain à Jéricho Optique ${v.businessUnit||''}. Merci de confirmer votre venue.`;
+      message = `${bonjourClient(v.nom,v.prenom,v.civilite)}, nous vous rappelons votre rendez-vous demain à Jéricho Optique ${v.businessUnit||''}. Merci de confirmer votre venue.`;
     } else if(contexte==='relance-paiement'){
-      message = `Bonjour ${v.prenom||v.nom||''}, nous vous contactons de Jéricho Optique concernant votre dossier. Il reste un solde de ${fmtFCFA(reste)} à régler. Pouvez-vous nous confirmer une date de passage en boutique ?`;
+      message = `${bonjourClient(v.nom,v.prenom,v.civilite)}, nous vous contactons de Jéricho Optique concernant votre dossier. Il reste un solde de ${fmtFCFA(reste)} à régler. Pouvez-vous nous confirmer une date de passage en boutique ?`;
     } else {
-      message = `Bonjour ${v.prenom||v.nom||''}, nous vous attendons aujourd'hui à Jéricho Optique ${v.businessUnit||''} pour votre rendez-vous. À tout à l'heure !`;
+      message = `${bonjourClient(v.nom,v.prenom,v.civilite)}, nous vous attendons aujourd'hui à Jéricho Optique ${v.businessUnit||''} pour votre rendez-vous. À tout à l'heure !`;
     }
     return `
     <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--line);gap:12px;flex-wrap:wrap;">
@@ -2221,9 +2241,9 @@ function renderJournee(){
     const jours = Math.floor((now - new Date(p.dateMiseEnRelation)) / 86400000);
     let message = '';
     if(contexte==='rdv'){
-      message = `Bonjour ${p.prenom||p.nom||''}, nous vous contactons de Jéricho Optique pour confirmer votre rendez-vous. Êtes-vous toujours disponible ?`;
+      message = `${bonjourClient(p.nom,p.prenom,p.civilite)}, nous vous contactons de Jéricho Optique pour confirmer votre rendez-vous. Êtes-vous toujours disponible ?`;
     } else {
-      message = `Bonjour ${p.prenom||p.nom||''}, nous sommes Jéricho Optique. Nous souhaitions vous recontacter concernant votre besoin en optique. Êtes-vous toujours intéressé(e) ?`;
+      message = `${bonjourClient(p.nom,p.prenom,p.civilite)}, nous sommes Jéricho Optique. Nous souhaitions vous recontacter concernant votre besoin en optique. Êtes-vous toujours intéressé(e) ?`;
     }
     return `
     <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--line);gap:12px;flex-wrap:wrap;">
@@ -2347,7 +2367,7 @@ function renderJournee(){
           <div style="font-size:12px;color:#888;">${escapeHtml(s.typeDemande||'')} · ${escapeHtml(s.boutique||'')} · <span class="badge b-open">${escapeHtml(s.statut)}</span></div>
           ${s.description?`<div style="font-size:12px;color:#666;margin-top:3px;font-style:italic;">${escapeHtml(s.description.slice(0,80))}${s.description.length>80?'…':''}</div>`:''}
         </div>
-        ${waBtn(s.telephone, `Bonjour ${s.clientNom||''}, nous vous contactons de Jéricho Optique concernant votre dossier SAV (${s.typeDemande||''}). Pouvez-vous nous donner des nouvelles ?`)}
+        ${waBtn(s.telephone, `${bonjourClient(s.clientNom,'',s.civilite||'')}, nous vous contactons de Jéricho Optique concernant votre dossier SAV (${s.typeDemande||''}). Pouvez-vous nous donner des nouvelles ?`)}
       </div>`).join('') : null,
     'Aucun ticket SAV ouvert.'
   )}
@@ -2362,7 +2382,7 @@ function renderJournee(){
     `Renouvellement urgent (${boutique24.length})`, '#A6402E', '🔴',
     boutique24.slice(0,6).map(cl=>{
       const num = (cl.telephone||'').startsWith('226')?cl.telephone:'226'+(cl.telephone||'');
-      const msg = encodeURIComponent(`Bonjour ${cl.nom} ${cl.prenom||''}, cela fait plus de 2 ans que vous avez vos lunettes. Chez Jéricho Optique, nous vous recommandons un contrôle de vue. Souhaitez-vous prendre rendez-vous ?`);
+      const msg = encodeURIComponent(`${bonjourClient(cl.nom,cl.prenom,cl.civilite)}, cela fait plus de 2 ans que vous avez vos lunettes. Chez Jéricho Optique, nous vous recommandons un contrôle de vue. Souhaitez-vous prendre rendez-vous ?`);
       return `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--line);flex-wrap:wrap;gap:8px;">
         <div><b style="font-size:13px;">${escapeHtml(cl.nom)} ${escapeHtml(cl.prenom||'')}</b>
         <span style="font-size:11px;color:#888;margin-left:8px;">Dernier achat : ${fmtDate(cl.derniereDate)} · Gest. : ${escapeHtml(cl.derniereVente?.gestionnaire||'')}</span></div>
@@ -2379,7 +2399,7 @@ function renderJournee(){
   ${boutique18.length ? section(
     `À relancer bientôt — 18 à 24 mois (${boutique18.length})`, '#E8A93B', '🟡',
     boutique18.slice(0,4).map(cl=>{
-      const msg = encodeURIComponent(`Bonjour ${cl.nom} ${cl.prenom||''}, vos lunettes auront bientôt 2 ans. Chez Jéricho Optique, nous vous invitons à anticiper votre renouvellement. Voulez-vous en discuter ?`);
+      const msg = encodeURIComponent(`${bonjourClient(cl.nom,cl.prenom,cl.civilite)}, vos lunettes auront bientôt 2 ans. Chez Jéricho Optique, nous vous invitons à anticiper votre renouvellement. Voulez-vous en discuter ?`);
       return `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--line);flex-wrap:wrap;gap:8px;">
         <div><b style="font-size:13px;">${escapeHtml(cl.nom)} ${escapeHtml(cl.prenom||'')}</b>
         <span style="font-size:11px;color:#888;margin-left:8px;">Dernier achat : ${fmtDate(cl.derniereDate)}</span></div>
@@ -2396,7 +2416,7 @@ function renderJournee(){
   ${boutiqueLentilles.length ? section(
     `Renouvellement lentilles (${boutiqueLentilles.length})`, '#68AAD1', '🔵',
     boutiqueLentilles.slice(0,4).map(cl=>{
-      const msg = encodeURIComponent(`Bonjour ${cl.nom} ${cl.prenom||''}, il est temps de renouveler vos lentilles de contact. Contactez-nous à Jéricho Optique pour votre prochaine commande.`);
+      const msg = encodeURIComponent(`${bonjourClient(cl.nom,cl.prenom,cl.civilite)}, il est temps de renouveler vos lentilles de contact. Contactez-nous à Jéricho Optique pour votre prochaine commande.`);
       return `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--line);flex-wrap:wrap;gap:8px;">
         <div><b style="font-size:13px;">${escapeHtml(cl.nom)} ${escapeHtml(cl.prenom||'')}</b>
         <span style="font-size:11px;color:#888;margin-left:8px;">Dernier achat : ${fmtDate(cl.derniereDate)}</span></div>
@@ -3136,6 +3156,7 @@ function attachVenteConditionalLogic(){
       const pr = document.getElementById('v-prenom'); if(pr) pr.value = s.prenom;
       const ad = document.getElementById('v-adresse'); if(ad) ad.value = s.adresse;
       const bu = document.getElementById('v-bu'); if(bu && s.boutique) bu.value = s.boutique;
+      const cv = document.getElementById('v-civilite'); if(cv && s.civilite) cv.value = s.civilite;
     });
   }, 100);
   bindAutre('v-assurance','wrap-assurance-autre');
@@ -3152,7 +3173,8 @@ function attachModalEvents(){
     e.preventDefault();
     const id = document.getElementById('p-id').value || uid();
     const obj = {
-      id, nom: document.getElementById('p-nom').value.trim(),
+      id, civilite: document.getElementById('p-civilite').value,
+      nom: document.getElementById('p-nom').value.trim(),
       prenom: document.getElementById('p-prenom').value.trim(),
       adresse: document.getElementById('p-adresse').value.trim(),
       telephone: document.getElementById('p-tel').value.trim(),
@@ -3180,7 +3202,8 @@ function attachModalEvents(){
     const id = document.getElementById('c-id').value || uid();
     const existing = DB.clients.find(c=>c.id===id);
     const obj = {
-      id, nom: document.getElementById('c-nom').value.trim(),
+      id, civilite: document.getElementById('c-civilite').value,
+      nom: document.getElementById('c-nom').value.trim(),
       prenom: document.getElementById('c-prenom').value.trim(),
       adresse: document.getElementById('c-adresse').value.trim(),
       telephone: document.getElementById('c-tel').value.trim(),
@@ -3284,6 +3307,7 @@ function attachModalEvents(){
       dateMiseEnRelation: val('v-date') || todayISO(),
       businessUnit: val('v-bu'),
       nom: val('v-nom').trim(), prenom: val('v-prenom').trim(),
+      civilite: val('v-civilite'),
       adresse: val('v-adresse').trim(), telephone: val('v-tel').trim(),
       typeArticle: val('v-article'),
       cout: val('v-cout'),
@@ -3445,6 +3469,10 @@ function exportCSV(rows, fields, filename){
   document.getElementById('app').innerHTML = `<div style="display:flex;align-items:center;justify-content:center;height:100vh;font-family:'IBM Plex Sans',sans-serif;color:#8a8980;">Chargement de Jéricho Optique…</div>`;
   await loadAll();
   await loadUsers();
+  // Si déjà connecté via sessionStorage, définir le bon onglet d'accueil
+  if(state.commercial && state.role){
+    state.teamTab = state.role==='admin' ? 'dashboard' : 'journee';
+  }
   render();
 })();
 </script>
