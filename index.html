@@ -1310,7 +1310,7 @@ function renderClients(){
   <div class="main-head">
     <div><h2>Clients &amp; SAV</h2><p>Fiches clients, historique d'achats et suivi du service après-vente.</p></div>
     <div style="display:flex;gap:8px;">
-      <button class="btn-sm btn-ghost" id="btn-new-sav">+ Ticket SAV</button>
+      <button class="btn-sm btn-ghost" id="btn-new-sav">🎫 + Ticket</button>
       <button class="btn-sm" id="btn-new-client">+ Nouveau client</button>
     </div>
   </div>
@@ -3345,8 +3345,38 @@ function attachGlobalEvents(){
       }
 
       // SAV
-      if(t.id==='btn-new-sav'){ state.modal={type:'sav',data:null}; render(); return; }
-      if(t.dataset.editSav){ state.modal={type:'sav',data:DB.sav.find(s=>s.id===t.dataset.editSav)||null}; render(); return; }
+      if(t.id==='btn-new-sav'){
+        // Ouvrir le nouveau formulaire de ticket (type SAV) plutôt que l'ancien
+        state.modal={type:'ticket', data:{
+          id:'', type:'🔧 SAV / Réparation', titre:'', description:'',
+          assigne: state.commercial, priorite:'Normale', statut:'À faire',
+          clientNom:'', clientPrenom:'', clientCivilite:'', clientTel:'', clientTel2:'',
+          labo:'', dateLimite:'', venteId:'', boutique:state.boutique||'',
+          creepar: state.commercial
+        }};
+        render(); return;
+      }
+      if(t.dataset.editSav){
+        const s = DB.sav.find(x=>x.id===t.dataset.editSav);
+        if(s){
+          // Convertir ancien format SAV vers ticket
+          state.modal={type:'ticket', data:{
+            id: s.id, type:'🔧 SAV / Réparation',
+            titre: s.typeDemande ? `SAV ${s.typeDemande} — ${s.clientNom||''}` : `SAV — ${s.clientNom||''}`,
+            description: s.description||'',
+            assigne: s.commercial||state.commercial,
+            priorite: 'Normale', statut: s.statut==='Résolu'?'Terminé':(s.statut||'À faire'),
+            clientNom: s.clientNom||'', clientPrenom:'', clientCivilite:'',
+            clientTel: s.telephone||'', clientTel2:'',
+            labo:'', dateLimite:'', venteId:'',
+            boutique: s.boutique||state.boutique||'',
+            creepar: s.commercial||state.commercial,
+            dateCreation: s.dateOuverture||todayISO()
+          }};
+          render();
+        }
+        return;
+      }
       if(t.dataset.delSav){
         if(!confirm('Supprimer ce ticket ?')) return;
         const id=t.dataset.delSav;
