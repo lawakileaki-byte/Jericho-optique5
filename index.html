@@ -463,14 +463,13 @@ async function apiDelete(k, id){
 }
 
 async function loadAll(){
-  for(const k of Object.keys(SHEET_NAMES)){
-    try{
-      DB[k] = await apiGet(k);
-    }catch(e){
-      DB[k] = [];
-      showToast("Impossible de charger " + SHEET_NAMES[k] + ".");
-    }
-  }
+  // Chargement en parallèle pour accélérer
+  const keys = Object.keys(SHEET_NAMES);
+  const results = await Promise.allSettled(keys.map(k => apiGet(k)));
+  results.forEach((r, i) => {
+    const k = keys[i];
+    DB[k] = r.status === 'fulfilled' ? r.value : [];
+  });
   loaded = true;
 }
 
@@ -1561,6 +1560,7 @@ function modalContent(){
   const m = state.modal;
   if(m.type==='prospect') return prospectForm(m.data);
   if(m.type==='client') return clientForm(m.data);
+  if(m.type==='client-from-prospect') return clientForm(m.data, true);
   if(m.type==='client-view') return clientView(m.data);
   if(m.type==='sav') return savForm(m.data);
   if(m.type==='stock') return stockForm(m.data);
@@ -1603,10 +1603,11 @@ function prospectForm(data){
   </form>`;
 }
 
-function clientForm(data){
+function clientForm(data, isConversion=false){
   const d = data || { id:'', civilite:'', nom:'', prenom:'', adresse:'', telephone:'', telephone2:'', email:'', boutique:BOUTIQUES[0], fonction:'', entreprise:'', notes:'', dateCreation: todayISO() };
   return `
-  <h3>${data ? 'Modifier la fiche client' : 'Nouveau client'}</h3>
+  <h3>${isConversion ? 'Convertir en client — vérifier les informations' : (data ? 'Modifier la fiche client' : 'Nouveau client')}</h3>
+  ${isConversion ? `<p style="font-size:12px;color:#2d7a3a;background:#f0fdf4;padding:8px 12px;border-radius:6px;margin-bottom:12px;">✅ Informations pré-remplies depuis le prospect. Vérifiez et complétez avant d'enregistrer.</p>` : ''}
   <form id="form-client">
     <div class="form-grid">
       <div class="form-section-title">Informations personnelles</div>
@@ -3282,8 +3283,22 @@ function attachGlobalEvents(){
       if(t.dataset.editProspect){ state.modal={type:'prospect',data:DB.prospects.find(p=>p.id===t.dataset.editProspect)||null}; render(); return; }
       if(t.dataset.convertProspect){
         const pr = DB.prospects.find(p=>p.id===t.dataset.convertProspect);
-        if(pr) state.modal={type:'client',data:{nom:pr.nom,prenom:pr.prenom||'',civilite:pr.civilite||'',adresse:pr.adresse||'',telephone:pr.telephone||'',email:'',boutique:pr.boutique||'',notes:pr.notes||'',dateCreation:todayISO(),historique:[]},sourceProspectId:pr.id};
-        render(); return;
+        if(pr){
+          // Ouvrir formulaire client PRÉ-REMPLI depuis le prospect — pas de modification du prospect
+          state.modal={
+            type:'client-from-prospect',
+            data:{
+              id:'', nom:pr.nom||'', prenom:pr.prenom||'', civilite:pr.civilite||'',
+              adresse:pr.adresse||'', telephone:pr.telephone||'', telephone2:pr.telephone2||'',
+              fonction:pr.fonction||'', entreprise:pr.entreprise||'',
+              email:'', boutique:pr.boutique||'', notes:pr.notes||'',
+              dateCreation:todayISO()
+            },
+            sourceProspectId:pr.id
+          };
+          render();
+        }
+        return;
       }
       if(t.dataset.delProspect){
         if(!confirm('Supprimer ce prospect ?')) return;
@@ -3337,6 +3352,13 @@ function attachGlobalEvents(){
         return;
       }
       // Ventes
+      if(t.id==='btn-new-ticket'){ state.modal={type:'ticket',data:null}; render(); return; }
+      if(t.dataset.editTicket){ state.modal={type:'ticket',data:DB.tickets.find(x=>x.id===t.dataset.editTicket)||null}; render(); return; }
+      if(t.dataset.delTicket){
+        if(!confirm('Supprimer ce ticket ?')) return;
+        const id=t.dataset.delTicket;
+        try{ await apiDelete('tickets',id); DB.tickets=DB.tickets.filter(x=>x.id!==id); render(); showToast('Ticket supprimé.'); }catch(e){ showToast('Erreur, réessaie.'); } return;
+      }
       if(t.id==='btn-new-apporteur'){ state.modal={type:'apporteur',data:null}; render(); return; }
       if(t.dataset.editApporteur){ state.modal={type:'apporteur',data:DB.apporteurs.find(a=>a.id===t.dataset.editApporteur)||null}; render(); return; }
       if(t.dataset.toggleApporteur){
@@ -3394,25 +3416,8 @@ function attachGlobalEvents(){
     const item = DB.prospects.find(p=>p.id===el.dataset.editProspect);
     state.modal={type:'prospect', data:item}; render();
   }));
-  document.querySelectorAll('[data-del-prospect]').forEach(el=>el.addEventListener('click', async ()=>{
-    if(!confirm('Supprimer ce prospect ?')) return;
-    const id = el.dataset.delProspect;
-    try{
-      await apiDelete('prospects', id);
-      DB.prospects = DB.prospects.filter(p=>p.id!==id);
-      render(); showToast('Prospect supprimé.');
-    }catch(e){ showToast("Erreur de suppression, réessaie."); }
-  }));
-  document.querySelectorAll('[data-convert-prospect]').forEach(el=>el.addEventListener('click', ()=>{
-    const p = DB.prospects.find(x=>x.id===el.dataset.convertProspect);
-    if(!p) return;
-    state.modal = {
-      type:'client',
-      data: { id:'', nom:p.nom, prenom:p.prenom||'', civilite:p.civilite||'', adresse:p.adresse||'', telephone:p.telephone||'', email:'', boutique:p.boutique, notes:p.notes||'' },
-      sourceProspectId: p.id
-    };
-    render();
-  }));
+  // Tous les handlers boutons sont gérés par la délégation globale
+  // convertProspect géré par la délégation globale
   // Filtres (restent ici car bindFilter écoute les inputs, pas les boutons)
   bindFilter('f-prospect-q', v=>state.filters.prospects.q=v, 'input');
   bindFilter('f-prospect-statut', v=>state.filters.prospects.statut=v, 'change');
