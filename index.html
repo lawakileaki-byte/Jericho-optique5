@@ -1893,14 +1893,14 @@ function venteForm(data){
           <div class="field"><label>Sphère</label><input type="number" step="0.25" id="v-od-sphere" value="${escapeAttr(d.odSphere)}" placeholder="ex: -1.75" inputmode="decimal"></div>
           <div class="field"><label>Cylindre</label><input type="number" step="0.25" id="v-od-cyl" value="${escapeAttr(d.odCylindre)}" placeholder="ex: -0.50" inputmode="decimal"></div>
           <div class="field"><label>Axe (0-180)</label><input type="number" step="1" min="0" max="180" id="v-od-axe" value="${escapeAttr(d.odAxe)}" placeholder="ex: 90" inputmode="numeric"></div>
-          <div class="field"><label>Addition</label><input type="number" step="0.25" min="0" id="v-od-add" value="${escapeAttr(d.odAddition)}" placeholder="ex: 2.00" inputmode="decimal"></div>
+          <div class="field"><label>Addition</label><input type="number" step="0.25" min="0" id="v-od-add" value="${escapeAttr(d.odAddition)}" placeholder="ex: 2.00" inputmode="decimal" oninput="autoOgAdd(this.value)"></div>
         </div>
         <div class="form-section-title">Prescription œil gauche (OG)</div>
         <div class="form-grid">
           <div class="field"><label>Sphère</label><input type="number" step="0.25" id="v-og-sphere" value="${escapeAttr(d.ogSphere)}" placeholder="ex: -1.75" inputmode="decimal"></div>
           <div class="field"><label>Cylindre</label><input type="number" step="0.25" id="v-og-cyl" value="${escapeAttr(d.ogCylindre)}" placeholder="ex: -0.50" inputmode="decimal"></div>
           <div class="field"><label>Axe (0-180)</label><input type="number" step="1" min="0" max="180" id="v-og-axe" value="${escapeAttr(d.ogAxe)}" placeholder="ex: 90" inputmode="numeric"></div>
-          <div class="field"><label>Addition</label><input type="number" step="0.25" min="0" id="v-og-add" value="${escapeAttr(d.ogAddition)}" placeholder="ex: 2.00" inputmode="decimal"></div>
+          <div class="field"><label>Addition <span id="og-add-hint" style="font-size:10px;color:#68AAD1;font-weight:400;"></span></label><input type="number" step="0.25" min="0" id="v-og-add" value="${escapeAttr(d.ogAddition)}" placeholder="ex: 2.00" inputmode="decimal" oninput="document.getElementById('og-add-hint').textContent=''"></div>
         </div>
         <div class="form-section-title">Verre</div>
         <div class="form-grid">
@@ -2721,6 +2721,12 @@ function ticketForm(data){
       <div class="field"><label>Boutique</label><select id="tk-boutique">${['Toutes',...BOUTIQUES].map(b=>`<option ${(d.boutique||state.boutique)===b?'selected':''}>${b}</option>`).join('')}</select></div>
 
       <div class="form-section-title">Client concerné</div>
+      <div class="field full" style="position:relative;">
+        <label>🔍 Rechercher un client <span style="font-weight:400;color:#9a998f;font-size:11px;">— par nom ou numéro</span></label>
+        <input id="tk-search" placeholder="Tapez le nom ou le numéro..." autocomplete="off"
+          oninput="tkSearchClient(this.value)" style="width:100%;">
+        <div id="tk-search-results" style="display:none;position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid #ddd;border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,.1);z-index:1000;max-height:200px;overflow-y:auto;"></div>
+      </div>
       <div class="field"><label>📱 Téléphone WhatsApp</label>
         <input id="tk-tel" value="${escapeAttr(d.clientTel||'')}" inputmode="numeric" placeholder="ex: 70000000" oninput="this.value=this.value.replace(/[^0-9]/g,'');tkAutoClient(this.value);">
       </div>
@@ -2758,17 +2764,91 @@ window.tkAutoClient = function(val){
   const tel = normTel(val);
   const vente = DB.ventes.find(v=>normTel(v.telephone)===tel || normTel(v.telephone2||'')===tel);
   if(!vente) return;
-  const n = document.getElementById('tk-client'); if(n) n.value = vente.nom||'';
-  const p = document.getElementById('tk-client-prenom'); if(p) p.value = vente.prenom||'';
-  const cv = document.getElementById('tk-civilite'); if(cv && vente.civilite) cv.value = vente.civilite;
-  const t2 = document.getElementById('tk-tel2'); if(t2 && vente.telephone2 && !t2.value) t2.value = vente.telephone2;
+  tkFillClient(vente);
+};
+
+// Remplir les champs client dans le ticket depuis un objet vente/client
+function tkFillClient(src){
+  const n = document.getElementById('tk-client'); if(n) n.value = src.nom||'';
+  const p = document.getElementById('tk-client-prenom'); if(p) p.value = src.prenom||'';
+  const cv = document.getElementById('tk-civilite'); if(cv && src.civilite) cv.value = src.civilite;
+  const t1 = document.getElementById('tk-tel');
+  if(t1 && !t1.value) t1.value = normTel(src.telephone||'');
+  const t2 = document.getElementById('tk-tel2');
+  if(t2 && !t2.value && src.telephone2) t2.value = src.telephone2||'';
+  // Bouton WA
+  const tel = normTel(src.telephone||'') || src.telephone2||'';
   const wrap = document.getElementById('tk-wa-btn-wrap');
-  if(wrap){
+  if(wrap && tel){
     const num = tel.startsWith('226')?tel:'226'+tel;
-    const msg = encodeURIComponent(bonjourClient(vente.nom,'',vente.civilite)+', nous vous contactons de Jéricho Optique concernant votre commande.');
-    wrap.innerHTML = `<a href="https://wa.me/${num}?text=${msg}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:5px;background:#25D366;color:#fff;text-decoration:none;padding:5px 10px;border-radius:6px;font-size:12px;font-weight:600;"><svg width="13" height="13" viewBox="0 0 24 24" fill="#fff"><path d="M12.04 2c-5.46 0-9.91 4.45-9.91 9.91 0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38c1.45.79 3.08 1.21 4.74 1.21 5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.816 9.816 0 0 0 12.04 2m.01 1.67c2.2 0 4.26.86 5.82 2.42a8.225 8.225 0 0 1 2.41 5.83c0 4.54-3.7 8.23-8.24 8.23-1.48 0-2.93-.39-4.19-1.15l-.3-.17-3.12.82.83-3.04-.2-.32a8.188 8.188 0 0 1-1.26-4.38c.01-4.54 3.7-8.24 8.25-8.24M8.53 7.33c-.16 0-.43.06-.66.31-.22.25-.87.86-.87 2.07 0 1.22.89 2.39 1 2.56.14.17 1.76 2.67 4.25 3.73.59.27 1.05.42 1.41.53.59.19 1.13.16 1.56.1.48-.07 1.46-.6 1.67-1.18.21-.58.21-1.07.14-1.18-.07-.11-.25-.17-.53-.31-.28-.14-1.66-.82-1.92-.91-.26-.09-.44-.14-.63.14-.19.28-.72.91-.88 1.09-.16.18-.32.2-.6.07-.28-.14-1.19-.44-2.26-1.4-.83-.75-1.4-1.67-1.56-1.95-.17-.28-.02-.44.12-.58.13-.13.28-.34.42-.51.14-.17.18-.29.28-.47.09-.19.05-.35-.02-.49-.07-.14-.63-1.52-.88-2.07-.24-.53-.48-.46-.66-.47-.16-.01-.35-.01-.53-.01Z"/></svg> WhatsApp client</a>`;
+    const msg = encodeURIComponent(bonjourClient(src.nom,src.prenom||'',src.civilite||'')+', nous vous contactons de Jéricho Optique.');
+    wrap.innerHTML = `<a href="https://wa.me/${num}?text=${msg}" target="_blank" rel="noopener"
+      style="display:inline-flex;align-items:center;gap:5px;background:#25D366;color:#fff;text-decoration:none;padding:5px 10px;border-radius:6px;font-size:12px;font-weight:600;">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="#fff"><path d="M12.04 2c-5.46 0-9.91 4.45-9.91 9.91 0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38c1.45.79 3.08 1.21 4.74 1.21 5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.816 9.816 0 0 0 12.04 2m.01 1.67c2.2 0 4.26.86 5.82 2.42a8.225 8.225 0 0 1 2.41 5.83c0 4.54-3.7 8.23-8.24 8.23-1.48 0-2.93-.39-4.19-1.15l-.3-.17-3.12.82.83-3.04-.2-.32a8.188 8.188 0 0 1-1.26-4.38c.01-4.54 3.7-8.24 8.25-8.24M8.53 7.33c-.16 0-.43.06-.66.31-.22.25-.87.86-.87 2.07 0 1.22.89 2.39 1 2.56.14.17 1.76 2.67 4.25 3.73.59.27 1.05.42 1.41.53.59.19 1.13.16 1.56.1.48-.07 1.46-.6 1.67-1.18.21-.58.21-1.07.14-1.18-.07-.11-.25-.17-.53-.31-.28-.14-1.66-.82-1.92-.91-.26-.09-.44-.14-.63.14-.19.28-.72.91-.88 1.09-.16.18-.32.2-.6.07-.28-.14-1.19-.44-2.26-1.4-.83-.75-1.4-1.67-1.56-1.95-.17-.28-.02-.44.12-.58.13-.13.28-.34.42-.51.14-.17.18-.29.28-.47.09-.19.05-.35-.02-.49-.07-.14-.63-1.52-.88-2.07-.24-.53-.48-.46-.66-.47-.16-.01-.35-.01-.53-.01Z"/></svg>
+      WhatsApp client</a>`;
+  }
+  // Fermer les résultats de recherche
+  const res = document.getElementById('tk-search-results');
+  if(res){ res.style.display='none'; res.innerHTML=''; }
+  const searchBox = document.getElementById('tk-search');
+  if(searchBox) searchBox.value = `${src.nom||''} ${src.prenom||''}`.trim();
+}
+
+// Recherche client par nom ou numéro dans le ticket
+window.tkSearchClient = function(val){
+  const res = document.getElementById('tk-search-results');
+  if(!res) return;
+  if(val.length < 2){ res.style.display='none'; return; }
+
+  const q = val.toLowerCase().replace(/\s/g,'');
+  // Chercher dans l'index client (nom + tel)
+  const seen = new Set();
+  const matches = [];
+  DB.ventes.forEach(v=>{
+    const nom = `${v.nom||''} ${v.prenom||''}`.trim();
+    const tel = normTel(v.telephone||'');
+    const key = tel || nom.toLowerCase();
+    if(seen.has(key)) return;
+    if(nom.toLowerCase().replace(/\s/g,'').includes(q) || tel.includes(q)){
+      seen.add(key);
+      matches.push({nom:v.nom||'', prenom:v.prenom||'', civilite:v.civilite||'', telephone:v.telephone||'', telephone2:v.telephone2||''});
+    }
+  });
+
+  if(!matches.length){ res.style.display='none'; return; }
+
+  res.innerHTML = matches.slice(0,8).map((m,i)=>`
+    <div onclick="tkFillClient(window._tkMatches[${i}])"
+      style="padding:8px 12px;cursor:pointer;border-bottom:1px solid #f0f0f0;font-size:13px;"
+      onmouseover="this.style.background='#FFF9EF'" onmouseout="this.style.background=''">
+      <b>${escapeHtml(m.civilite?m.civilite+' ':'')}${escapeHtml(m.nom)} ${escapeHtml(m.prenom)}</b>
+      <span style="color:#888;font-size:11px;margin-left:8px;">📱 ${escapeHtml(normTel(m.telephone)||'—')}</span>
+    </div>`).join('');
+  window._tkMatches = matches.slice(0,8);
+  res.style.display='block';
+};
+
+// Fermer les suggestions si clic ailleurs
+document.addEventListener('click', e=>{
+  if(!e.target.closest('#tk-search-results') && !e.target.closest('#tk-search')){
+    const res = document.getElementById('tk-search-results');
+    if(res) res.style.display='none';
+  }
+});
+
+// ===== AUTO-REMPLIR ADDITION OG DEPUIS OD =====
+window.autoOgAdd = function(val){
+  const ogAdd = document.getElementById('v-og-add');
+  const hint = document.getElementById('og-add-hint');
+  if(!ogAdd) return;
+  // Copier vers OG seulement si OG est vide ou identique à l'ancienne valeur OD
+  if(!ogAdd.value || ogAdd.dataset.autoFilled==='true'){
+    ogAdd.value = val;
+    ogAdd.dataset.autoFilled = val ? 'true' : '';
+    if(hint) hint.textContent = val ? '↑ copié depuis OD' : '';
   }
 };
+
 
 
 // Créer automatiquement un ticket labo après une vente
