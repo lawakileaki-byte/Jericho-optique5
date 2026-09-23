@@ -527,7 +527,7 @@ function buildClientIndex(ventes){
     if(!idx[key]){
       idx[key] = {
         key,
-        telephone: normTel(v.telephone),
+        telephone: normTel(String(v.telephone||'')),
         telephone2: v.telephone2||'',
         nom: v.nom||'',
         prenom: v.prenom||'',
@@ -1143,7 +1143,7 @@ function renderDashboard(){
     return `<div class="panel" style="border-left:4px solid ${couleur};">
       <h3 style="color:${couleur};margin-bottom:10px;">${titre} (${clients.length})</h3>
       ${clients.slice(0,8).map(cl=>{
-        const effTel = cl.telephone || cl.telephone2 || '';
+        const effTel = String(cl.telephone || cl.telephone2 || '');
         const num = effTel.startsWith('226') ? effTel : '226'+effTel;
         const msg = encodeURIComponent(msgWA.replace('{nom}', bonjourClient(cl.nom,cl.prenom,cl.civilite)));
         return `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--line);flex-wrap:wrap;gap:8px;">
@@ -2316,7 +2316,7 @@ function renderJournee(){
 
   // Fonction bouton WhatsApp
   function waBtn(tel, message, label='WhatsApp', tel2=''){
-    const telEff = tel || tel2;
+    const telEff = String(tel||'') || String(tel2||'');
     if(!telEff) return '<span style="color:#ccc;font-size:12px;">Pas de numéro</span>';
     const num = String(telEff).replace(/\s/g,'');
     const fullNum = num.startsWith('226') ? num : '226'+num;
@@ -2670,7 +2670,7 @@ function renderTickets(){
             <b>${escapeHtml(t.clientNom||'—')}</b>
             ${t.clientPrenom?`<span style="color:#888;"> ${escapeHtml(t.clientPrenom)}</span>`:''}
             ${t.clientTel?`<div style="font-size:11px;color:#555;">📱 ${escapeHtml(t.clientTel)}${t.clientTel2?` · 📞 ${escapeHtml(t.clientTel2)}`:''}</div>`:''}
-            ${t.clientTel||t.clientTel2?`<a href="https://wa.me/${(t.clientTel||t.clientTel2).startsWith('226')?(t.clientTel||t.clientTel2):'226'+(t.clientTel||t.clientTel2)}?text=${encodeURIComponent(bonjourClient(t.clientNom,t.clientPrenom||'',t.clientCivilite||'')+', nous vous contactons de Jéricho Optique concernant votre commande.')}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:4px;background:#25D366;color:#fff;text-decoration:none;padding:2px 8px;border-radius:5px;font-size:11px;font-weight:600;margin-top:3px;"><svg width="11" height="11" viewBox="0 0 24 24" fill="#fff"><path d="M12.04 2c-5.46 0-9.91 4.45-9.91 9.91 0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38c1.45.79 3.08 1.21 4.74 1.21 5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.816 9.816 0 0 0 12.04 2m.01 1.67c2.2 0 4.26.86 5.82 2.42a8.225 8.225 0 0 1 2.41 5.83c0 4.54-3.7 8.23-8.24 8.23-1.48 0-2.93-.39-4.19-1.15l-.3-.17-3.12.82.83-3.04-.2-.32a8.188 8.188 0 0 1-1.26-4.38c.01-4.54 3.7-8.24 8.25-8.24M8.53 7.33c-.16 0-.43.06-.66.31-.22.25-.87.86-.87 2.07 0 1.22.89 2.39 1 2.56.14.17 1.76 2.67 4.25 3.73.59.27 1.05.42 1.41.53.59.19 1.13.16 1.56.1.48-.07 1.46-.6 1.67-1.18.21-.58.21-1.07.14-1.18-.07-.11-.25-.17-.53-.31-.28-.14-1.66-.82-1.92-.91-.26-.09-.44-.14-.63.14-.19.28-.72.91-.88 1.09-.16.18-.32.2-.6.07-.28-.14-1.19-.44-2.26-1.4-.83-.75-1.4-1.67-1.56-1.95-.17-.28-.02-.44.12-.58.13-.13.28-.34.42-.51.14-.17.18-.29.28-.47.09-.19.05-.35-.02-.49-.07-.14-.63-1.52-.88-2.07-.24-.53-.48-.46-.66-.47-.16-.01-.35-.01-.53-.01Z"/></svg> WA</a>`:''}</td>
+            ${t.clientTel||t.clientTel2?`<a href="https://wa.me/${(()=>{const tel=String(t.clientTel||t.clientTel2||''); return tel.startsWith('226')?tel:'226'+tel;})()}?text=${encodeURIComponent(bonjourClient(t.clientNom,t.clientPrenom||'',t.clientCivilite||'')+', nous vous contactons de Jéricho Optique concernant votre commande.')}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:4px;background:#25D366;color:#fff;text-decoration:none;padding:2px 8px;border-radius:5px;font-size:11px;font-weight:600;margin-top:3px;"><svg width="11" height="11" viewBox="0 0 24 24" fill="#fff"><path d="M12.04 2c-5.46 0-9.91 4.45-9.91 9.91 0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38c1.45.79 3.08 1.21 4.74 1.21 5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.816 9.816 0 0 0 12.04 2m.01 1.67c2.2 0 4.26.86 5.82 2.42a8.225 8.225 0 0 1 2.41 5.83c0 4.54-3.7 8.23-8.24 8.23-1.48 0-2.93-.39-4.19-1.15l-.3-.17-3.12.82.83-3.04-.2-.32a8.188 8.188 0 0 1-1.26-4.38c.01-4.54 3.7-8.24 8.25-8.24M8.53 7.33c-.16 0-.43.06-.66.31-.22.25-.87.86-.87 2.07 0 1.22.89 2.39 1 2.56.14.17 1.76 2.67 4.25 3.73.59.27 1.05.42 1.41.53.59.19 1.13.16 1.56.1.48-.07 1.46-.6 1.67-1.18.21-.58.21-1.07.14-1.18-.07-.11-.25-.17-.53-.31-.28-.14-1.66-.82-1.92-.91-.26-.09-.44-.14-.63.14-.19.28-.72.91-.88 1.09-.16.18-.32.2-.6.07-.28-.14-1.19-.44-2.26-1.4-.83-.75-1.4-1.67-1.56-1.95-.17-.28-.02-.44.12-.58.13-.13.28-.34.42-.51.14-.17.18-.29.28-.47.09-.19.05-.35-.02-.49-.07-.14-.63-1.52-.88-2.07-.24-.53-.48-.46-.66-.47-.16-.01-.35-.01-.53-.01Z"/></svg> WA</a>`:''}</td>
           <td><b>${escapeHtml(t.assigne||'—')}</b>${t.creepar?`<div style="font-size:10px;color:#aaa;">par ${escapeHtml(t.creepar)}</div>`:''}</td>
           <td>${badgePrio(t.priorite)}</td>
           <td>${badgeStatut(t.statut)}</td>
@@ -2793,6 +2793,7 @@ function creerTicketLabo(vente){
     clientTel: normTel(vente.telephone)||'',
     clientTel2: vente.telephone2||'',
     boutique: vente.businessUnit || state.boutique || '',
+    labo: vente.laboratoire || '',
     dateCreation: todayISO(),
     dateLimite: '',
     venteId: vente.id,
@@ -3795,9 +3796,10 @@ function attachModalEvents(){
         const ticket = creerTicketLabo(obj);
         if(ticket){
           await apiUpsert('tickets', ticket);
+          if(!Array.isArray(DB.tickets)) DB.tickets = [];
           DB.tickets.unshift(ticket);
         }
-      }catch(e){ /* ticket labo non bloquant */ }
+      }catch(e){ console.warn('Ticket labo non créé:', e.message); }
 
       state.modal=null; render();
       showToast(idx>=0 ? 'Vente mise à jour.' : 'Vente enregistrée. Ticket labo créé automatiquement.');
