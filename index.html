@@ -1629,6 +1629,124 @@ function clientForm(data){
   </form>`;
 }
 
+function clientView(client){
+  if(!client) return '<p style="color:#A6402E;">Client introuvable.</p>';
+  const telNorm = normTel(client.telephone);
+  const tel2Norm = normTel(client.telephone2);
+  const telWA = telNorm || tel2Norm;
+
+  // Toutes les ventes de ce client par téléphone normalisé
+  const ventesClient = DB.ventes.filter(v=>{
+    const vt = normTel(v.telephone);
+    if(telNorm && vt && vt===telNorm) return true;
+    if(!telNorm || !vt) return (v.nom||'').toLowerCase().trim()===(client.nom||'').toLowerCase().trim();
+    return false;
+  }).sort((a,b)=>(b.dateMiseEnRelation||'').localeCompare(a.dateMiseEnRelation||''));
+
+  const savClient = DB.sav.filter(s=>{
+    const st = normTel(s.telephone);
+    if(telNorm && st && st===telNorm) return true;
+    return (s.clientNom||'').toLowerCase().trim()===(client.nom||'').toLowerCase().trim();
+  }).sort((a,b)=>(b.dateOuverture||'').localeCompare(a.dateOuverture||''));
+
+  const caTotal = ventesClient.reduce((a,v)=>a+venteTotal(v),0);
+  const resteTotal = ventesClient.reduce((a,v)=>a+venteReste(v),0);
+  const derniereVente = ventesClient[0];
+  const premiereVente = ventesClient.length ? ventesClient[ventesClient.length-1] : null;
+  const dernPresc = ventesClient.find(v=>v.odSphere||v.ogSphere);
+
+  // Badge ancienneté lunettes
+  let badgeRenouvellement = '';
+  if(derniereVente && (derniereVente.typeArticle||'').toLowerCase().includes('monture')){
+    const mois = Math.floor((new Date()-new Date(derniereVente.dateMiseEnRelation||''))/86400000/30);
+    if(mois>=24) badgeRenouvellement = `<span style="background:#A6402E;color:#fff;font-size:11px;padding:2px 8px;border-radius:10px;margin-left:8px;">Renouvellement urgent (${mois} mois)</span>`;
+    else if(mois>=18) badgeRenouvellement = `<span style="background:#E8A93B;color:#fff;font-size:11px;padding:2px 8px;border-radius:10px;margin-left:8px;">À relancer (${mois} mois)</span>`;
+  }
+
+  return `
+  <h3>${client.civilite?escapeHtml(client.civilite)+' ':''}<span style="font-weight:700;">${escapeHtml(client.nom||'')}</span> ${escapeHtml(client.prenom||'')}${badgeRenouvellement}</h3>
+
+  <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-bottom:16px;">
+    ${telNorm?`<span style="font-size:13px;color:#555;">📱 WA : <b>${escapeHtml(telNorm)}</b></span>`:''}
+    ${tel2Norm?`<span style="font-size:13px;color:#555;">📞 Tel 2 : <b>${escapeHtml(tel2Norm)}</b></span>`:''}
+    ${client.adresse?`<span style="font-size:13px;color:#555;">📍 ${escapeHtml(client.adresse)}</span>`:''}
+    ${client.boutique?`<span style="font-size:13px;color:#555;">🏪 ${escapeHtml(client.boutique)}</span>`:''}
+    ${(client.fonction||client.entreprise)?`<span style="font-size:13px;color:#555;">💼 ${[client.fonction,client.entreprise].filter(Boolean).map(escapeHtml).join(' · ')}</span>`:''}
+    ${telWA?`<a href="https://wa.me/${telWA.startsWith('226')?telWA:'226'+telWA}?text=${encodeURIComponent(bonjourClient(client.nom,client.prenom,client.civilite)+', nous vous contactons de Jéricho Optique.')}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:5px;background:#25D366;color:#fff;text-decoration:none;padding:5px 12px;border-radius:6px;font-size:12px;font-weight:600;">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="#fff"><path d="M12.04 2c-5.46 0-9.91 4.45-9.91 9.91 0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38c1.45.79 3.08 1.21 4.74 1.21 5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.816 9.816 0 0 0 12.04 2m.01 1.67c2.2 0 4.26.86 5.82 2.42a8.225 8.225 0 0 1 2.41 5.83c0 4.54-3.7 8.23-8.24 8.23-1.48 0-2.93-.39-4.19-1.15l-.3-.17-3.12.82.83-3.04-.2-.32a8.188 8.188 0 0 1-1.26-4.38c.01-4.54 3.7-8.24 8.25-8.24M8.53 7.33c-.16 0-.43.06-.66.31-.22.25-.87.86-.87 2.07 0 1.22.89 2.39 1 2.56.14.17 1.76 2.67 4.25 3.73.59.27 1.05.42 1.41.53.59.19 1.13.16 1.56.1.48-.07 1.46-.6 1.67-1.18.21-.58.21-1.07.14-1.18-.07-.11-.25-.17-.53-.31-.28-.14-1.66-.82-1.92-.91-.26-.09-.44-.14-.63.14-.19.28-.72.91-.88 1.09-.16.18-.32.2-.6.07-.28-.14-1.19-.44-2.26-1.4-.83-.75-1.4-1.67-1.56-1.95-.17-.28-.02-.44.12-.58.13-.13.28-.34.42-.51.14-.17.18-.29.28-.47.09-.19.05-.35-.02-.49-.07-.14-.63-1.52-.88-2.07-.24-.53-.48-.46-.66-.47-.16-.01-.35-.01-.53-.01Z"/></svg>
+      WhatsApp
+    </a>`:''}
+  </div>
+
+  <!-- KPIs -->
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:16px;">
+    <div style="background:var(--sand-light);border-radius:8px;padding:12px;text-align:center;">
+      <div style="font-size:10px;font-weight:700;color:#E8A93B;text-transform:uppercase;margin-bottom:3px;">CA total</div>
+      <div style="font-size:17px;font-weight:700;">${fmtFCFA(caTotal)}</div>
+      <div style="font-size:11px;color:#888;">${ventesClient.length} achat(s)</div>
+    </div>
+    ${resteTotal>0?`<div style="background:#fdf0ee;border-radius:8px;padding:12px;text-align:center;">
+      <div style="font-size:10px;font-weight:700;color:#A6402E;text-transform:uppercase;margin-bottom:3px;">Reste à payer</div>
+      <div style="font-size:17px;font-weight:700;color:#A6402E;">${fmtFCFA(resteTotal)}</div>
+    </div>`:''}
+    ${premiereVente?`<div style="background:var(--sand-light);border-radius:8px;padding:12px;text-align:center;">
+      <div style="font-size:10px;font-weight:700;color:#68AAD1;text-transform:uppercase;margin-bottom:3px;">Client depuis</div>
+      <div style="font-size:13px;font-weight:700;">${fmtDate(premiereVente.dateMiseEnRelation)}</div>
+    </div>`:''}
+    ${savClient.length?`<div style="background:var(--sand-light);border-radius:8px;padding:12px;text-align:center;">
+      <div style="font-size:10px;font-weight:700;color:#555;text-transform:uppercase;margin-bottom:3px;">Tickets SAV</div>
+      <div style="font-size:17px;font-weight:700;">${savClient.length}</div>
+      <div style="font-size:11px;color:#888;">${savClient.filter(s=>s.statut!=='Résolu').length} ouvert(s)</div>
+    </div>`:''}
+  </div>
+
+  <!-- Dernière prescription -->
+  ${dernPresc?`<div style="background:#EAF3FE;border-radius:8px;padding:12px 14px;margin-bottom:14px;border-left:3px solid #68AAD1;">
+    <div style="font-size:11px;font-weight:700;color:#68AAD1;text-transform:uppercase;margin-bottom:6px;">Dernière prescription (${fmtDate(dernPresc.dateMiseEnRelation)})</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:12px;">
+      <div><b>OD</b> — Sphère : ${dernPresc.odSphere||'—'} · Cyl : ${dernPresc.odCylindre||'—'} · Axe : ${dernPresc.odAxe||'—'}${dernPresc.odAddition?' · Add : '+dernPresc.odAddition:''}</div>
+      <div><b>OG</b> — Sphère : ${dernPresc.ogSphere||'—'} · Cyl : ${dernPresc.ogCylindre||'—'} · Axe : ${dernPresc.ogAxe||'—'}${dernPresc.ogAddition?' · Add : '+dernPresc.ogAddition:''}</div>
+    </div>
+    ${dernPresc.laboratoire?`<div style="margin-top:5px;font-size:12px;color:#555;">Labo : <b>${escapeHtml(dernPresc.laboratoire)}</b>${dernPresc.caracteristiqueVerre?' · '+escapeHtml(dernPresc.caracteristiqueVerre):''}</div>`:''}
+  </div>`:''}
+
+  <!-- Historique achats -->
+  <h4 style="font-size:13px;font-weight:700;margin-bottom:8px;">Historique (${ventesClient.length} achat${ventesClient.length>1?'s':''})</h4>
+  ${ventesClient.length?`<div style="overflow-x:auto;"><table>
+    <thead><tr><th>Date</th><th>Type</th><th>Total</th><th>Remise</th><th>Avance</th><th>Reste</th><th>RDV</th><th>Gestionnaire</th><th></th></tr></thead>
+    <tbody>${ventesClient.map(v=>`<tr>
+      <td style="white-space:nowrap;">${fmtDate(v.dateMiseEnRelation)}</td>
+      <td>${escapeHtml(v.typeArticle||'')}</td>
+      <td style="font-weight:600;">${fmtFCFA(venteTotal(v))}</td>
+      <td>${v.remise&&Number(v.remise)>0?fmtFCFA(Number(v.remise)):'—'}</td>
+      <td>${v.avance&&Number(v.avance)>0?fmtFCFA(Number(v.avance)):'—'}</td>
+      <td>${venteReste(v)>0?`<span style="color:#A6402E;font-weight:600;">${fmtFCFA(venteReste(v))}</span>`:'<span style="color:#2d7a3a;">Soldé</span>'}</td>
+      <td style="white-space:nowrap;">${fmtDate(v.dateRdv)}</td>
+      <td style="font-size:11px;">${escapeHtml(v.gestionnaire||v.commercial||'')}</td>
+      <td><button class="icon-btn" data-print-vente="${v.id}">🖨️</button></td>
+    </tr>`).join('')}</tbody>
+  </table></div>`:`<p style="font-size:13px;color:#9a998f;font-style:italic;">Aucune vente trouvée.</p>`}
+
+  <!-- SAV -->
+  ${savClient.length?`<h4 style="font-size:13px;font-weight:700;margin:14px 0 8px;">Tickets SAV (${savClient.length})</h4>
+  <div style="overflow-x:auto;"><table>
+    <thead><tr><th>Date</th><th>Type</th><th>Description</th><th>Statut</th></tr></thead>
+    <tbody>${savClient.map(s=>`<tr>
+      <td>${fmtDate(s.dateOuverture)}</td>
+      <td>${escapeHtml(s.typeDemande||'')}</td>
+      <td style="font-size:12px;color:#555;">${escapeHtml((s.description||'').slice(0,60))}${(s.description||'').length>60?'…':''}</td>
+      <td>${statutBadge(s.statut,'sav')}</td>
+    </tr>`).join('')}</tbody>
+  </table></div>`:''}
+
+  ${client.notes?`<div style="margin-top:14px;background:var(--sand-light);border-radius:8px;padding:10px 14px;font-size:13px;"><b>Notes :</b> ${escapeHtml(client.notes)}</div>`:''}
+
+  <div class="modal-actions" style="justify-content:flex-start;margin-top:16px;">
+    <button type="button" class="btn-sm btn-ghost" id="modal-cancel">Fermer</button>
+    ${client.id?`<button type="button" class="btn-sm" data-edit-client="${client.id}">Modifier la fiche</button>`:''}
+  </div>`;
+}
+
 function savForm(data){
   const d = data || { id:'', clientNom:'', telephone:'', boutique:BOUTIQUES[0], typeDemande:TYPES_SAV[0], description:'', statut:'Ouvert', commercial: state.commercial };
   return `
@@ -3045,7 +3163,7 @@ function attachGlobalEvents(){
 
       // Clients
       if(t.id==='btn-new-client'){ state.modal={type:'client',data:null}; render(); return; }
-      if(t.dataset.viewClient){ state.modal={type:'client-view',data:DB.clients.find(c=>c.id===t.dataset.viewClient)||null}; render(); return; }
+      if(t.dataset.viewClient){ state.view='equipe'; state.modal={type:'client-view',data:DB.clients.find(c=>c.id===t.dataset.viewClient)||null}; render(); return; }
       if(t.dataset.editClient){ state.modal={type:'client',data:DB.clients.find(c=>c.id===t.dataset.editClient)||null}; render(); return; }
       if(t.dataset.delClient){
         if(!confirm('Supprimer ce client ?')) return;
@@ -3070,9 +3188,9 @@ function attachGlobalEvents(){
       if(t.dataset.viewVenteClient){
         const v = DB.ventes.find(x=>x.id===t.dataset.viewVenteClient);
         if(v){
-          // Chercher la fiche client existante par téléphone
           const telN = normTel(v.telephone);
           const ficheClient = DB.clients.find(c=>normTel(c.telephone)===telN && telN) || null;
+          state.view = 'equipe'; // s'assurer qu'on est dans l'espace équipe
           state.modal={type:'client-view', data:{
             nom: v.nom||'', prenom: v.prenom||'',
             civilite: v.civilite||ficheClient?.civilite||'',
