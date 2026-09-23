@@ -2573,7 +2573,11 @@ function renderTickets(){
         <tr style="${t.statut==='Terminé'?'opacity:.5;':''}">
           <td>${badgeType(t.type)}</td>
           <td><b>${escapeHtml(t.titre)}</b>${t.description?`<div style="font-size:11px;color:#888;">${escapeHtml(t.description.slice(0,50))}${t.description.length>50?'…':''}</div>`:''}</td>
-          <td style="font-size:12px;">${escapeHtml(t.clientNom||'—')}</td>
+          <td style="font-size:12px;">
+            <b>${escapeHtml(t.clientNom||'—')}</b>
+            ${t.clientPrenom?`<span style="color:#888;"> ${escapeHtml(t.clientPrenom)}</span>`:''}
+            ${t.clientTel?`<div style="font-size:11px;color:#555;">📱 ${escapeHtml(t.clientTel)}${t.clientTel2?` · 📞 ${escapeHtml(t.clientTel2)}`:''}</div>`:''}
+            ${t.clientTel||t.clientTel2?`<a href="https://wa.me/${(t.clientTel||t.clientTel2).startsWith('226')?(t.clientTel||t.clientTel2):'226'+(t.clientTel||t.clientTel2)}?text=${encodeURIComponent(bonjourClient(t.clientNom,t.clientPrenom||'',t.clientCivilite||'')+', nous vous contactons de Jéricho Optique concernant votre commande.')}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:4px;background:#25D366;color:#fff;text-decoration:none;padding:2px 8px;border-radius:5px;font-size:11px;font-weight:600;margin-top:3px;"><svg width="11" height="11" viewBox="0 0 24 24" fill="#fff"><path d="M12.04 2c-5.46 0-9.91 4.45-9.91 9.91 0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38c1.45.79 3.08 1.21 4.74 1.21 5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.816 9.816 0 0 0 12.04 2m.01 1.67c2.2 0 4.26.86 5.82 2.42a8.225 8.225 0 0 1 2.41 5.83c0 4.54-3.7 8.23-8.24 8.23-1.48 0-2.93-.39-4.19-1.15l-.3-.17-3.12.82.83-3.04-.2-.32a8.188 8.188 0 0 1-1.26-4.38c.01-4.54 3.7-8.24 8.25-8.24M8.53 7.33c-.16 0-.43.06-.66.31-.22.25-.87.86-.87 2.07 0 1.22.89 2.39 1 2.56.14.17 1.76 2.67 4.25 3.73.59.27 1.05.42 1.41.53.59.19 1.13.16 1.56.1.48-.07 1.46-.6 1.67-1.18.21-.58.21-1.07.14-1.18-.07-.11-.25-.17-.53-.31-.28-.14-1.66-.82-1.92-.91-.26-.09-.44-.14-.63.14-.19.28-.72.91-.88 1.09-.16.18-.32.2-.6.07-.28-.14-1.19-.44-2.26-1.4-.83-.75-1.4-1.67-1.56-1.95-.17-.28-.02-.44.12-.58.13-.13.28-.34.42-.51.14-.17.18-.29.28-.47.09-.19.05-.35-.02-.49-.07-.14-.63-1.52-.88-2.07-.24-.53-.48-.46-.66-.47-.16-.01-.35-.01-.53-.01Z"/></svg> WA</a>`:''}</td>
           <td><b>${escapeHtml(t.assigne||'—')}</b>${t.creepar?`<div style="font-size:10px;color:#aaa;">par ${escapeHtml(t.creepar)}</div>`:''}</td>
           <td>${badgePrio(t.priorite)}</td>
           <td>${badgeStatut(t.statut)}</td>
@@ -2590,21 +2594,61 @@ function renderTickets(){
 }
 
 function ticketForm(data){
-  const d = data || { id:'', type:TYPES_TICKET[0], titre:'', description:'', assigne:'Directrice', priorite:'Normale', statut:'À faire', clientNom:'', labo:'', dateLimite:'', venteId:'', boutique:state.boutique||'' };
+  const canChangeAssigne = isAdmin();
+  const d = data || {
+    id:'', type:TYPES_TICKET[0], titre:'', description:'',
+    assigne:'Directrice', priorite:'Normale', statut:'À faire',
+    clientNom:'', clientCivilite:'', clientPrenom:'',
+    clientTel:'', clientTel2:'',
+    labo:'', dateLimite:'', venteId:'', boutique:state.boutique||''
+  };
+
+  const telWA = d.clientTel || d.clientTel2 || '';
+  const waNum = telWA ? (telWA.startsWith('226')?telWA:'226'+telWA) : '';
+  const waMsg = telWA ? encodeURIComponent(bonjourClient(d.clientNom,'',d.clientCivilite)+', nous vous contactons de Jéricho Optique concernant votre commande.') : '';
+  const waBtnHtml = waNum ? `<a href="https://wa.me/${waNum}?text=${waMsg}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:5px;background:#25D366;color:#fff;text-decoration:none;padding:5px 10px;border-radius:6px;font-size:12px;font-weight:600;margin-top:6px;"><svg width="13" height="13" viewBox="0 0 24 24" fill="#fff"><path d="M12.04 2c-5.46 0-9.91 4.45-9.91 9.91 0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38c1.45.79 3.08 1.21 4.74 1.21 5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.816 9.816 0 0 0 12.04 2m.01 1.67c2.2 0 4.26.86 5.82 2.42a8.225 8.225 0 0 1 2.41 5.83c0 4.54-3.7 8.23-8.24 8.23-1.48 0-2.93-.39-4.19-1.15l-.3-.17-3.12.82.83-3.04-.2-.32a8.188 8.188 0 0 1-1.26-4.38c.01-4.54 3.7-8.24 8.25-8.24M8.53 7.33c-.16 0-.43.06-.66.31-.22.25-.87.86-.87 2.07 0 1.22.89 2.39 1 2.56.14.17 1.76 2.67 4.25 3.73.59.27 1.05.42 1.41.53.59.19 1.13.16 1.56.1.48-.07 1.46-.6 1.67-1.18.21-.58.21-1.07.14-1.18-.07-.11-.25-.17-.53-.31-.28-.14-1.66-.82-1.92-.91-.26-.09-.44-.14-.63.14-.19.28-.72.91-.88 1.09-.16.18-.32.2-.6.07-.28-.14-1.19-.44-2.26-1.4-.83-.75-1.4-1.67-1.56-1.95-.17-.28-.02-.44.12-.58.13-.13.28-.34.42-.51.14-.17.18-.29.28-.47.09-.19.05-.35-.02-.49-.07-.14-.63-1.52-.88-2.07-.24-.53-.48-.46-.66-.47-.16-.01-.35-.01-.53-.01Z"/></svg> WhatsApp client</a>` : '';
+
   return `
   <h3>${data?'Modifier le ticket':'Nouveau ticket'}</h3>
   <form id="form-ticket">
     <div class="form-grid">
+      <div class="form-section-title">Informations du ticket</div>
       <div class="field"><label>Type</label><select id="tk-type">${TYPES_TICKET.map(t=>`<option ${d.type===t?'selected':''}>${t}</option>`).join('')}</select></div>
       <div class="field"><label>Priorité</label><select id="tk-priorite">${PRIORITES_TICKET.map(p=>`<option ${d.priorite===p?'selected':''}>${p}</option>`).join('')}</select></div>
       <div class="field full"><label>Titre <span style="color:#A6402E;">*</span></label><input required id="tk-titre" value="${escapeAttr(d.titre)}" placeholder="Ex: Commander verres progressifs pour TRAORE"></div>
       <div class="field full"><label>Description / Instructions</label><textarea id="tk-desc">${escapeHtml(d.description||'')}</textarea></div>
-      <div class="field"><label>Assigné à <span style="color:#A6402E;">*</span></label><select required id="tk-assigne">${STAFF_ALL.map(s=>`<option ${d.assigne===s?'selected':''}>${s}</option>`).join('')}</select></div>
       <div class="field"><label>Statut</label><select id="tk-statut">${STATUTS_TICKET.map(s=>`<option ${d.statut===s?'selected':''}>${s}</option>`).join('')}</select></div>
-      <div class="field"><label>Client concerné</label><input id="tk-client" value="${escapeAttr(d.clientNom||'')}" placeholder="Nom du client (optionnel)"></div>
-      <div class="field"><label>Laboratoire</label><input id="tk-labo" value="${escapeAttr(d.labo||'')}" placeholder="Ex: BBGR, Essilor..."></div>
+      <div class="field"><label>Assigné à <span style="color:#A6402E;">*</span></label>
+        ${canChangeAssigne
+          ? `<select required id="tk-assigne">${STAFF_ALL.map(s=>`<option ${d.assigne===s?'selected':''}>${s}</option>`).join('')}</select>`
+          : `<input value="${escapeAttr(d.assigne)}" readonly style="background:#f5f4f0;color:#888;cursor:not-allowed;"><input type="hidden" id="tk-assigne" value="${escapeAttr(d.assigne)}">`
+        }
+      </div>
       <div class="field"><label>Date limite</label><input type="date" id="tk-datelimite" value="${escapeAttr(d.dateLimite||'')}"></div>
       <div class="field"><label>Boutique</label><select id="tk-boutique">${['Toutes',...BOUTIQUES].map(b=>`<option ${(d.boutique||state.boutique)===b?'selected':''}>${b}</option>`).join('')}</select></div>
+
+      <div class="form-section-title">Client concerné</div>
+      <div class="field"><label>📱 Téléphone WhatsApp</label>
+        <input id="tk-tel" value="${escapeAttr(d.clientTel||'')}" inputmode="numeric" placeholder="ex: 70000000" oninput="this.value=this.value.replace(/[^0-9]/g,'');tkAutoClient(this.value);">
+      </div>
+      <div class="field"><label>📞 Téléphone 2</label>
+        <input id="tk-tel2" value="${escapeAttr(d.clientTel2||'')}" inputmode="numeric" placeholder="ex: 65000000" oninput="this.value=this.value.replace(/[^0-9]/g,'')">
+      </div>
+      <div class="field"><label>Civilité</label>
+        <select id="tk-civilite"><option value="">—</option>${CIVILITES.filter(c=>c).map(c=>`<option ${d.clientCivilite===c?'selected':''}>${c}</option>`).join('')}</select>
+      </div>
+      <div class="field"><label>Nom <span style="color:#A6402E;">*</span></label>
+        <input required id="tk-client" value="${escapeAttr(d.clientNom||'')}" placeholder="Nom de famille">
+      </div>
+      <div class="field"><label>Prénom</label>
+        <input id="tk-client-prenom" value="${escapeAttr(d.clientPrenom||'')}" placeholder="Prénom">
+      </div>
+      <div class="field" id="tk-wa-btn-wrap">${waBtnHtml}</div>
+
+      <div class="form-section-title">Commande laboratoire</div>
+      <div class="field"><label>Laboratoire</label>
+        <input id="tk-labo" value="${escapeAttr(d.labo||'')}" placeholder="Ex: BBGR, Essilor, Synchrony...">
+      </div>
     </div>
     <div class="modal-actions">
       <button type="button" class="btn-sm btn-ghost" id="modal-cancel">Annuler</button>
@@ -2615,6 +2659,24 @@ function ticketForm(data){
     <input type="hidden" id="tk-createur" value="${escapeAttr(d.creepar||state.commercial)}">
   </form>`;
 }
+
+window.tkAutoClient = function(val){
+  if(val.length < 6) return;
+  const tel = normTel(val);
+  const vente = DB.ventes.find(v=>normTel(v.telephone)===tel || normTel(v.telephone2||'')===tel);
+  if(!vente) return;
+  const n = document.getElementById('tk-client'); if(n) n.value = vente.nom||'';
+  const p = document.getElementById('tk-client-prenom'); if(p) p.value = vente.prenom||'';
+  const cv = document.getElementById('tk-civilite'); if(cv && vente.civilite) cv.value = vente.civilite;
+  const t2 = document.getElementById('tk-tel2'); if(t2 && vente.telephone2 && !t2.value) t2.value = vente.telephone2;
+  const wrap = document.getElementById('tk-wa-btn-wrap');
+  if(wrap){
+    const num = tel.startsWith('226')?tel:'226'+tel;
+    const msg = encodeURIComponent(bonjourClient(vente.nom,'',vente.civilite)+', nous vous contactons de Jéricho Optique concernant votre commande.');
+    wrap.innerHTML = `<a href="https://wa.me/${num}?text=${msg}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:5px;background:#25D366;color:#fff;text-decoration:none;padding:5px 10px;border-radius:6px;font-size:12px;font-weight:600;"><svg width="13" height="13" viewBox="0 0 24 24" fill="#fff"><path d="M12.04 2c-5.46 0-9.91 4.45-9.91 9.91 0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38c1.45.79 3.08 1.21 4.74 1.21 5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.816 9.816 0 0 0 12.04 2m.01 1.67c2.2 0 4.26.86 5.82 2.42a8.225 8.225 0 0 1 2.41 5.83c0 4.54-3.7 8.23-8.24 8.23-1.48 0-2.93-.39-4.19-1.15l-.3-.17-3.12.82.83-3.04-.2-.32a8.188 8.188 0 0 1-1.26-4.38c.01-4.54 3.7-8.24 8.25-8.24M8.53 7.33c-.16 0-.43.06-.66.31-.22.25-.87.86-.87 2.07 0 1.22.89 2.39 1 2.56.14.17 1.76 2.67 4.25 3.73.59.27 1.05.42 1.41.53.59.19 1.13.16 1.56.1.48-.07 1.46-.6 1.67-1.18.21-.58.21-1.07.14-1.18-.07-.11-.25-.17-.53-.31-.28-.14-1.66-.82-1.92-.91-.26-.09-.44-.14-.63.14-.19.28-.72.91-.88 1.09-.16.18-.32.2-.6.07-.28-.14-1.19-.44-2.26-1.4-.83-.75-1.4-1.67-1.56-1.95-.17-.28-.02-.44.12-.58.13-.13.28-.34.42-.51.14-.17.18-.29.28-.47.09-.19.05-.35-.02-.49-.07-.14-.63-1.52-.88-2.07-.24-.53-.48-.46-.66-.47-.16-.01-.35-.01-.53-.01Z"/></svg> WhatsApp client</a>`;
+  }
+};
+
 
 // Créer automatiquement un ticket labo après une vente
 function creerTicketLabo(vente){
@@ -2632,8 +2694,11 @@ function creerTicketLabo(vente){
     assigne: 'Directrice',
     priorite: 'Haute',
     statut: 'À faire',
-    clientNom: `${vente.nom||''} ${vente.prenom||''}`.trim(),
-    labo: vente.laboratoire || '',
+    clientNom: `${vente.nom||''}`.trim(),
+    clientPrenom: vente.prenom||'',
+    clientCivilite: vente.civilite||'',
+    clientTel: normTel(vente.telephone)||'',
+    clientTel2: vente.telephone2||'',
     boutique: vente.businessUnit || state.boutique || '',
     dateCreation: todayISO(),
     dateLimite: '',
@@ -3650,6 +3715,10 @@ function attachModalEvents(){
       priorite: document.getElementById('tk-priorite').value,
       statut: document.getElementById('tk-statut').value,
       clientNom: document.getElementById('tk-client').value.trim(),
+      clientPrenom: document.getElementById('tk-client-prenom')?.value.trim()||'',
+      clientCivilite: document.getElementById('tk-civilite')?.value||'',
+      clientTel: document.getElementById('tk-tel')?.value.replace(/[^0-9]/g,'')||'',
+      clientTel2: document.getElementById('tk-tel2')?.value.replace(/[^0-9]/g,'')||'',
       labo: document.getElementById('tk-labo').value.trim(),
       dateLimite: document.getElementById('tk-datelimite').value,
       boutique: document.getElementById('tk-boutique').value,
