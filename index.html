@@ -409,9 +409,9 @@ tbody tr:hover{background:var(--sand-light);}
 const API_URL = "https://script.google.com/macros/s/AKfycbxVwZ7D_0pvYcSdZiYEcna8MteG53OnyoP6x-ylMYc8f0tojGi29q9yF8TzneJ3LpWH/exec";
 const API_KEY = "jericho2026"; // doit correspondre à SECRET_KEY dans le script Apps Script
 
-const SHEET_NAMES = { prospects:'Prospects', clients:'Clients', sav:'SAV', stock:'Stock', ventes:'Ventes', tickets:'Tickets' };
+const SHEET_NAMES = { prospects:'Prospects', clients:'Clients', sav:'SAV', stock:'Stock', ventes:'Ventes', tickets:'Tickets', apporteurs:'Apporteurs' };
 
-let DB = { prospects: [], clients: [], sav: [], stock: [], ventes: [], tickets: [] };
+let DB = { prospects: [], clients: [], sav: [], stock: [], ventes: [], tickets: [], apporteurs: [] };
 let loaded = false;
 
 function normalizeRow(row){
@@ -1566,6 +1566,7 @@ function modalContent(){
   if(m.type==='stock') return stockForm(m.data);
   if(m.type==='vente') return venteForm(m.data);
   if(m.type==='ticket') return ticketForm(m.data);
+  if(m.type==='apporteur') return apporteurForm(m.data);
   return '';
 }
 
@@ -1837,7 +1838,17 @@ function venteForm(data){
       </div>
 
       <div id="sec-staff" class="form-grid" style="display:none;grid-column:1/-1;">
-        <div class="field"><label>Apporteur d'affaire</label><select id="v-apporteur">${STAFF.map(s=>`<option ${d.apporteurAffaire===s?'selected':''}>${s}</option>`).join('')}</select></div>
+        <div class="field"><label>Apporteur d'affaire</label>
+          <select id="v-apporteur">
+            <option value="">— Aucun —</option>
+            ${DB.apporteurs.filter(a=>a.actif!=='false'&&a.actif!==false).map(a=>{
+              const label = `${a.nom||''} ${a.prenom||''}`.trim() + (a.specialite?` (${a.specialite})`:'');
+              const val = `${a.nom||''} ${a.prenom||''}`.trim();
+              return `<option value="${escapeAttr(val)}" ${d.apporteurAffaire===val?'selected':''}>${escapeHtml(label)}</option>`;
+            }).join('')}
+            <option value="Autre" ${d.apporteurAffaire==='Autre'?'selected':''}>Autre</option>
+          </select>
+        </div>
         <div class="field" id="wrap-apporteur-autre" style="display:none;"><label>Précisez</label><input id="v-apporteur-autre" value="${escapeAttr(d.apporteurAffaireAutre)}"></div>
         <div class="field">
           <label>Gestionnaire <span style="font-weight:400;color:#9a998f;font-size:11px;">— propriétaire du client, porte le CA</span></label>
@@ -1898,7 +1909,7 @@ function venteForm(data){
           </div>
           <div class="field"><label>Remise (montant)</label><input type="number" min="0" step="500" id="v-remise" value="${escapeAttr(d.remise)}" oninput="calcVenteReste()"></div>
           <div class="field"><label>Avance encaissée</label><input type="number" min="0" step="500" id="v-avance" value="${escapeAttr(d.avance)}" oninput="calcVenteReste()"></div>
-          <div class="field" id="wrap-bon"><label>Bon non encaissé <span style="font-weight:400;color:#9a998f;">(assurance)</span></label><input type="number" min="0" step="500" id="v-bon" value="${escapeAttr(d.montantBonNonEncaisse)}" oninput="calcVenteReste()"></div>
+          <div class="field" id="wrap-bon"><label>Bon non encaissé <span style="color:#A6402E;">*</span> <span style="font-weight:400;color:#9a998f;font-size:11px;">(obligatoire si assurance)</span></label><input type="number" min="0" step="500" id="v-bon" value="${escapeAttr(d.montantBonNonEncaisse)}" oninput="calcVenteReste()"></div>
           <div class="field" style="background:#fdf0ee;border-radius:8px;padding:8px;" id="wrap-reste">
             <label style="color:#A6402E;font-weight:600;">Reste à payer</label>
             <input type="number" id="v-reste-display" readonly style="font-weight:600;color:#A6402E;background:transparent;border:none;" value="0">
@@ -1907,7 +1918,7 @@ function venteForm(data){
       </div>
 
       <div class="form-section-title">Suivi</div>
-      <div class="field"><label>Date de RDV</label><input type="date" id="v-rdv" value="${escapeAttr(d.dateRdv)}"></div>
+      <div class="field"><label>Date de RDV <span style="color:#A6402E;">*</span></label><input required type="date" id="v-rdv" value="${escapeAttr(d.dateRdv)}"></div>
       <div class="field"><label>Saisi par</label><input value="${escapeAttr(d.saisePar||state.commercial)}" readonly style="background:#f5f4f0;color:#888;cursor:not-allowed;"></div>
       <div class="field full"><label>Commentaire</label><textarea id="v-commentaire">${escapeHtml(d.commentaire)}</textarea></div>
     </div>
@@ -2005,7 +2016,61 @@ function renderAdminComptes(){
           </tr>`).join('') : `<tr class="empty-row"><td colspan="7">Aucun utilisateur chargé.</td></tr>`}
       </tbody>
     </table>
+  </div>
+
+  <!-- SECTION APPORTEURS D'AFFAIRE -->
+  <div class="main-head" style="margin-top:32px;">
+    <div><h2>Apporteurs d'affaire</h2><p>Ophtalmologues et médecins qui orientent des clients vers Jéricho Optique.</p></div>
+    <button class="btn-sm" id="btn-new-apporteur">+ Nouvel apporteur</button>
+  </div>
+  <div class="panel" style="padding:0;">
+    <table>
+      <thead><tr><th>Nom</th><th>Spécialité</th><th>Cabinet</th><th>Téléphone</th><th>CA généré</th><th>Statut</th><th></th></tr></thead>
+      <tbody>
+        ${DB.apporteurs.length ? DB.apporteurs.map(a=>{
+          // CA généré par cet apporteur
+          const caApp = DB.ventes
+            .filter(v=>(v.apporteurAffaire||'').toLowerCase()===(`${a.nom} ${a.prenom||''}`.trim()).toLowerCase())
+            .reduce((s,v)=>s+venteTotal(v),0);
+          return `<tr>
+            <td><b>${escapeHtml(a.nom||'')} ${escapeHtml(a.prenom||'')}</b></td>
+            <td>${escapeHtml(a.specialite||'—')}</td>
+            <td>${escapeHtml(a.cabinet||'—')}</td>
+            <td>${a.telephone?`<a href="tel:${escapeHtml(a.telephone)}" style="color:#68AAD1;">${escapeHtml(a.telephone)}</a>`:'—'}</td>
+            <td style="font-weight:600;color:#E8A93B;">${caApp>0?fmtFCFA(caApp):'—'}</td>
+            <td><span style="background:${a.actif==='false'||a.actif===false?'#ccc':'#2d7a3a'};color:#fff;font-size:10px;padding:1px 8px;border-radius:8px;">${a.actif==='false'||a.actif===false?'Inactif':'Actif'}</span></td>
+            <td><div class="row-actions">
+              <button class="icon-btn" data-edit-apporteur="${a.id}">Modifier</button>
+              <button class="icon-btn danger" data-toggle-apporteur="${a.id}">${a.actif==='false'||a.actif===false?'Activer':'Désactiver'}</button>
+            </div></td>
+          </tr>`;
+        }).join('') : `<tr class="empty-row"><td colspan="7">Aucun apporteur enregistré. Ajoutez vos ophtalmologues partenaires.</td></tr>`}
+      </tbody>
+    </table>
   </div>`;
+}
+
+function apporteurForm(data){
+  const d = data || { id:'', nom:'', prenom:'', specialite:'Ophtalmologue', cabinet:'', telephone:'', actif:true };
+  const SPECIALITES = ['Ophtalmologue','Médecin généraliste','Optométriste','Pédiatre','Autre'];
+  return `
+  <h3>${data?'Modifier l\'apporteur':'Nouvel apporteur d\'affaire'}</h3>
+  <form id="form-apporteur">
+    <div class="form-grid">
+      <div class="form-section-title">Informations personnelles</div>
+      <div class="field"><label>Nom <span style="color:#A6402E;">*</span></label><input required id="ap-nom" value="${escapeAttr(d.nom||'')}" placeholder="Nom de famille"></div>
+      <div class="field"><label>Prénom</label><input id="ap-prenom" value="${escapeAttr(d.prenom||'')}" placeholder="Prénom"></div>
+      <div class="field"><label>Spécialité</label><select id="ap-specialite">${SPECIALITES.map(s=>`<option ${d.specialite===s?'selected':''}>${s}</option>`).join('')}</select></div>
+      <div class="field"><label>Cabinet / Clinique</label><input id="ap-cabinet" value="${escapeAttr(d.cabinet||'')}" placeholder="Ex: Cabinet Dr Ouédraogo"></div>
+      <div class="field"><label>Téléphone</label><input id="ap-tel" value="${escapeAttr(d.telephone||'')}" inputmode="numeric" placeholder="ex: 70000000" oninput="this.value=this.value.replace(/[^0-9]/g,'')"></div>
+      <div class="field"><label>Statut</label><select id="ap-actif"><option value="true" ${d.actif!==false&&d.actif!=='false'?'selected':''}>Actif</option><option value="false" ${d.actif===false||d.actif==='false'?'selected':''}>Inactif</option></select></div>
+    </div>
+    <div class="modal-actions">
+      <button type="button" class="btn-sm btn-ghost" id="modal-cancel">Annuler</button>
+      <button type="submit" class="btn-sm">${data?'Enregistrer':'Ajouter l\'apporteur'}</button>
+    </div>
+    <input type="hidden" id="ap-id" value="${escapeAttr(d.id)}">
+  </form>`;
 }
 
 function renderMonCompte(){
@@ -3199,7 +3264,7 @@ function attachGlobalEvents(){
   const app = document.getElementById('app');
   if(app){
     app.addEventListener('click', async (e)=>{
-      const t = e.target.closest('button, a[data-nav], [data-tab], [data-del-prospect], [data-del-client], [data-del-sav], [data-del-vente], [data-del-stock], [data-edit-prospect], [data-edit-client], [data-edit-sav], [data-edit-vente], [data-edit-stock], [data-view-client], [data-convert-prospect], [data-edit-user], [data-toggle-user], [data-nav], [data-print-vente], [data-view-vente-client], [data-edit-ticket], [data-del-ticket], [data-kpi-action], [data-periode]');
+      const t = e.target.closest('button, a[data-nav], [data-tab], [data-del-prospect], [data-del-client], [data-del-sav], [data-del-vente], [data-del-stock], [data-edit-prospect], [data-edit-client], [data-edit-sav], [data-edit-vente], [data-edit-stock], [data-view-client], [data-convert-prospect], [data-edit-user], [data-toggle-user], [data-nav], [data-print-vente], [data-view-vente-client], [data-edit-ticket], [data-del-ticket], [data-edit-apporteur], [data-toggle-apporteur], [data-kpi-action], [data-periode]');
       if(!t) return;
 
       // Navigation publique
@@ -3272,7 +3337,12 @@ function attachGlobalEvents(){
         return;
       }
       // Ventes
-      if(t.id==='btn-new-ticket'){ state.modal={type:'ticket',data:null}; render(); return; }
+      if(t.id==='btn-new-apporteur'){ state.modal={type:'apporteur',data:null}; render(); return; }
+      if(t.dataset.editApporteur){ state.modal={type:'apporteur',data:DB.apporteurs.find(a=>a.id===t.dataset.editApporteur)||null}; render(); return; }
+      if(t.dataset.toggleApporteur){
+        const a = DB.apporteurs.find(x=>x.id===t.dataset.toggleApporteur);
+        if(a){ a.actif = (a.actif==='false'||a.actif===false) ? true : false; await apiUpsert('apporteurs',a); render(); } return;
+      }
       if(t.dataset.editTicket){ state.modal={type:'ticket',data:DB.tickets.find(x=>x.id===t.dataset.editTicket)||null}; render(); return; }
       if(t.dataset.delTicket){
         if(!confirm('Supprimer ce ticket ?')) return;
@@ -3447,14 +3517,17 @@ function attachVenteConditionalLogic(){
     // Afficher le reste avec séparateurs de milliers
     const elReste = document.getElementById('v-reste-display');
     if(elReste){
-      elReste.value = reste > 0 ? reste.toLocaleString('fr-FR', {maximumFractionDigits:0}) + ' FCFA' : '0 FCFA';
+      elReste.value = reste.toLocaleString('fr-FR', {maximumFractionDigits:0}) + ' FCFA';
+      elReste.style.color = reste > 0 ? '#A6402E' : '#2d7a3a';
     }
     // Afficher le total avec séparateurs dans le label
     const elTotalLabel = document.getElementById('v-total-label');
     if(elTotalLabel) elTotalLabel.textContent = total > 0 ? total.toLocaleString('fr-FR', {maximumFractionDigits:0}) + ' FCFA' : '';
-    // Masquer/afficher le bon non encaissé selon l'assurance
+    // Masquer/afficher le bon non encaissé selon l'assurance + obligatoire
     const wrapBon = document.getElementById('wrap-bon');
+    const inputBon = document.getElementById('v-bon');
     if(wrapBon) wrapBon.style.display = hasBon ? '' : 'none';
+    if(inputBon) inputBon.required = hasBon;
   };
 
   // Masquer/afficher bon selon assurance au changement
@@ -3732,6 +3805,31 @@ function attachModalEvents(){
       else{ DB.tickets.unshift(obj); }
       state.modal=null; render();
       showToast('Ticket enregistré.');
+    }catch(err){ showToast("Erreur d'enregistrement, réessaie."); }
+  });
+
+  // Formulaire apporteur d'affaire
+  const fap = document.getElementById('form-apporteur');
+  if(fap) fap.addEventListener('submit', async(e)=>{
+    e.preventDefault();
+    const id = document.getElementById('ap-id')?.value || ('ap_'+Date.now()+'_'+Math.random().toString(36).slice(2,6));
+    const existing = DB.apporteurs.find(x=>x.id===id);
+    const obj = {
+      id,
+      nom: document.getElementById('ap-nom').value.trim(),
+      prenom: document.getElementById('ap-prenom')?.value.trim()||'',
+      specialite: document.getElementById('ap-specialite').value,
+      cabinet: document.getElementById('ap-cabinet')?.value.trim()||'',
+      telephone: document.getElementById('ap-tel')?.value.replace(/[^0-9]/g,'')||'',
+      actif: document.getElementById('ap-actif').value,
+      dateCreation: existing?.dateCreation || todayISO(),
+    };
+    try{
+      await apiUpsert('apporteurs', obj);
+      if(existing){ DB.apporteurs = DB.apporteurs.map(x=>x.id===id?obj:x); }
+      else{ DB.apporteurs.unshift(obj); }
+      state.modal=null; render();
+      showToast('Apporteur enregistré.');
     }catch(err){ showToast("Erreur d'enregistrement, réessaie."); }
   });
 
