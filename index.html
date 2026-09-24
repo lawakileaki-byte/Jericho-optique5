@@ -641,6 +641,8 @@ const state = {
   analysePeriode: 'mois',
   analyseDebut: '',
   analyseFin: '',
+  primesMois: new Date().getMonth(),
+  primesAnnee: new Date().getFullYear(),
   filters: { prospects:{statut:'', boutique:'', q:''}, clients:{boutique:'', q:''}, sav:{statut:'', boutique:'', q:''}, stock:{boutique:'', categorie:'', q:''}, ventes:{boutique:'', typeArticle:'', q:'', periode:'mois'}, tickets:{q:'',statut:'',type:'',assigne:''} },
   modal: null,
 };
@@ -1048,6 +1050,7 @@ function renderTeam(){
         <button data-tab="stock" class="${state.teamTab==='stock'?'active':''}">Stock</button>
         <button data-tab="tickets" class="${state.teamTab==='tickets'?'active':''}">🎫 Tickets${(()=>{const mes=DB.tickets.filter(t=>t.assigne===state.commercial&&t.statut!=='Terminé');return mes.length?` <span style="background:#A6402E;color:#fff;font-size:10px;padding:1px 5px;border-radius:8px;margin-left:4px;">${mes.length}</span>`:'';})()} </button>
         <button data-tab="analyse" class="${state.teamTab==='analyse'?'active':''}">Analyse</button>
+        <button data-tab="primes" class="${state.teamTab==='primes'?'active':''}">💰 Primes</button>
         ${isAdmin() ? `<button data-tab="admin" class="${state.teamTab==='admin'?'active':''}">Comptes</button>` : ''}
         <div class="out">
           <button data-tab="moncompte" class="${state.teamTab==='moncompte'?'active':''}">Mon compte</button>
@@ -1072,6 +1075,7 @@ function renderTeamTab(){
   if(state.teamTab==='admin') return isAdmin() ? renderAdminComptes() : renderProspects();
   if(state.teamTab==='moncompte') return renderMonCompte();
   if(state.teamTab==='analyse') return renderAnalyse();
+  if(state.teamTab==='primes') return renderPrimes();
   return '';
 }
 
@@ -1898,14 +1902,19 @@ function venteForm(data){
           <div class="field"><label>Sphère</label><input type="number" step="0.25" id="v-od-sphere" value="${escapeAttr(d.odSphere)}" placeholder="ex: -1.75" inputmode="decimal"></div>
           <div class="field"><label>Cylindre</label><input type="number" step="0.25" id="v-od-cyl" value="${escapeAttr(d.odCylindre)}" placeholder="ex: -0.50" inputmode="decimal"></div>
           <div class="field"><label>Axe (0-180)</label><input type="number" step="1" min="0" max="180" id="v-od-axe" value="${escapeAttr(d.odAxe)}" placeholder="ex: 90" inputmode="numeric"></div>
-          <div class="field"><label>Addition</label><input type="number" step="0.25" min="0" id="v-od-add" value="${escapeAttr(d.odAddition)}" placeholder="ex: 2.00" inputmode="decimal" oninput="autoOgAdd(this.value)"></div>
+          <div class="field"><label>Addition</label><input type="number" step="0.25" min="0" id="v-od-add" value="${escapeAttr(d.odAddition)}" placeholder="ex: 2.00" inputmode="decimal" oninput="autoOgAdd(this.value);updateBadgeTypeVerre()"></div>
         </div>
         <div class="form-section-title">Prescription œil gauche (OG)</div>
         <div class="form-grid">
           <div class="field"><label>Sphère</label><input type="number" step="0.25" id="v-og-sphere" value="${escapeAttr(d.ogSphere)}" placeholder="ex: -1.75" inputmode="decimal"></div>
           <div class="field"><label>Cylindre</label><input type="number" step="0.25" id="v-og-cyl" value="${escapeAttr(d.ogCylindre)}" placeholder="ex: -0.50" inputmode="decimal"></div>
           <div class="field"><label>Axe (0-180)</label><input type="number" step="1" min="0" max="180" id="v-og-axe" value="${escapeAttr(d.ogAxe)}" placeholder="ex: 90" inputmode="numeric"></div>
-          <div class="field"><label>Addition <span id="og-add-hint" style="font-size:10px;color:#68AAD1;font-weight:400;"></span></label><input type="number" step="0.25" min="0" id="v-og-add" value="${escapeAttr(d.ogAddition)}" placeholder="ex: 2.00" inputmode="decimal" oninput="document.getElementById('og-add-hint').textContent=''"></div>
+          <div class="field"><label>Addition <span id="og-add-hint" style="font-size:10px;color:#68AAD1;font-weight:400;"></span></label><input type="number" step="0.25" min="0" id="v-og-add" value="${escapeAttr(d.ogAddition)}" placeholder="ex: 2.00" inputmode="decimal" oninput="document.getElementById('og-add-hint').textContent='';updateBadgeTypeVerre()"></div>
+          <div class="field full">
+            <div id="badge-type-verre" style="display:inline-flex;align-items:center;gap:8px;padding:8px 14px;border-radius:8px;font-size:13px;font-weight:600;background:${(()=>{const od=parseFloat(d.odAddition)||0;const og=parseFloat(d.ogAddition)||0;return (od>0.1||og>0.1)?'#EAF3FE':'#F5F4F0';})()};color:${(()=>{const od=parseFloat(d.odAddition)||0;const og=parseFloat(d.ogAddition)||0;return (od>0.1||og>0.1)?'#185FA5':'#555';})()};">
+              ${(()=>{const od=parseFloat(d.odAddition)||0;const og=parseFloat(d.ogAddition)||0;return (od>0.1||og>0.1)?'🔵 Progressif — prime lentilles palier PROGRESSIF':'⚪ Unifocal — prime lentilles palier UNIFOCAL';})()}
+            </div>
+          </div>
         </div>
         <div class="form-section-title">Verre</div>
         <div class="form-grid">
@@ -2127,7 +2136,7 @@ function renderMonCompte(){
    FORMULAIRES ADMIN UTILISATEURS
    ========================================================= */
 function userForm(data){
-  const d = data || { id:'', nom:'', motDePasse:'', role:'commercial', boutique:BOUTIQUES[0], actif:'oui', objectifAnnuel:'', objectifsMensuels:'' };
+  const d = data || { id:'', nom:'', motDePasse:'', role:'commercial', boutique:BOUTIQUES[0], actif:'oui', objectifAnnuel:'', objectifsMensuels:'', salaireBase:'' };
   const isEdit = !!data;
   let objMensuels = {};
   if(d.objectifsMensuels){ try{ objMensuels = JSON.parse(d.objectifsMensuels); }catch(e){} }
@@ -2143,6 +2152,7 @@ function userForm(data){
       <div class="field"><label>Rôle</label><select id="u-role"><option value="commercial" ${d.role==='commercial'?'selected':''}>Commercial(e)</option><option value="admin" ${d.role==='admin'?'selected':''}>Admin / Directrice</option></select></div>
       <div class="field"><label>Boutique principale</label><select id="u-boutique"><option value="Toutes" ${d.boutique==='Toutes'?'selected':''}>Toutes</option>${BOUTIQUES.map(b=>`<option ${d.boutique===b?'selected':''}>${b}</option>`).join('')}</select></div>
       <div class="field"><label>Statut</label><select id="u-actif"><option value="oui" ${d.actif==='oui'?'selected':''}>Actif</option><option value="non" ${d.actif==='non'?'selected':''}>Inactif</option></select></div>
+      <div class="field"><label>Salaire de base (FCFA)</label><input type="number" min="0" step="5000" id="u-salaire" value="${escapeAttr(d.salaireBase||'')}" placeholder="ex: 75000"></div>
     </div>
 
     <div class="form-section-title" style="margin-top:20px;">Objectifs de vente</div>
@@ -2842,6 +2852,17 @@ document.addEventListener('click', e=>{
 });
 
 // ===== AUTO-REMPLIR ADDITION OG DEPUIS OD =====
+window.updateBadgeTypeVerre = function(){
+  const odAdd = parseFloat(document.getElementById('v-od-add')?.value||'0')||0;
+  const ogAdd = parseFloat(document.getElementById('v-og-add')?.value||'0')||0;
+  const isP = odAdd > 0.1 || ogAdd > 0.1;
+  const badge = document.getElementById('badge-type-verre');
+  if(!badge) return;
+  badge.style.background = isP ? '#EAF3FE' : '#F5F4F0';
+  badge.style.color = isP ? '#185FA5' : '#555';
+  badge.textContent = isP ? '🔵 Progressif — prime lentilles palier PROGRESSIF' : '⚪ Unifocal — prime lentilles palier UNIFOCAL';
+};
+
 window.autoOgAdd = function(val){
   const ogAdd = document.getElementById('v-og-add');
   const hint = document.getElementById('og-add-hint');
@@ -2885,6 +2906,399 @@ function creerTicketLabo(vente){
     creepar: state.commercial,
   };
   return ticket;
+}
+
+// Détection unifocal/progressif selon les additions
+function isProgressif(vente){
+  const odAdd = parseFloat(String(vente.odAddition||'0').replace(',','.').replace('+','')) || 0;
+  const ogAdd = parseFloat(String(vente.ogAddition||'0').replace(',','.').replace('+','')) || 0;
+  return Math.abs(odAdd) > 0.1 || Math.abs(ogAdd) > 0.1;
+}
+
+// Calcul prime monture par vente
+function primeMontureParVente(prixMont){
+  const p = Number(prixMont)||0;
+  if(p < 25000) return 0;
+  if(p <= 40000) return 1500;
+  if(p <= 65000) return 3000;
+  if(p <= 120000) return 5000;
+  return 8000;
+}
+
+// Calcul prime lentilles progressif (forfait par vente selon CA mensuel)
+function primeLentillesProgressif(caMensuelLentProg, nbVentes, objectifMensuel){
+  if(caMensuelLentProg <= 0 || nbVentes <= 0) return 0;
+  const obj = Number(objectifMensuel)||1800000;
+  let forfait;
+  if(caMensuelLentProg > obj) return Math.round(caMensuelLentProg * 0.09);
+  if(caMensuelLentProg > 900000) forfait = 9000;
+  else if(caMensuelLentProg > 480000) forfait = 7000;
+  else if(caMensuelLentProg >= 300000) forfait = 6000;
+  else return 0;
+  return forfait * nbVentes;
+}
+
+// Calcul prime lentilles unifocal
+function primeLentillesUnifocal(caMensuelLentUnif, nbVentes, objectifMensuel){
+  if(caMensuelLentUnif <= 0 || nbVentes <= 0) return 0;
+  const obj = Number(objectifMensuel)||1200000;
+  let forfait;
+  if(caMensuelLentUnif > obj) return Math.round(caMensuelLentUnif * 0.08);
+  if(caMensuelLentUnif > 700000) forfait = 6000;
+  else if(caMensuelLentUnif > 400000) forfait = 4000;
+  else if(caMensuelLentUnif >= 240000) forfait = 3000;
+  else return 0;
+  return forfait * nbVentes;
+}
+
+// Calcul prime totale d'un commercial pour un mois donné
+function calculPrimeMensuelle(nomCommercial, annee, mois, utilisateur){
+  const debutMois = `${annee}-${String(mois+1).padStart(2,'0')}-01`;
+  const finMois   = `${annee}-${String(mois+1).padStart(2,'0')}-${new Date(annee, mois+1, 0).getDate()}`;
+
+  // Ventes du mois (montures + lentilles seulement, pas accessoires/réparations)
+  const ventesCommercial = DB.ventes.filter(v => {
+    if(v.gestionnaire !== nomCommercial) return false;
+    const d = v.dateMiseEnRelation || '';
+    if(d < debutMois || d > finMois) return false;
+    const type = (v.typeArticle||'').toLowerCase();
+    return type.includes('monture') || type.includes('lentille');
+  });
+
+  // Objectif mensuel du commercial
+  let objMensuels = {};
+  try{ objMensuels = JSON.parse(utilisateur?.objectifsMensuels||'{}'); }catch(e){}
+  const objMois = Number(objMensuels[mois]||utilisateur?.objectifAnnuel/12||0);
+
+  // Séparer progressif / unifocal
+  const ventesAvecMont = ventesCommercial.filter(v=>Number(v.prixVenteMonture||0)>=10000);
+  
+  let caProg=0, nbProg=0, caUnif=0, nbUnif=0, primeMont=0;
+  let detailProg=[], detailUnif=[];
+
+  ventesCommercial.forEach(v => {
+    const prog = isProgressif(v);
+    const lent = Number(v.prixVenteLentilles||0);
+    const mont = Number(v.prixVenteMonture||0);
+    const remise = Number(v.remise||0);
+    const lentNet = Math.max(lent - remise*0.5, 0);
+    const montNet = Math.max(mont - remise*0.5, 0);
+
+    // Prime monture (toutes ventes avec monture >= 10k, progressif ET unifocal)
+    if(mont >= 10000){
+      const pm = primeMontureParVente(montNet);
+      primeMont += pm;
+    }
+
+    if(lent < 10000) return; // Pas de prime lentilles si < 10k
+
+    if(prog){
+      caProg += lentNet;
+      nbProg++;
+      detailProg.push({nom:v.nom||'', date:v.dateMiseEnRelation, lent:lentNet, mont:montNet, od:v.odAddition, og:v.ogAddition});
+    } else {
+      caUnif += lentNet;
+      nbUnif++;
+      detailUnif.push({nom:v.nom||'', date:v.dateMiseEnRelation, lent:lentNet, mont:montNet});
+    }
+  });
+
+  const primeProg = primeLentillesProgressif(caProg, nbProg, objMois);
+  const primeUnif = primeLentillesUnifocal(caUnif, nbUnif, objMois);
+  const primeBrute = primeProg + primeUnif + primeMont;
+
+  // Impayés du commercial ce mois
+  const impayes = ventesCommercial
+    .filter(v => Number(v.avance||0) < (Number(v.prixVenteTotalSansRemise||0) - Number(v.remise||0)))
+    .reduce((s,v) => {
+      const total = Number(v.prixVenteTotalSansRemise||0) - Number(v.remise||0);
+      const avance = Number(v.avance||0);
+      const bon = Number(v.montantBonNonEncaisse||0);
+      return s + Math.max(total - avance - bon, 0);
+    }, 0);
+
+  // Retenue 30% si impayés
+  const retenue = impayes > 0 ? Math.round(primeBrute * 0.30) : 0;
+  const primeNette = primeBrute - retenue;
+
+  return {
+    nomCommercial, annee, mois,
+    caProg, nbProg, primeProg,
+    caUnif, nbUnif, primeUnif,
+    primeMont,
+    primeBrute, impayes, retenue, primeNette,
+    objMois, detailProg, detailUnif,
+    nbVentesTotales: ventesCommercial.length
+  };
+}
+
+/* =========================================================
+   PRIMES
+   ========================================================= */
+function renderPrimes(){
+  const now = new Date();
+  const moisCourant = now.getMonth();
+  const anneeCourante = now.getFullYear();
+  const moisAff = state.primesMois !== undefined ? state.primesMois : moisCourant;
+  const anneeAff = state.primesAnnee || anneeCourante;
+
+  // Trouver l'utilisateur courant
+  const user = USERS_CACHE.find(u => u.id === state.userId || u.nom === state.commercial);
+
+  if(isAdmin()){
+    return renderPrimesAdmin(anneeAff, moisAff);
+  } else {
+    return renderPrimesCommercial(state.commercial, anneeAff, moisAff, user);
+  }
+}
+
+function renderPrimesCommercial(nom, annee, mois, user){
+  const p = calculPrimeMensuelle(nom, annee, mois, user);
+  const MOIS_NOM = ["Janvier","Février","Mars","Avril","Mai","Juin","Juillet","Août","Septembre","Octobre","Novembre","Décembre"];
+
+  // Barre progression prime brute vs objectif
+  const pctProg = p.objMois > 0 ? Math.min(Math.round(p.caProg/p.objMois*100),100) : 0;
+  const pctUnif = p.objMois > 0 ? Math.min(Math.round(p.caUnif/p.objMois*100),100) : 0;
+
+  // Palier actuel progressif
+  function palierProg(ca){
+    if(ca >= 900000) return {label:'Palier 3 — 9 000 FCFA/vente', color:'#2d7a3a'};
+    if(ca >= 480000) return {label:'Palier 2 — 7 000 FCFA/vente', color:'#E8A93B'};
+    if(ca >= 300000) return {label:'Palier 1 — 6 000 FCFA/vente', color:'#68AAD1'};
+    return {label:'Sous le seuil (min. 300 000 FCFA)', color:'#ccc'};
+  }
+  function palierUnif(ca){
+    if(ca >= 700000) return {label:'Palier 3 — 6 000 FCFA/vente', color:'#2d7a3a'};
+    if(ca >= 400000) return {label:'Palier 2 — 4 000 FCFA/vente', color:'#E8A93B'};
+    if(ca >= 240000) return {label:'Palier 1 — 3 000 FCFA/vente', color:'#68AAD1'};
+    return {label:'Sous le seuil (min. 240 000 FCFA)', color:'#ccc'};
+  }
+
+  const pp = palierProg(p.caProg);
+  const pu = palierUnif(p.caUnif);
+
+  return `
+  <div class="main-head">
+    <div><h2>💰 Mes primes</h2><p>Calcul en temps réel — ${MOIS_NOM[mois]} ${annee}</p></div>
+    <div style="display:flex;gap:8px;align-items:center;">
+      <select onchange="state.primesMois=Number(this.value);render();" style="padding:6px;border-radius:6px;border:1px solid #ddd;">
+        ${MOIS_NOM.map((m,i)=>`<option value="${i}" ${i===mois?'selected':''}>${m}</option>`).join('')}
+      </select>
+      <select onchange="state.primesAnnee=Number(this.value);render();" style="padding:6px;border-radius:6px;border:1px solid #ddd;">
+        ${[annee-1,annee].map(a=>`<option value="${a}" ${a===annee?'selected':''}>${a}</option>`).join('')}
+      </select>
+    </div>
+  </div>
+
+  <!-- RÉSUMÉ PRIME -->
+  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;margin-bottom:20px;">
+    <div class="kpi" style="text-align:center;">
+      <div class="lbl">Prime lentilles progressif</div>
+      <div class="val" style="font-size:20px;color:#E8A93B;">${fmtFCFA(p.primeProg)}</div>
+      <div class="sub">${p.nbProg} vente(s) · ${fmtFCFA(p.caProg)} CA</div>
+    </div>
+    <div class="kpi" style="text-align:center;">
+      <div class="lbl">Prime lentilles unifocal</div>
+      <div class="val" style="font-size:20px;color:#E8A93B;">${fmtFCFA(p.primeUnif)}</div>
+      <div class="sub">${p.nbUnif} vente(s) · ${fmtFCFA(p.caUnif)} CA</div>
+    </div>
+    <div class="kpi" style="text-align:center;">
+      <div class="lbl">Prime montures</div>
+      <div class="val" style="font-size:20px;color:#E8A93B;">${fmtFCFA(p.primeMont)}</div>
+      <div class="sub">sur toutes les montures ≥ 25 000 FCFA</div>
+    </div>
+    <div class="kpi ${p.retenue>0?'warn':''}" style="text-align:center;">
+      <div class="lbl">Prime brute</div>
+      <div class="val" style="font-size:22px;">${fmtFCFA(p.primeBrute)}</div>
+      ${p.retenue>0?`<div class="sub" style="color:#A6402E;">Retenue 30% : −${fmtFCFA(p.retenue)} (impayés)</div>`:'<div class="sub" style="color:#2d7a3a;">✓ Aucun impayé ce mois</div>'}
+    </div>
+    <div class="kpi" style="text-align:center;background:#FFF9EF;border:2px solid #E8A93B;">
+      <div class="lbl" style="color:#E8A93B;font-weight:700;">Prime nette estimée</div>
+      <div class="val" style="font-size:24px;color:#E8A93B;">${fmtFCFA(p.primeNette)}</div>
+      ${p.impayes>0?`<div class="sub" style="color:#A6402E;">Impayés : ${fmtFCFA(p.impayes)} → recouvrer pour débloquer les 30%</div>`:''}
+    </div>
+  </div>
+
+  <!-- PALIERS ACTUELS -->
+  <div class="panel">
+    <h3 style="margin-bottom:14px;">Votre palier actuel</h3>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+      <div>
+        <div style="font-size:11px;font-weight:700;color:#888;text-transform:uppercase;margin-bottom:6px;">Lentilles Progressif</div>
+        <div style="background:${pp.color};color:#fff;padding:6px 12px;border-radius:6px;font-size:12px;font-weight:600;margin-bottom:8px;">${pp.label}</div>
+        <div style="background:#f0f0f0;border-radius:8px;height:10px;overflow:hidden;">
+          <div style="background:#E8A93B;height:100%;width:${pctProg}%;transition:width .5s;"></div>
+        </div>
+        <div style="font-size:11px;color:#888;margin-top:4px;">${fmtFCFA(p.caProg)} / ${p.objMois?fmtFCFA(p.objMois):'objectif non défini'}</div>
+        <div style="font-size:11px;color:#555;margin-top:8px;">
+          Prochain palier :
+          ${p.caProg < 300000 ? `<b>300 000 FCFA</b> (manque ${fmtFCFA(300000-p.caProg)})` :
+            p.caProg < 480000 ? `<b>480 000 FCFA</b> (manque ${fmtFCFA(480000-p.caProg)})` :
+            p.caProg < 900000 ? `<b>900 000 FCFA</b> (manque ${fmtFCFA(900000-p.caProg)})` :
+            p.objMois && p.caProg < p.objMois ? `<b>Objectif ${fmtFCFA(p.objMois)}</b> (manque ${fmtFCFA(p.objMois-p.caProg)})` :
+            '🏆 Objectif atteint !'}
+        </div>
+      </div>
+      <div>
+        <div style="font-size:11px;font-weight:700;color:#888;text-transform:uppercase;margin-bottom:6px;">Lentilles Unifocal</div>
+        <div style="background:${pu.color};color:#fff;padding:6px 12px;border-radius:6px;font-size:12px;font-weight:600;margin-bottom:8px;">${pu.label}</div>
+        <div style="background:#f0f0f0;border-radius:8px;height:10px;overflow:hidden;">
+          <div style="background:#68AAD1;height:100%;width:${pctUnif}%;transition:width .5s;"></div>
+        </div>
+        <div style="font-size:11px;color:#888;margin-top:4px;">${fmtFCFA(p.caUnif)} / ${p.objMois?fmtFCFA(p.objMois):'objectif non défini'}</div>
+        <div style="font-size:11px;color:#555;margin-top:8px;">
+          Prochain palier :
+          ${p.caUnif < 240000 ? `<b>240 000 FCFA</b> (manque ${fmtFCFA(240000-p.caUnif)})` :
+            p.caUnif < 400000 ? `<b>400 000 FCFA</b> (manque ${fmtFCFA(400000-p.caUnif)})` :
+            p.caUnif < 700000 ? `<b>700 000 FCFA</b> (manque ${fmtFCFA(700000-p.caUnif)})` :
+            '🏆 Objectif atteint !'}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- GRILLE DE REFERENCE -->
+  <div class="panel">
+    <h3 style="margin-bottom:12px;">Grille de référence</h3>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;font-size:12px;">
+      <div>
+        <div style="font-weight:700;color:#E8A93B;margin-bottom:6px;">🔵 Lentilles Progressif</div>
+        <div style="color:#888;font-size:11px;">CA lentilles progressif/mois</div>
+        ${[['300k – 480k','6 000/vente'],['480k – 900k','7 000/vente'],['900k – objectif','9 000/vente'],['>objectif','9% du CA']].map(([p,v])=>`
+          <div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #f0f0f0;">
+            <span style="color:#555;">${p}</span><b>${v}</b>
+          </div>`).join('')}
+      </div>
+      <div>
+        <div style="font-weight:700;color:#68AAD1;margin-bottom:6px;">⚪ Lentilles Unifocal</div>
+        <div style="color:#888;font-size:11px;">CA lentilles unifocal/mois</div>
+        ${[['240k – 400k','3 000/vente'],['400k – 700k','4 000/vente'],['700k – objectif','6 000/vente'],['>objectif','8% du CA']].map(([p,v])=>`
+          <div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #f0f0f0;">
+            <span style="color:#555;">${p}</span><b>${v}</b>
+          </div>`).join('')}
+      </div>
+      <div>
+        <div style="font-weight:700;color:#26282B;margin-bottom:6px;">🏷️ Prime Monture</div>
+        <div style="color:#888;font-size:11px;">Par vente (monture ≥ 10 000)</div>
+        ${[['< 25 000','0 FCFA'],['25 000 – 40 000','1 500 FCFA'],['40 001 – 65 000','3 000 FCFA'],['65 001 – 120 000','5 000 FCFA'],['> 120 000','8 000 FCFA']].map(([p,v])=>`
+          <div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #f0f0f0;">
+            <span style="color:#555;">${p}</span><b>${v}</b>
+          </div>`).join('')}
+      </div>
+    </div>
+  </div>
+
+  <!-- DÉTAIL DES VENTES DU MOIS -->
+  <div class="panel">
+    <h3>Détail de mes ventes — ${MOIS_NOM[mois]} ${annee}</h3>
+    <table>
+      <thead><tr><th>Date</th><th>Client</th><th>Type</th><th>Prix lentilles</th><th>Prix monture</th><th>Prime lentilles</th><th>Prime monture</th></tr></thead>
+      <tbody>
+        ${[...p.detailProg.map(v=>({...v,type:'🔵 Progressif'})), ...p.detailUnif.map(v=>({...v,type:'⚪ Unifocal'}))].sort((a,b)=>(a.date||'').localeCompare(b.date||'')).map(v=>`
+        <tr>
+          <td style="font-size:12px;">${fmtDate(v.date)}</td>
+          <td><b>${escapeHtml(v.nom)}</b></td>
+          <td><span style="font-size:12px;">${v.type}</span></td>
+          <td>${fmtFCFA(v.lent)}</td>
+          <td>${v.mont>=10000?fmtFCFA(v.mont):'—'}</td>
+          <td style="color:#E8A93B;font-weight:600;">—</td>
+          <td style="color:#E8A93B;font-weight:600;">${v.mont>=10000?fmtFCFA(primeMontureParVente(v.mont)):'—'}</td>
+        </tr>`).join('') || '<tr class="empty-row"><td colspan="7">Aucune vente avec lentilles ce mois.</td></tr>'}
+      </tbody>
+    </table>
+  </div>`;
+}
+
+function renderPrimesAdmin(annee, mois){
+  const MOIS_NOM = ["Janvier","Février","Mars","Avril","Mai","Juin","Juillet","Août","Septembre","Octobre","Novembre","Décembre"];
+  const commerciaux = USERS_CACHE.filter(u=>u.actif==='oui');
+
+  return `
+  <div class="main-head">
+    <div><h2>💰 Suivi des primes</h2><p>${MOIS_NOM[mois]} ${annee}</p></div>
+    <div style="display:flex;gap:8px;align-items:center;">
+      <select onchange="state.primesMois=Number(this.value);render();" style="padding:6px;border-radius:6px;border:1px solid #ddd;">
+        ${MOIS_NOM.map((m,i)=>`<option value="${i}" ${i===mois?'selected':''}>${m}</option>`).join('')}
+      </select>
+      <select onchange="state.primesAnnee=Number(this.value);render();" style="padding:6px;border-radius:6px;border:1px solid #ddd;">
+        ${[annee-1,annee].map(a=>`<option value="${a}" ${a===annee?'selected':''}>${a}</option>`).join('')}
+      </select>
+    </div>
+  </div>
+
+  <div class="panel" style="padding:0;">
+    <table>
+      <thead>
+        <tr>
+          <th>Commercial</th>
+          <th>Salaire base</th>
+          <th>P. Progressif</th>
+          <th>P. Unifocal</th>
+          <th>P. Montures</th>
+          <th>Prime brute</th>
+          <th>Impayés</th>
+          <th>Retenue 30%</th>
+          <th>Prime nette</th>
+          <th>Total à payer</th>
+          <th>Statut</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${commerciaux.map(u=>{
+          const p = calculPrimeMensuelle(u.nom, annee, mois, u);
+          const salaire = Number(u.salaireBase||0);
+          const totalAPayer = salaire + p.primeNette;
+          const statut = p.impayes > 0 ? '⏳ Partiel' : '✅ À verser';
+          return `<tr>
+            <td><b>${escapeHtml(u.nom)}</b></td>
+            <td>
+              <input type="number" value="${u.salaireBase||''}" placeholder="Saisir..."
+                style="width:100px;padding:3px 6px;border:1px solid #ddd;border-radius:4px;font-size:12px;"
+                onchange="updateSalaireBase('${u.id}',this.value)">
+            </td>
+            <td style="color:#E8A93B;">${fmtFCFA(p.primeProg)}</td>
+            <td style="color:#68AAD1;">${fmtFCFA(p.primeUnif)}</td>
+            <td>${fmtFCFA(p.primeMont)}</td>
+            <td style="font-weight:600;">${fmtFCFA(p.primeBrute)}</td>
+            <td style="color:${p.impayes>0?'#A6402E':'#2d7a3a'};">${p.impayes>0?fmtFCFA(p.impayes):'—'}</td>
+            <td style="color:#A6402E;">${p.retenue>0?'−'+fmtFCFA(p.retenue):'—'}</td>
+            <td style="font-weight:700;color:#E8A93B;">${fmtFCFA(p.primeNette)}</td>
+            <td style="font-weight:700;font-size:14px;">${salaire>0?fmtFCFA(totalAPayer):'—'}</td>
+            <td><span style="background:${p.impayes>0?'#E8A93B':'#2d7a3a'};color:#fff;padding:2px 8px;border-radius:8px;font-size:11px;">${statut}</span></td>
+          </tr>`;
+        }).join('')}
+      </tbody>
+    </table>
+  </div>
+
+  <!-- DÉTAIL PAR COMMERCIAL -->
+  <div style="margin-top:20px;">
+    ${commerciaux.map(u=>{
+      const p = calculPrimeMensuelle(u.nom, annee, mois, u);
+      if(p.nbVentesTotales===0) return '';
+      return `<div class="panel" style="margin-bottom:12px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+          <h3 style="margin:0;">${escapeHtml(u.nom)} — ${fmtFCFA(p.primeBrute)} prime brute</h3>
+          <div style="font-size:12px;color:#888;">${p.nbProg} ventes progressif · ${p.nbUnif} ventes unifocal</div>
+        </div>
+        <div style="display:flex;gap:16px;font-size:12px;flex-wrap:wrap;">
+          <span>🔵 Lentilles progressif : <b>${fmtFCFA(p.caProg)}</b></span>
+          <span>⚪ Lentilles unifocal : <b>${fmtFCFA(p.caUnif)}</b></span>
+          <span>🏷️ Prime montures : <b>${fmtFCFA(p.primeMont)}</b></span>
+          ${p.impayes>0?`<span style="color:#A6402E;">⚠️ Impayés : <b>${fmtFCFA(p.impayes)}</b> → retenue <b>${fmtFCFA(p.retenue)}</b></span>`:''}
+        </div>
+      </div>`;
+    }).join('')}
+  </div>`;
+}
+
+// Mettre à jour le salaire de base d'un utilisateur
+async function updateSalaireBase(userId, valeur){
+  const u = USERS_CACHE.find(x=>x.id===userId);
+  if(!u) return;
+  u.salaireBase = valeur;
+  try{ await apiUpsert('utilisateurs', u); showToast('Salaire mis à jour.'); }
+  catch(e){ showToast('Erreur de sauvegarde.'); }
 }
 
 function renderAnalyse(){
@@ -4021,7 +4435,8 @@ function attachModalEvents(){
       dateCreation: existing ? existing.dateCreation : todayISO(),
       derniereConnexion: existing ? existing.derniereConnexion : '',
       objectifAnnuel: document.getElementById('u-obj-annuel')?.value || '',
-      objectifsMensuels: JSON.stringify(objMensuels)
+      objectifsMensuels: JSON.stringify(objMensuels),
+      salaireBase: document.getElementById('u-salaire')?.value || ''
     };
     try{
       await saveUser(userRow);
