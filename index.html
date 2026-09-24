@@ -409,9 +409,9 @@ tbody tr:hover{background:var(--sand-light);}
 const API_URL = "https://script.google.com/macros/s/AKfycbxVwZ7D_0pvYcSdZiYEcna8MteG53OnyoP6x-ylMYc8f0tojGi29q9yF8TzneJ3LpWH/exec";
 const API_KEY = "jericho2026"; // doit correspondre à SECRET_KEY dans le script Apps Script
 
-const SHEET_NAMES = { prospects:'Prospects', clients:'Clients', sav:'SAV', stock:'Stock', ventes:'Ventes', tickets:'Tickets', apporteurs:'Apporteurs' };
+const SHEET_NAMES = { prospects:'Prospects', clients:'Clients', sav:'SAV', stock:'Stock', ventes:'Ventes', tickets:'Tickets', apporteurs:'Apporteurs', paie:'Paie', avances:'Avances' };
 
-let DB = { prospects: [], clients: [], sav: [], stock: [], ventes: [], tickets: [], apporteurs: [] };
+let DB = { prospects: [], clients: [], sav: [], stock: [], ventes: [], tickets: [], apporteurs: [], paie: [], avances: [] };
 let loaded = false;
 let _clientIndexCache = null;
 let _clientIndexVentesLen = 0;
@@ -475,7 +475,7 @@ async function apiDelete(k, id){
 async function loadAll(){
   // Charger d'abord les données critiques (connexion + ventes récentes)
   const prioritaires = ['utilisateurs', 'ventes', 'prospects', 'clients'];
-  const secondaires = ['sav', 'stock', 'tickets', 'apporteurs'];
+  const secondaires = ['sav', 'stock', 'tickets', 'apporteurs', 'paie', 'avances'];
 
   // Chargement prioritaire en parallèle
   const resPrio = await Promise.allSettled(prioritaires.map(k => apiGet(k)));
@@ -1056,6 +1056,7 @@ function renderTeam(){
         <button data-tab="analyse" class="${state.teamTab==='analyse'?'active':''}">Analyse</button>
         <button data-tab="primes" class="${state.teamTab==='primes'?'active':''}">💰 Primes</button>
         ${isAdmin() ? `<button data-tab="admin" class="${state.teamTab==='admin'?'active':''}">Comptes</button>` : ''}
+        ${isAdmin() ? `<button data-tab="paie" class="${state.teamTab==='paie'?'active':''}">💵 Paie</button>` : ''}
         <div class="out">
           <button data-tab="moncompte" class="${state.teamTab==='moncompte'?'active':''}">Mon compte</button>
           <button id="btn-logout">⇄ Changer de compte</button>
@@ -1080,6 +1081,7 @@ function renderTeamTab(){
   if(state.teamTab==='moncompte') return renderMonCompte();
   if(state.teamTab==='analyse') return renderAnalyse();
   if(state.teamTab==='primes') return renderPrimes();
+  if(state.teamTab==='paie') return renderPaie();
   return '';
 }
 
@@ -1114,14 +1116,16 @@ function renderDashboard(){
 
   const d18 = new Date(now); d18.setMonth(d18.getMonth()-18);
   const d24 = new Date(now); d24.setMonth(d24.getMonth()-24);
-  const d10 = new Date(now); d10.setMonth(d10.getMonth()-10);
+  const d20 = new Date(now); d20.setMonth(d20.getMonth()-20);
   const s18 = d18.toISOString().slice(0,10);
   const s24 = d24.toISOString().slice(0,10);
-  const s10 = d10.toISOString().slice(0,10);
+  const s20 = d20.toISOString().slice(0,10);
 
   const clients24 = tousClients.filter(c=>c.derniereDate<=s24 && c.dernierType.toLowerCase().includes('monture'));
   const clients18 = tousClients.filter(c=>c.derniereDate<=s18 && c.derniereDate>s24 && c.dernierType.toLowerCase().includes('monture'));
-  const clientsLentilles = tousClients.filter(c=>c.derniereDate<=s10 && c.dernierType.toLowerCase().includes('lentille'));
+  // Lentilles : urgent +24 mois, à relancer 20-24 mois (même cycle que lunettes)
+  const clientsLentilles24 = tousClients.filter(c=>c.derniereDate<=s24 && c.dernierType.toLowerCase().includes('lentille'));
+  const clientsLentilles = tousClients.filter(c=>c.derniereDate<=s20 && c.dernierType.toLowerCase().includes('lentille'));
 
   const totalProspects = myProspects.length;
   const convertis = myProspects.filter(x=>x.statut==='Converti en client').length;
@@ -1187,14 +1191,16 @@ function renderDashboard(){
     ${kpi('Total clients', nbClients, 'ayant acheté au moins une fois', false, "state.teamTab='clients';render();")}
     ${kpi('Renouvellement urgent', clients24.length, 'lunettes +24 mois', clients24.length>0, null)}
     ${kpi('À relancer bientôt', clients18.length, 'lunettes 18-24 mois', clients18.length>0, null)}
-    ${kpi('Lentilles à renouveler', clientsLentilles.length, 'achat lentilles +10 mois', clientsLentilles.length>0, null)}
+    ${kpi('Lentilles urgentes', clientsLentilles24.length, 'achat lentilles +24 mois', clientsLentilles24.length>0, null)}
+    ${kpi('Lentilles à relancer', clientsLentilles.filter(c=>c.derniereDate>s24).length, 'achat lentilles 20-24 mois', false, null)}
     ${kpi('Taux de conversion', taux+'%', convertis+' convertis / '+totalProspects+' prospects', false, "state.teamTab='prospects';render();")}
     ${iAmAdmin?kpi('SAV ouverts', savOuverts, 'tickets en cours', savOuverts>0, "state.teamTab='clients';render();"):''}
   </div>
 
   ${listeRelance(clients24,'🔴 Renouvellement urgent — lunettes de plus de 2 ans','#A6402E','Bonjour {nom}, cela fait plus de 2 ans que vous avez vos lunettes. Chez Jéricho Optique, nous vous recommandons un contrôle de vue. Souhaitez-vous prendre rendez-vous ?')}
   ${listeRelance(clients18,'🟡 À relancer — lunettes entre 18 et 24 mois','#E8A93B','Bonjour {nom}, vos lunettes auront bientôt 2 ans. Chez Jéricho Optique, nous vous invitons à anticiper votre renouvellement. Voulez-vous en discuter ?')}
-  ${listeRelance(clientsLentilles,'🔵 Renouvellement lentilles','#68AAD1','Bonjour {nom}, il est temps de renouveler vos lentilles de contact. Contactez-nous à Jéricho Optique pour votre prochaine commande.')}
+  ${listeRelance(clientsLentilles24,'🔴 Lentilles urgentes (+24 mois)','#A6402E','Bonjour {nom}, vos lentilles de contact ont plus de 2 ans. Nous vous recommandons un renouvellement urgent. Contactez-nous à Jéricho Optique.')}
+  ${listeRelance(clientsLentilles.filter(c=>c.derniereDate>s24),'🔵 Lentilles à relancer (20-24 mois)','#68AAD1','Bonjour {nom}, il est bientôt temps de renouveler vos lentilles de contact chez Jéricho Optique. Souhaitez-vous prendre rendez-vous ?')}
 
   <div class="panel"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;"><h3 style="margin:0;">${iAmAdmin?'Dernières ventes':'Mes dernières ventes'}</h3><button class="btn-sm btn-ghost" data-kpi-action="state.teamTab='ventes';render();">Voir tout →</button></div>
     ${renderMiniTable(recentVentes,['Client','Type','Montant','Reste','Date'],r=>[escapeHtml(`${r.nom||''} ${r.prenom||''}`.trim()),escapeHtml(r.typeArticle||''),fmtFCFA(venteTotal(r)),venteReste(r)>0?`<span style="color:#A6402E;font-weight:600;">${fmtFCFA(venteReste(r))}</span>`:'<span style="color:#2d7a3a;">Soldé</span>',fmtDate(r.dateMiseEnRelation)])}
@@ -1602,6 +1608,7 @@ function modalContent(){
   if(m.type==='ticket') return ticketForm(m.data);
   if(m.type==='apporteur') return apporteurForm(m.data);
   if(m.type==='user') return userForm(m.data);
+  if(m.type==='avance') return avanceForm(m.data);
   return '';
 }
 
@@ -2326,13 +2333,15 @@ function renderJournee(){
   const clientsBoutique = getCachedClientIndex(ventesBoutique);
   const d18b = new Date(now); d18b.setMonth(d18b.getMonth()-18);
   const d24b = new Date(now); d24b.setMonth(d24b.getMonth()-24);
-  const d10b = new Date(now); d10b.setMonth(d10b.getMonth()-10);
+  const d20b = new Date(now); d20b.setMonth(d20b.getMonth()-20);
   const s18b = d18b.toISOString().slice(0,10);
   const s24b = d24b.toISOString().slice(0,10);
-  const s10b = d10b.toISOString().slice(0,10);
+  const s20b = d20b.toISOString().slice(0,10);
   const boutique24 = Object.values(clientsBoutique).filter(c=>c.derniereDate<=s24b && c.dernierType.toLowerCase().includes('monture'));
   const boutique18 = Object.values(clientsBoutique).filter(c=>c.derniereDate<=s18b && c.derniereDate>s24b && c.dernierType.toLowerCase().includes('monture'));
-  const boutiqueLentilles = Object.values(clientsBoutique).filter(c=>c.derniereDate<=s10b && c.dernierType.toLowerCase().includes('lentille'));
+  // Lentilles : urgent +24 mois, à relancer 20-24 mois
+  const boutiqueLentilles24 = Object.values(clientsBoutique).filter(c=>c.derniereDate<=s24b && c.dernierType.toLowerCase().includes('lentille'));
+  const boutiqueLentilles = Object.values(clientsBoutique).filter(c=>c.derniereDate<=s20b && c.dernierType.toLowerCase().includes('lentille'));
 
   // Fonction bouton WhatsApp
   function waBtn(tel, message, label='WhatsApp', tel2=''){
@@ -2588,10 +2597,22 @@ function renderJournee(){
     'Aucun client à relancer.'
   ) : ''}
 
-  ${boutiqueLentilles.length ? section(
-    `Renouvellement lentilles (${boutiqueLentilles.length})`, '#68AAD1', '🔵',
-    boutiqueLentilles.slice(0,4).map(cl=>{
-      const msg = encodeURIComponent(`${bonjourClient(cl.nom,cl.prenom,cl.civilite)}, il est temps de renouveler vos lentilles de contact. Contactez-nous à Jéricho Optique pour votre prochaine commande.`);
+  ${boutiqueLentilles24.length ? section(
+    `Lentilles urgentes +24 mois (${boutiqueLentilles24.length})`, '#A6402E', '🔴',
+    boutiqueLentilles24.slice(0,4).map(cl=>{
+      const effTel = String(cl.telephone || cl.telephone2 || '');
+      const num = effTel.startsWith('226') ? effTel : '226'+effTel;
+      const msg = encodeURIComponent(`${bonjourClient(cl.nom,cl.prenom,cl.civilite)}, vos lentilles de contact ont plus de 2 ans. Nous vous recommandons un renouvellement urgent. Contactez-nous à Jéricho Optique.`);
+      return `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--line);">
+        <div><b>${escapeHtml(bonjourClient(cl.nom,cl.prenom,cl.civilite))}</b> <span style="font-size:11px;color:#A6402E;">● ${cl.moisDepuis||'?'} mois</span></div>
+        ${effTel?`<a href="https://wa.me/${num}?text=${msg}" target="_blank" style="background:#25D366;color:#fff;padding:4px 10px;border-radius:6px;font-size:12px;text-decoration:none;font-weight:600;">WhatsApp</a>`:''}
+      </div>`;}).join(''),
+    'Aucune lentille urgente.'
+  ) : ''}
+  ${boutiqueLentilles.filter(c=>c.derniereDate>s24b).length ? section(
+    `Lentilles à relancer 20-24 mois (${boutiqueLentilles.filter(c=>c.derniereDate>s24b).length})`, '#68AAD1', '🔵',
+    boutiqueLentilles.filter(c=>c.derniereDate>s24b).slice(0,4).map(cl=>{
+      const msg = encodeURIComponent(`${bonjourClient(cl.nom,cl.prenom,cl.civilite)}, il est bientôt temps de renouveler vos lentilles de contact chez Jéricho Optique. Souhaitez-vous prendre rendez-vous ?`);
       return `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--line);flex-wrap:wrap;gap:8px;">
         <div><b style="font-size:13px;">${escapeHtml(cl.nom)} ${escapeHtml(cl.prenom||'')}</b>
         <span style="font-size:11px;color:#888;margin-left:8px;">Dernier achat : ${fmtDate(cl.derniereDate)}</span></div>
@@ -2601,7 +2622,7 @@ function renderJournee(){
         </div>
       </div>`;
     }).join('')+
-    (boutiqueLentilles.length>4?`<p style="font-size:12px;color:#E8A93B;margin-top:8px;text-align:center;">+${boutiqueLentilles.length-4} autres dans le Tableau de bord</p>`:''),
+    (boutiqueLentilles.filter(c=>c.derniereDate>s24b).length>4?`<p style="font-size:12px;color:#E8A93B;margin-top:8px;text-align:center;">+${boutiqueLentilles.filter(c=>c.derniereDate>s24b).length-4} autres dans le Tableau de bord</p>`:''),
     'Aucun renouvellement lentilles.'
   ) : ''}
   `;
@@ -3069,8 +3090,325 @@ function calculPrimeMensuelle(nomCommercial, annee, mois, utilisateur){
 }
 
 /* =========================================================
-   PRIMES
+   MODULE PAIE
    ========================================================= */
+function getBulletin(commercial, moisStr){
+  // moisStr = '2026-09'
+  return DB.paie.find(p => p.commercial === commercial && p.mois === moisStr);
+}
+
+function getAvancesCommercial(commercial){
+  return DB.avances.filter(a => (a.commercial||'').toLowerCase() === commercial.toLowerCase() && a.statut !== 'solde');
+}
+
+function totalAvancesMois(commercial, moisStr){
+  // Somme des échéances dues ce mois
+  return DB.avances
+    .filter(a => (a.commercial||'').toLowerCase() === commercial.toLowerCase())
+    .reduce((sum, a) => {
+      try {
+        const echeances = JSON.parse(a.echeances||'[]');
+        const due = echeances.find(e => e.mois === moisStr);
+        return sum + (due ? Number(due.montant||0) : 0);
+      } catch(e){ return sum; }
+    }, 0);
+}
+
+function renderPaie(){
+  const now = new Date();
+  const moisCourant = now.getMonth();
+  const anneeCourante = now.getFullYear();
+  const moisAff = state.primesMois !== undefined ? state.primesMois : moisCourant;
+  const anneeAff = state.primesAnnee || anneeCourante;
+  const MOIS_NOM = ["Janvier","Février","Mars","Avril","Mai","Juin","Juillet","Août","Septembre","Octobre","Novembre","Décembre"];
+  const moisStr = `${anneeAff}-${String(moisAff+1).padStart(2,'0')}`;
+  const commerciaux = USERS_ALL_CACHE.filter(u=>u.role==='commercial' && u.actif==='oui');
+
+  return `
+  <div class="main-head">
+    <div><h2>💵 Gestion de la paie</h2><p>${MOIS_NOM[moisAff]} ${anneeAff}</p></div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+      <select onchange="state.primesMois=Number(this.value);render();" style="padding:6px;border-radius:6px;border:1px solid #ddd;">
+        ${MOIS_NOM.map((m,i)=>`<option value="${i}" ${i===moisAff?'selected':''}>${m}</option>`).join('')}
+      </select>
+      <select onchange="state.primesAnnee=Number(this.value);render();" style="padding:6px;border-radius:6px;border:1px solid #ddd;">
+        ${[anneeCourante-1,anneeCourante].map(a=>`<option value="${a}" ${a===anneeAff?'selected':''}>${a}</option>`).join('')}
+      </select>
+      <button class="btn-sm btn-ghost" id="btn-new-avance">+ Avance sur salaire</button>
+    </div>
+  </div>
+
+  <!-- BULLETINS PAR COMMERCIAL -->
+  ${commerciaux.map(u => {
+    const user = USERS_CACHE.find(x=>x.id===u.id) || u;
+    const p = calculPrimeMensuelle(u.nom, anneeAff, moisAff, user);
+    const bulletin = getBulletin(u.nom, moisStr) || {};
+    const salaire = Number(u.salaireBase||0);
+    const prime70 = Math.round(p.primeBrute * 0.70);
+    const prime30 = p.primeBrute - prime70;
+
+    // 30% retenus cumulés des mois précédents non encore libérés
+    const retenusCumules = DB.paie
+      .filter(b => b.commercial === u.nom && b.mois < moisStr)
+      .reduce((s,b) => s + (Number(b.prime30Retenu||0) - Number(b.prime30Libere||0)), 0);
+
+    // Avances dues ce mois
+    const avancesMois = totalAvancesMois(u.nom, moisStr);
+    const avancesManuelle = Number(bulletin.avances||0);
+    const totalAvances = avancesMois + avancesManuelle;
+
+    // Impayés actuels du commercial
+    const impayes = p.impayes;
+    // Suggestion libération 30% (proportionnel aux recouvrements)
+    const bulletinPrevMois = DB.paie.filter(b=>b.commercial===u.nom && b.mois < moisStr).slice(-1)[0];
+    const impayes30Lib = Number(bulletin.prime30Libere||0);
+
+    const sousTotal = salaire + prime70;
+    const netAPayer = Math.max(sousTotal - totalAvances, 0);
+    const statut = bulletin.statut || 'en_attente';
+
+    return `
+    <div class="panel" style="margin-bottom:16px;border-left:4px solid ${statut==='solde'?'#2d7a3a':'#E8A93B'};">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
+        <div>
+          <h3 style="margin:0;">${escapeHtml(u.nom)}</h3>
+          <span style="background:${statut==='solde'?'#2d7a3a':'#E8A93B'};color:#fff;font-size:11px;padding:2px 10px;border-radius:8px;">
+            ${statut==='solde'?'✅ Soldé':'⏳ En attente'}
+          </span>
+        </div>
+        <div style="text-align:right;">
+          <div style="font-size:22px;font-weight:800;color:#26282B;">${fmtFCFA(netAPayer)}</div>
+          <div style="font-size:11px;color:#888;">NET À PAYER</div>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px;margin-bottom:14px;">
+        <div style="background:#f9f9f7;border-radius:8px;padding:10px;text-align:center;">
+          <div style="font-size:11px;color:#888;margin-bottom:2px;">Salaire de base</div>
+          <div style="font-weight:700;">${fmtFCFA(salaire)}</div>
+        </div>
+        <div style="background:#FFF9EF;border-radius:8px;padding:10px;text-align:center;">
+          <div style="font-size:11px;color:#888;margin-bottom:2px;">Prime brute</div>
+          <div style="font-weight:700;color:#E8A93B;">${fmtFCFA(p.primeBrute)}</div>
+          <div style="font-size:10px;color:#aaa;">${p.nbProg} prog · ${p.nbUnif} unif</div>
+        </div>
+        <div style="background:#EAF3FE;border-radius:8px;padding:10px;text-align:center;">
+          <div style="font-size:11px;color:#888;margin-bottom:2px;">70% prime versé</div>
+          <div style="font-weight:700;color:#185FA5;">${fmtFCFA(prime70)}</div>
+        </div>
+        <div style="background:#FDF0EE;border-radius:8px;padding:10px;text-align:center;">
+          <div style="font-size:11px;color:#888;margin-bottom:2px;">30% retenu</div>
+          <div style="font-weight:700;color:#A6402E;">${fmtFCFA(prime30)}</div>
+          ${impayes>0?`<div style="font-size:10px;color:#A6402E;">Impayés: ${fmtFCFA(impayes)}</div>`:'<div style="font-size:10px;color:#2d7a3a;">Aucun impayé</div>'}
+        </div>
+        ${retenusCumules>0?`
+        <div style="background:#FDF0EE;border:1.5px dashed #A6402E;border-radius:8px;padding:10px;text-align:center;">
+          <div style="font-size:11px;color:#A6402E;font-weight:600;margin-bottom:2px;">30% cumulés à libérer</div>
+          <div style="font-weight:700;color:#A6402E;">${fmtFCFA(retenusCumules)}</div>
+        </div>`:''}
+      </div>
+
+      <!-- LIBÉRATION 30% -->
+      ${prime30>0||retenusCumules>0?`
+      <div style="background:#FDF8EE;border-radius:8px;padding:12px;margin-bottom:12px;">
+        <div style="font-size:12px;font-weight:700;color:#E8A93B;margin-bottom:8px;">Libération des 30% retenus</div>
+        <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+          <div style="font-size:12px;color:#555;">
+            Ce mois : <b>${fmtFCFA(prime30)}</b>
+            ${retenusCumules>0?`· Cumulés anciens mois : <b style="color:#A6402E;">${fmtFCFA(retenusCumules)}</b>`:''}
+            · Total disponible : <b>${fmtFCFA(prime30+retenusCumules)}</b>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <label style="font-size:12px;color:#555;">Libérer :</label>
+            <input type="number" min="0" max="${prime30+retenusCumules}" step="1000"
+              value="${impayes30Lib||''}" placeholder="0"
+              id="lib30-${u.id}"
+              style="width:120px;padding:4px 8px;border:1.5px solid #E8A93B;border-radius:6px;font-size:13px;font-weight:600;">
+            <span style="font-size:12px;color:#888;">FCFA</span>
+          </div>
+          ${impayes>0?`<div style="font-size:11px;color:#A6402E;">⚠️ Impayés restants : ${fmtFCFA(impayes)} — suggéré : ${fmtFCFA(Math.min(prime30,Math.round(prime30*Math.min(1,1-impayes/Math.max(p.caProg+p.caUnif,1)))))}</div>`:'<div style="font-size:11px;color:#2d7a3a;">✅ Aucun impayé — libération totale recommandée</div>'}
+        </div>
+      </div>`:''}
+
+      <!-- AVANCES -->
+      <div style="background:#f5f4f0;border-radius:8px;padding:12px;margin-bottom:12px;">
+        <div style="font-size:12px;font-weight:700;color:#555;margin-bottom:8px;">Avances sur salaire — ${MOIS_NOM[moisAff]}</div>
+        <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+          ${avancesMois>0?`<div style="font-size:12px;color:#555;">Échéances planifiées : <b style="color:#A6402E;">${fmtFCFA(avancesMois)}</b></div>`:''}
+          <div style="display:flex;align-items:center;gap:8px;">
+            <label style="font-size:12px;color:#555;">Avance supplémentaire :</label>
+            <input type="number" min="0" step="5000"
+              value="${bulletin.avances||''}" placeholder="0"
+              id="av-${u.id}"
+              style="width:120px;padding:4px 8px;border:1px solid #ddd;border-radius:6px;font-size:13px;">
+            <span style="font-size:12px;color:#888;">FCFA</span>
+          </div>
+          ${totalAvances>0?`<div style="font-size:12px;font-weight:700;color:#A6402E;">Total déduit : ${fmtFCFA(totalAvances)}</div>`:''}
+        </div>
+      </div>
+
+      <!-- NOTES -->
+      <div style="margin-bottom:12px;">
+        <textarea id="note-${u.id}" placeholder="Notes (optionnel)..."
+          style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;font-size:12px;resize:vertical;min-height:50px;box-sizing:border-box;">${escapeHtml(bulletin.notes||'')}</textarea>
+      </div>
+
+      <!-- RÉCAPITULATIF ET VALIDATION -->
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;padding-top:10px;border-top:1px solid #eee;">
+        <div style="font-size:13px;color:#555;">
+          ${fmtFCFA(salaire)} salaire
+          + ${fmtFCFA(prime70)} prime 70%
+          ${totalAvances>0?`− ${fmtFCFA(totalAvances)} avances`:''}
+          = <b style="font-size:15px;color:#26282B;">${fmtFCFA(netAPayer)} net</b>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <button class="btn-sm btn-ghost" onclick="sauvegarderBulletin('${u.id}','${u.nom}','${moisStr}',false)">
+            Enregistrer
+          </button>
+          <button class="btn-sm" onclick="sauvegarderBulletin('${u.id}','${u.nom}','${moisStr}',true)"
+            style="background:${statut==='solde'?'#888':'#2d7a3a'};">
+            ${statut==='solde'?'✅ Soldé — Rouvrir':'✅ Valider & Solder'}
+          </button>
+        </div>
+      </div>
+    </div>`;
+  }).join('')}
+
+  <!-- AVANCES EN COURS -->
+  <div class="panel">
+    <h3 style="margin-bottom:12px;">📋 Avances sur salaire en cours</h3>
+    ${DB.avances.filter(a=>a.statut!=='solde').length ? `
+    <table>
+      <thead><tr><th>Commercial</th><th>Montant total</th><th>Motif</th><th>Échéancier</th><th>Reste dû</th><th></th></tr></thead>
+      <tbody>
+        ${DB.avances.filter(a=>a.statut!=='solde').map(a=>{
+          let echeances = [];
+          try{ echeances = JSON.parse(a.echeances||'[]'); }catch(e){}
+          const totalPaye = echeances.filter(e=>e.paye).reduce((s,e)=>s+Number(e.montant||0),0);
+          const reste = Number(a.montant||0) - totalPaye;
+          return `<tr>
+            <td><b>${escapeHtml(a.commercial||'')}</b></td>
+            <td>${fmtFCFA(Number(a.montant||0))}</td>
+            <td style="font-size:12px;color:#888;">${escapeHtml(a.motif||'—')}</td>
+            <td style="font-size:11px;">${echeances.map(e=>`<span style="background:${e.paye?'#2d7a3a':'#E8A93B'};color:#fff;padding:1px 6px;border-radius:4px;margin:1px;display:inline-block;">${e.mois}: ${fmtFCFA(Number(e.montant||0))}</span>`).join('')}</td>
+            <td style="font-weight:700;color:#A6402E;">${fmtFCFA(reste)}</td>
+            <td><button class="icon-btn" data-edit-avance="${a.id}">Modifier</button></td>
+          </tr>`;
+        }).join('')}
+      </tbody>
+    </table>` : '<p style="color:#888;font-style:italic;">Aucune avance en cours.</p>'}
+  </div>`;
+}
+
+// Sauvegarder un bulletin de paie
+async function sauvegarderBulletin(userId, nom, moisStr, solder){
+  const user = USERS_ALL_CACHE.find(x=>x.id===userId) || USERS_CACHE.find(x=>x.id===userId);
+  const moisAff = state.primesMois !== undefined ? state.primesMois : new Date().getMonth();
+  const anneeAff = state.primesAnnee || new Date().getFullYear();
+  const p = calculPrimeMensuelle(nom, anneeAff, moisAff, user);
+
+  const prime70 = Math.round(p.primeBrute * 0.70);
+  const prime30 = p.primeBrute - prime70;
+  const lib30 = Number(document.getElementById(`lib30-${userId}`)?.value||0);
+  const avancesSupp = Number(document.getElementById(`av-${userId}`)?.value||0);
+  const notes = document.getElementById(`note-${userId}`)?.value||'';
+  const salaire = Number(user?.salaireBase||0);
+  const avancesMois = totalAvancesMois(nom, moisStr);
+  const totalAvances = avancesMois + avancesSupp;
+  const netAPayer = Math.max(salaire + prime70 - totalAvances, 0);
+
+  const existing = getBulletin(nom, moisStr);
+  const bulletin = {
+    id: existing?.id || `paie_${nom}_${moisStr}_${Date.now()}`,
+    commercial: nom,
+    mois: moisStr,
+    salaireBase: salaire,
+    primeBrute: p.primeBrute,
+    prime70, prime30,
+    prime30Libere: lib30,
+    avances: avancesSupp,
+    totalAvances,
+    netAPayer,
+    impayes: p.impayes,
+    notes,
+    statut: solder ? 'solde' : (existing?.statut||'en_attente'),
+    dateValidation: solder ? todayISO() : (existing?.dateValidation||''),
+  };
+
+  try{
+    await apiUpsert('paie', bulletin);
+    if(existing){
+      DB.paie = DB.paie.map(b=>b.id===bulletin.id?bulletin:b);
+    } else {
+      DB.paie.push(bulletin);
+    }
+    render();
+    showToast(solder ? `✅ Paie de ${nom} soldée pour ${moisStr}.` : `Bulletin de ${nom} enregistré.`);
+  }catch(e){
+    showToast('Erreur de sauvegarde — vérifiez la feuille Paie dans Sheets.');
+  }
+}
+
+function avanceForm(data){
+  const MOIS_NOM = ["Jan","Fév","Mar","Avr","Mai","Jun","Jul","Aoû","Sep","Oct","Nov","Déc"];
+  const now = new Date();
+  const commerciaux = USERS_CACHE.filter(u=>u.role==='commercial'&&u.actif==='oui');
+  const d = data || { id:'', commercial:'', montant:'', motif:'', echeances:'[]', statut:'en_cours' };
+  let echeances = [];
+  try{ echeances = JSON.parse(d.echeances||'[]'); }catch(e){}
+
+  // Générer 6 mois à partir du mois courant pour l'échéancier
+  const moisOptions = [];
+  for(let i=0; i<12; i++){
+    const m = new Date(now.getFullYear(), now.getMonth()+i, 1);
+    moisOptions.push(`${m.getFullYear()}-${String(m.getMonth()+1).padStart(2,'0')}`);
+  }
+
+  return `
+  <h3>${data?'Modifier l\'avance':'Nouvelle avance sur salaire'}</h3>
+  <form id="form-avance">
+    <div class="form-grid">
+      <div class="form-section-title">Informations</div>
+      <div class="field"><label>Commercial <span style="color:#A6402E;">*</span></label>
+        <select required id="av-commercial">
+          <option value="">— choisir —</option>
+          ${commerciaux.map(u=>`<option value="${escapeAttr(u.nom)}" ${d.commercial===u.nom?'selected':''}>${escapeHtml(u.nom)}</option>`).join('')}
+        </select>
+      </div>
+      <div class="field"><label>Montant total <span style="color:#A6402E;">*</span></label>
+        <input required type="number" min="0" step="5000" id="av-montant" value="${escapeAttr(d.montant||'')}" placeholder="ex: 50000">
+      </div>
+      <div class="field full"><label>Motif</label>
+        <input id="av-motif" value="${escapeAttr(d.motif||'')}" placeholder="Motif de l'avance...">
+      </div>
+
+      <div class="form-section-title">Échéancier de remboursement</div>
+      <div class="field full" style="font-size:12px;color:#888;margin-top:-8px;">
+        Définissez le montant à déduire chaque mois. Le total des échéances doit égaler le montant de l'avance.
+      </div>
+      <div class="field full" id="echeancier-wrap">
+        ${moisOptions.slice(0,6).map((mois,i) => {
+          const ech = echeances.find(e=>e.mois===mois)||{};
+          return `<div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
+            <span style="width:80px;font-size:13px;font-weight:600;">${mois}</span>
+            <input type="number" min="0" step="5000" name="ech_${mois}" value="${ech.montant||''}"
+              placeholder="0" style="width:120px;padding:5px 8px;border:1px solid #ddd;border-radius:6px;">
+            <label style="font-size:12px;color:#888;">
+              <input type="checkbox" name="ech_paye_${mois}" ${ech.paye?'checked':''}> Payé
+            </label>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button type="button" class="btn-sm btn-ghost" id="modal-cancel">Annuler</button>
+      <button type="submit" class="btn-sm">${data?'Enregistrer':'Créer l\'avance'}</button>
+    </div>
+    <input type="hidden" id="av-id" value="${escapeAttr(d.id)}">
+  </form>`;
+}
+
+
 function renderPrimes(){
   const now = new Date();
   const moisCourant = now.getMonth();
@@ -3901,7 +4239,7 @@ function attachGlobalEvents(){
   const app = document.getElementById('app');
   if(app){
     app.addEventListener('click', async (e)=>{
-      const t = e.target.closest('button, a[data-nav], [data-tab], [data-del-prospect], [data-del-client], [data-del-sav], [data-del-vente], [data-del-stock], [data-edit-prospect], [data-edit-client], [data-edit-sav], [data-edit-vente], [data-edit-stock], [data-view-client], [data-convert-prospect], [data-edit-user], [data-toggle-user], [data-nav], [data-print-vente], [data-view-vente-client], [data-edit-ticket], [data-del-ticket], [data-edit-apporteur], [data-toggle-apporteur], [data-kpi-action], [data-periode]');
+      const t = e.target.closest('button, a[data-nav], [data-tab], [data-del-prospect], [data-del-client], [data-del-sav], [data-del-vente], [data-del-stock], [data-edit-prospect], [data-edit-client], [data-edit-sav], [data-edit-vente], [data-edit-stock], [data-view-client], [data-convert-prospect], [data-edit-user], [data-toggle-user], [data-nav], [data-print-vente], [data-view-vente-client], [data-edit-ticket], [data-del-ticket], [data-edit-apporteur], [data-toggle-apporteur], [data-edit-avance], [data-kpi-action], [data-periode]');
       if(!t) return;
 
       // Navigation publique
@@ -4026,6 +4364,8 @@ function attachGlobalEvents(){
         try{ await apiDelete('tickets',id); DB.tickets=DB.tickets.filter(x=>x.id!==id); render(); showToast('Ticket supprimé.'); }catch(e){ showToast('Erreur, réessaie.'); } return;
       }
       if(t.id==='btn-new-apporteur'){ state.modal={type:'apporteur',data:null}; render(); return; }
+      if(t.id==='btn-new-avance'){ state.view='equipe'; state.modal={type:'avance',data:null}; render(); return; }
+      if(t.dataset.editAvance){ state.view='equipe'; state.modal={type:'avance',data:DB.avances.find(a=>a.id===t.dataset.editAvance)||null}; render(); return; }
       if(t.dataset.editApporteur){ state.modal={type:'apporteur',data:DB.apporteurs.find(a=>a.id===t.dataset.editApporteur)||null}; render(); return; }
       if(t.dataset.toggleApporteur){
         const a = DB.apporteurs.find(x=>x.id===t.dataset.toggleApporteur);
@@ -4511,6 +4851,43 @@ function attachModalEvents(){
       state.modal=null; render();
       showToast('Apporteur enregistré.');
     }catch(err){ showToast("Erreur d'enregistrement, réessaie."); }
+  });
+
+  // Formulaire avance
+  const fav = document.getElementById('form-avance');
+  if(fav) fav.addEventListener('submit', async(e)=>{
+    e.preventDefault();
+    const id = document.getElementById('av-id')?.value || ('av_'+Date.now()+'_'+Math.random().toString(36).slice(2,6));
+    const commercial = document.getElementById('av-commercial').value;
+    const montant = document.getElementById('av-montant').value;
+    const motif = document.getElementById('av-motif')?.value||'';
+
+    // Lire l'échéancier
+    const echeances = [];
+    fav.querySelectorAll('input[name^="ech_"][type="number"]').forEach(inp=>{
+      const mois = inp.name.replace('ech_','');
+      const montantEch = Number(inp.value||0);
+      if(montantEch > 0){
+        const payeEl = fav.querySelector(`input[name="ech_paye_${mois}"]`);
+        echeances.push({ mois, montant: montantEch, paye: payeEl?.checked||false });
+      }
+    });
+
+    const obj = {
+      id, commercial, montant: Number(montant), motif,
+      echeances: JSON.stringify(echeances),
+      statut: 'en_cours',
+      dateCreation: document.getElementById('av-id')?.value ? (DB.avances.find(a=>a.id===id)?.dateCreation||todayISO()) : todayISO(),
+    };
+
+    try{
+      await apiUpsert('avances', obj);
+      const existing = DB.avances.find(a=>a.id===id);
+      if(existing){ DB.avances = DB.avances.map(a=>a.id===id?obj:a); }
+      else{ DB.avances.push(obj); }
+      state.modal=null; render();
+      showToast('Avance enregistrée.');
+    }catch(err){ showToast("Erreur d'enregistrement."); }
   });
 
   const fu = document.getElementById('form-user');
