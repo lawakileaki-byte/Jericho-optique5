@@ -4648,6 +4648,8 @@ function attachVenteConditionalLogic(){
   bindAutre('v-labo','wrap-labo-autre');
 }
 
+  // form-changepwd géré par délégation sur document (voir bas du script)
+
 function attachModalEvents(){
   bindClick('modal-cancel', ()=>{ state.modal=null; render(); });
 
@@ -5005,53 +5007,7 @@ function attachModalEvents(){
   });
 
   // Changement de mot de passe (Mon compte)
-  const fcp = document.getElementById('form-changepwd');
-  if(fcp) fcp.addEventListener('submit', async (e)=>{
-    e.preventDefault();
-    const oldPwd = document.getElementById('cp-old').value;
-    const newPwd = document.getElementById('cp-new').value;
-    const newPwd2 = document.getElementById('cp-new2').value;
-    const errEl = document.getElementById('cp-error');
-    const btn = fcp.querySelector('button[type=submit]');
-    btn.textContent = 'Vérification...'; btn.disabled = true;
-
-    // Recharger le cache depuis Google Sheets pour avoir les données fraîches
-    await loadUsers();
-    btn.textContent = 'Enregistrer le nouveau mot de passe'; btn.disabled = false;
-
-    // Chercher dans USERS_ALL_CACHE (tous) et USERS_CACHE (actifs)
-    const user = USERS_ALL_CACHE.find(u=>u.id===state.userId)
-               || USERS_CACHE.find(u=>u.id===state.userId)
-               || USERS_ALL_CACHE.find(u=>u.nom===state.commercial)
-               || USERS_CACHE.find(u=>u.nom===state.commercial);
-
-    if(!user){
-      errEl.textContent = 'Compte introuvable. Reconnectez-vous et réessayez.'; errEl.style.display=''; return;
-    }
-    if(user.motDePasse !== oldPwd){
-      errEl.textContent = 'Mot de passe actuel incorrect.'; errEl.style.display=''; return;
-    }
-    if(newPwd !== newPwd2){
-      errEl.textContent = 'Les deux nouveaux mots de passe ne correspondent pas.'; errEl.style.display=''; return;
-    }
-    if(newPwd.length < 6){
-      errEl.textContent = 'Le nouveau mot de passe doit faire au moins 6 caractères.'; errEl.style.display=''; return;
-    }
-    errEl.style.display = 'none';
-    const updated = {...user, motDePasse: newPwd};
-    try{
-      await saveUser(updated);
-      // Mettre à jour les deux caches
-      const idxAll = USERS_ALL_CACHE.findIndex(u=>u.id===user.id);
-      if(idxAll>=0) USERS_ALL_CACHE[idxAll].motDePasse = newPwd;
-      const idxActif = USERS_CACHE.findIndex(u=>u.id===user.id);
-      if(idxActif>=0) USERS_CACHE[idxActif].motDePasse = newPwd;
-      document.getElementById('cp-old').value = '';
-      document.getElementById('cp-new').value = '';
-      document.getElementById('cp-new2').value = '';
-      showToast('✅ Mot de passe changé avec succès.');
-    }catch(err){ errEl.textContent = "Erreur d'enregistrement, réessaie."; errEl.style.display=''; }
-  });
+  // form-changepwd géré dans attachGlobalEvents
 }
 
 /* =========================================================
@@ -5090,6 +5046,57 @@ function exportCSV(rows, fields, filename){
     state.teamTab = state.role==='admin' ? 'dashboard' : 'journee';
   }
   render();
+
+  // ===== DÉLÉGATION GLOBALE — form-changepwd =====
+  // Utilise la capture sur document pour attraper le submit
+  // même quand le formulaire est rendu après le premier attachGlobalEvents
+  document.addEventListener('submit', async (e)=>{
+    if(e.target.id !== 'form-changepwd') return;
+    e.preventDefault();
+    e.stopPropagation();
+
+    const oldPwd = document.getElementById('cp-old')?.value || '';
+    const newPwd = document.getElementById('cp-new')?.value || '';
+    const newPwd2 = document.getElementById('cp-new2')?.value || '';
+    const errEl = document.getElementById('cp-error');
+    const btn = e.target.querySelector('button[type=submit]');
+
+    if(btn){ btn.textContent = 'Vérification...'; btn.disabled = true; }
+    await loadUsers();
+    if(btn){ btn.textContent = 'Enregistrer le nouveau mot de passe'; btn.disabled = false; }
+
+    const showErr = (msg) => {
+      if(errEl){ errEl.textContent = msg; errEl.style.display = 'block'; }
+      else { showToast(msg); }
+    };
+
+    const user = USERS_ALL_CACHE.find(u=>u.id===state.userId)
+               || USERS_CACHE.find(u=>u.id===state.userId)
+               || USERS_ALL_CACHE.find(u=>u.nom===state.commercial)
+               || USERS_CACHE.find(u=>u.nom===state.commercial);
+
+    if(!user){ showErr('Compte introuvable. Reconnectez-vous.'); return; }
+    if(user.motDePasse !== oldPwd){ showErr('Mot de passe actuel incorrect.'); return; }
+    if(newPwd !== newPwd2){ showErr('Les deux nouveaux mots de passe ne correspondent pas.'); return; }
+    if(newPwd.length < 6){ showErr('Minimum 6 caractères.'); return; }
+
+    if(errEl) errEl.style.display = 'none';
+    const updated = {...user, motDePasse: newPwd};
+    try{
+      await saveUser(updated);
+      const idxAll = USERS_ALL_CACHE.findIndex(u=>u.id===user.id);
+      if(idxAll>=0) USERS_ALL_CACHE[idxAll].motDePasse = newPwd;
+      const idxActif = USERS_CACHE.findIndex(u=>u.id===user.id);
+      if(idxActif>=0) USERS_CACHE[idxActif].motDePasse = newPwd;
+      if(document.getElementById('cp-old')) document.getElementById('cp-old').value = '';
+      if(document.getElementById('cp-new')) document.getElementById('cp-new').value = '';
+      if(document.getElementById('cp-new2')) document.getElementById('cp-new2').value = '';
+      showToast('✅ Mot de passe changé avec succès !');
+    }catch(err){
+      showErr("Erreur d'enregistrement, réessaie.");
+    }
+  }, true); // true = capture phase — intercepte avant tout autre handler
+
 })();
 </script>
 </body>
