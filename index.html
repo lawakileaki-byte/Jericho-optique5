@@ -1593,6 +1593,7 @@ function modalContent(){
   if(m.type==='vente') return venteForm(m.data);
   if(m.type==='ticket') return ticketForm(m.data);
   if(m.type==='apporteur') return apporteurForm(m.data);
+  if(m.type==='user') return userForm(m.data);
   return '';
 }
 
@@ -3696,6 +3697,13 @@ function attachVenteConditionalLogic(){
       const cv = document.getElementById('v-civilite'); if(cv && s.civilite) cv.value = s.civilite;
       const fo = document.getElementById('v-fonction'); if(fo && s.fonction) fo.value = s.fonction;
       const en = document.getElementById('v-entreprise'); if(en && s.entreprise) en.value = s.entreprise;
+      // Pré-remplir le gestionnaire avec celui de la dernière vente du client
+      const telN = normTel(s.telephone);
+      const derniereVente = DB.ventes.find(v => normTel(v.telephone) === telN && v.gestionnaire);
+      const gestEl = document.getElementById('v-gestionnaire');
+      if(gestEl && derniereVente && derniereVente.gestionnaire){
+        gestEl.value = derniereVente.gestionnaire;
+      }
     });
   }, 100);
   bindAutre('v-assurance','wrap-assurance-autre');
