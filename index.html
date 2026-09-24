@@ -592,13 +592,17 @@ const SHEET_NAMES_USERS = { ...SHEET_NAMES, utilisateurs: "Utilisateurs" };
 
 // Cache local des utilisateurs (rechargé à chaque connexion)
 let USERS_CACHE = [];
+let USERS_ALL_CACHE = [];
 
 async function loadUsers(){
   try{
     const url = `${API_URL}?key=${encodeURIComponent(API_KEY)}&sheet=Utilisateurs`;
     const res = await fetch(url);
     const data = await res.json();
-    if(data.ok && data.rows) USERS_CACHE = data.rows.filter(u=>u.actif==='oui');
+    if(data.ok && data.rows) {
+      USERS_ALL_CACHE = data.rows;
+      USERS_CACHE = data.rows.filter(u=>u.actif==='oui');
+    }
   }catch(e){ console.error('Erreur chargement utilisateurs', e); }
 }
 
@@ -2953,14 +2957,28 @@ function primeLentillesUnifocal(caMensuelLentUnif, nbVentes, objectifMensuel){
 
 // Calcul prime totale d'un commercial pour un mois donné
 function calculPrimeMensuelle(nomCommercial, annee, mois, utilisateur){
-  const debutMois = `${annee}-${String(mois+1).padStart(2,'0')}-01`;
-  const finMois   = `${annee}-${String(mois+1).padStart(2,'0')}-${new Date(annee, mois+1, 0).getDate()}`;
+  const debutMois = new Date(annee, mois, 1);
+  const finMois   = new Date(annee, mois+1, 0);
 
-  // Toutes les ventes du mois (montures + lentilles contact, pas accessoires/réparations)
+  // Convertir une date en objet Date (gère ISO et DD/MM/YYYY)
+  function parseDate(d){
+    if(!d) return null;
+    const s = String(d).trim().slice(0,10);
+    // Format ISO : 2024-08-31
+    if(s.match(/^\d{4}-\d{2}-\d{2}$/)) return new Date(s);
+    // Format DD/MM/YYYY : 31/08/2024
+    if(s.match(/^\d{2}\/\d{2}\/\d{4}$/)){
+      const [dd,mm,yyyy] = s.split('/');
+      return new Date(`${yyyy}-${mm}-${dd}`);
+    }
+    return null;
+  }
+
+  // Toutes les ventes du mois (montures + lentilles, pas accessoires/réparations)
   const ventesCommercial = DB.ventes.filter(v => {
     if(v.gestionnaire !== nomCommercial) return false;
-    const d = v.dateMiseEnRelation || '';
-    if(d < debutMois || d > finMois) return false;
+    const d = parseDate(v.dateMiseEnRelation);
+    if(!d || d < debutMois || d > finMois) return false;
     const type = (v.typeArticle||'').toLowerCase();
     return type.includes('monture') || type.includes('lentille');
   });
@@ -3325,11 +3343,20 @@ function renderPrimesAdmin(annee, mois){
 
 // Mettre à jour le salaire de base d'un utilisateur
 async function updateSalaireBase(userId, valeur){
-  const u = USERS_CACHE.find(x=>x.id===userId);
-  if(!u) return;
-  u.salaireBase = valeur;
-  try{ await apiUpsert('utilisateurs', u); showToast('Salaire mis à jour.'); }
-  catch(e){ showToast('Erreur de sauvegarde.'); }
+  let u = USERS_ALL_CACHE.find(x=>x.id===userId) || USERS_CACHE.find(x=>x.id===userId);
+  if(!u){ showToast('Utilisateur introuvable.'); return; }
+  u.salaireBase = String(valeur||'');
+  // Sync dans les deux caches
+  const idxAll = USERS_ALL_CACHE.findIndex(x=>x.id===userId);
+  if(idxAll>=0) USERS_ALL_CACHE[idxAll].salaireBase = u.salaireBase;
+  const idxActif = USERS_CACHE.findIndex(x=>x.id===userId);
+  if(idxActif>=0) USERS_CACHE[idxActif].salaireBase = u.salaireBase;
+  try{
+    await apiUpsert('utilisateurs', u);
+    showToast(`Salaire de ${u.nom||userId} mis à jour.`);
+  }catch(e){
+    showToast('Erreur — vérifiez la colonne salaireBase dans Sheets.');
+  }
 }
 
 function renderAnalyse(){
