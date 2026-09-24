@@ -2017,6 +2017,7 @@ function renderAdminComptes(){
   <div class="main-head">
     <div><h2>Gestion des comptes</h2><p>Comptes, objectifs et suivi de l'équipe en temps réel.</p></div>
     <button class="btn-sm" id="btn-new-user">+ Nouveau compte</button>
+    <button class="btn-sm btn-ghost" id="btn-dedup-ventes" style="font-size:12px;">🔍 Détecter doublons ventes</button>
   </div>
 
   ${commerciaux.length ? `
@@ -2957,27 +2958,30 @@ function primeLentillesUnifocal(caMensuelLentUnif, nbVentes, objectifMensuel){
 
 // Calcul prime totale d'un commercial pour un mois donné
 function calculPrimeMensuelle(nomCommercial, annee, mois, utilisateur){
-  const debutMois = new Date(annee, mois, 1);
-  const finMois   = new Date(annee, mois+1, 0);
+  // Comparaison en string ISO — évite les problèmes de fuseau horaire
+  const mm = String(mois+1).padStart(2,'0');
+  const lastDay = new Date(annee, mois+1, 0).getDate();
+  const debutMois = `${annee}-${mm}-01`;
+  const finMois   = `${annee}-${mm}-${String(lastDay).padStart(2,'0')}`;
 
-  // Convertir une date en objet Date (gère ISO et DD/MM/YYYY)
-  function parseDate(d){
-    if(!d) return null;
+  // Normaliser une date en string ISO YYYY-MM-DD
+  function normDate(d){
+    if(!d) return '';
     const s = String(d).trim().slice(0,10);
-    // Format ISO : 2024-08-31
-    if(s.match(/^\d{4}-\d{2}-\d{2}$/)) return new Date(s);
-    // Format DD/MM/YYYY : 31/08/2024
+    // Format ISO : 2024-08-31 → OK
+    if(s.match(/^\d{4}-\d{2}-\d{2}$/)) return s;
+    // Format DD/MM/YYYY : 31/08/2024 → 2024-08-31
     if(s.match(/^\d{2}\/\d{2}\/\d{4}$/)){
-      const [dd,mm,yyyy] = s.split('/');
-      return new Date(`${yyyy}-${mm}-${dd}`);
+      const [dd,mm2,yyyy] = s.split('/');
+      return `${yyyy}-${mm2}-${dd}`;
     }
-    return null;
+    return s;
   }
 
   // Toutes les ventes du mois (montures + lentilles, pas accessoires/réparations)
   const ventesCommercial = DB.ventes.filter(v => {
     if(v.gestionnaire !== nomCommercial) return false;
-    const d = parseDate(v.dateMiseEnRelation);
+    const d = normDate(v.dateMiseEnRelation);
     if(!d || d < debutMois || d > finMois) return false;
     const type = (v.typeArticle||'').toLowerCase();
     return type.includes('monture') || type.includes('lentille');
@@ -3341,7 +3345,52 @@ function renderPrimesAdmin(annee, mois){
   </div>`;
 }
 
-// Mettre à jour le salaire de base d'un utilisateur
+// Détecter et supprimer les doublons de ventes
+async function detecterDoublons(){
+  // Deux ventes = doublon si même gestionnaire + même téléphone + même date + même total
+  const seen = new Map();
+  const doublons = [];
+
+  // Trier par date pour garder la première occurrence
+  const ventesTriees = [...DB.ventes].sort((a,b)=>(a.dateMiseEnRelation||'').localeCompare(b.dateMiseEnRelation||''));
+
+  ventesTriees.forEach(v => {
+    const tel = normTel(v.telephone||'');
+    const date = (v.dateMiseEnRelation||'').slice(0,10);
+    const total = String(v.prixVenteTotalSansRemise||'');
+    const type = v.typeArticle||'';
+    const key = `${v.gestionnaire}|${tel}|${date}|${total}|${type}`;
+    if(seen.has(key)){
+      doublons.push(v); // Doublon — à supprimer
+    } else {
+      seen.set(key, v.id);
+    }
+  });
+
+  if(doublons.length === 0){
+    showToast('✅ Aucun doublon détecté dans les ventes.');
+    return;
+  }
+
+  const msg = `${doublons.length} doublon(s) détecté(s).\n\nExemples :\n${doublons.slice(0,3).map(v=>`• ${v.nom||''} ${v.prenom||''} — ${v.dateMiseEnRelation||''} — ${v.prixVenteTotalSansRemise||''} FCFA`).join('\n')}\n\nSupprimer ces doublons ?`;
+
+  if(!confirm(msg)) return;
+
+  showToast('Suppression en cours...');
+  let supprimés = 0;
+  for(const v of doublons){
+    try{
+      await apiDelete('ventes', v.id);
+      DB.ventes = DB.ventes.filter(x=>x.id!==v.id);
+      supprimés++;
+    }catch(e){ /* continuer */ }
+  }
+  _clientIndexCache = null; // Invalider le cache
+  render();
+  showToast(`✅ ${supprimés} doublon(s) supprimé(s). Données nettoyées.`);
+}
+
+
 async function updateSalaireBase(userId, valeur){
   let u = USERS_ALL_CACHE.find(x=>x.id===userId) || USERS_CACHE.find(x=>x.id===userId);
   if(!u){ showToast('Utilisateur introuvable.'); return; }
@@ -3352,10 +3401,11 @@ async function updateSalaireBase(userId, valeur){
   const idxActif = USERS_CACHE.findIndex(x=>x.id===userId);
   if(idxActif>=0) USERS_CACHE[idxActif].salaireBase = u.salaireBase;
   try{
-    await apiUpsert('utilisateurs', u);
+    // Utiliser saveUser (endpoint Utilisateurs avec majuscule)
+    await saveUser(u);
     showToast(`Salaire de ${u.nom||userId} mis à jour.`);
   }catch(e){
-    showToast('Erreur — vérifiez la colonne salaireBase dans Sheets.');
+    showToast('Erreur — vérifiez la connexion.');
   }
 }
 
@@ -4013,6 +4063,7 @@ function attachGlobalEvents(){
 
       // Admin utilisateurs
       if(t.id==='btn-new-user'){ state.view='equipe'; state.modal={type:'user',data:null}; render(); return; }
+      if(t.id==='btn-dedup-ventes'){ await detecterDoublons(); return; }
       if(t.dataset.editUser){ const u=USERS_CACHE.find(x=>x.id===t.dataset.editUser); state.view='equipe'; state.modal={type:'user',data:u}; render(); return; }
       if(t.dataset.toggleUser){
         const u=USERS_CACHE.find(x=>x.id===t.dataset.toggleUser);
