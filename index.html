@@ -1938,7 +1938,7 @@ function venteForm(data){
           <div class="field" id="wrap-bon"><label>Bon non encaissé <span style="color:#A6402E;">*</span> <span style="font-weight:400;color:#9a998f;font-size:11px;">(obligatoire si assurance)</span></label><input type="number" min="0" step="500" id="v-bon" value="${escapeAttr(d.montantBonNonEncaisse)}" oninput="calcVenteReste()"></div>
           <div class="field" style="background:#fdf0ee;border-radius:8px;padding:8px;" id="wrap-reste">
             <label style="color:#A6402E;font-weight:600;">Reste à payer</label>
-            <input type="number" id="v-reste-display" readonly style="font-weight:600;color:#A6402E;background:transparent;border:none;" value="0">
+            <input type="text" id="v-reste-display" readonly style="font-weight:700;font-size:18px;color:#A6402E;background:transparent;border:none;cursor:default;" value="0 FCFA">
           </div>
         </div>
       </div>
