@@ -701,7 +701,7 @@ const STATUTS_SAV = ["Ouvert","En cours","En attente de pièce","Résolu"];
 const CATEGORIES_STOCK = ["Monture optique","Monture solaire","Verres correcteurs","Lentilles de contact","Accessoires","Autre"];
 
 const TYPES_ARTICLE = ["Monture / Verres correcteurs","Lentilles","Accessoires","Réparation et entretien"];
-const TYPES_TICKET = ['🔬 Commande labo','🔧 SAV / Réparation','📞 Rappel client','📦 Réception commande','🎯 Tâche libre'];
+const TYPES_TICKET = ['🔬 Commande labo','🔧 SAV / Réparation','📞 Rappel client','📦 Réception commande','🎯 Tâche libre','💵 Bulletin de paie'];
 const STATUTS_TICKET = ['À faire','En cours','En attente','Terminé'];
 const PRIORITES_TICKET = ['Haute','Normale','Basse'];
 const STAFF = ["Paloma","Alima","Ali","Amandine","Amande","Rabi","Autre"];
@@ -2277,7 +2277,8 @@ function renderJournee(){
 
   // Mes tickets assignés non terminés
   if(!DB.tickets || !Array.isArray(DB.tickets)) DB.tickets = [];
-  const mesTickets = DB.tickets.filter(t=>t.assigne===nom && t.statut!=='Terminé');
+  const mesTickets = DB.tickets.filter(t=>t.assigne===nom && t.statut!=='Terminé' && t.type!=='💵 Bulletin de paie');
+  const mesTicketsPaie = DB.tickets.filter(t=>t.assigne===nom && t.type==='💵 Bulletin de paie' && t.statut!=='Terminé');
   const ticketsLabo = isAdmin() ? DB.tickets.filter(t=>t.type==='🔬 Commande labo' && t.statut==='À faire') : [];
 
   // Mes prospects
@@ -2525,7 +2526,24 @@ function renderJournee(){
     'Aucun ticket SAV ouvert.'
   )}
 
-  <!-- TICKETS ASSIGNÉS -->
+  <!-- BULLETIN DE PAIE EN ATTENTE -->
+  ${mesTicketsPaie.length ? `
+  <div class="panel" style="border-left:4px solid #E8A93B;margin-bottom:16px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+      <h3 style="margin:0;color:#E8A93B;">💵 ${mesTicketsPaie.length > 1 ? mesTicketsPaie.length+' bulletins de paie' : 'Bulletin de paie'} en attente</h3>
+    </div>
+    ${mesTicketsPaie.map(t=>`
+    <div style="background:#FFF9EF;border-radius:8px;padding:12px;margin-bottom:8px;">
+      <div style="font-weight:700;font-size:14px;margin-bottom:8px;">📄 ${escapeHtml(t.titre)}</div>
+      <div style="font-size:12px;white-space:pre-line;color:#444;line-height:1.7;">${escapeHtml(t.description||'')}</div>
+      <div style="margin-top:10px;display:flex;gap:8px;">
+        <button class="btn-sm btn-ghost" style="font-size:12px;" onclick="(async()=>{
+          const tk = DB.tickets.find(x=>x.id==='${t.id}');
+          if(tk){ tk.statut='Terminé'; await apiUpsert('tickets',tk); render(); showToast('Paie confirmée reçue.'); }
+        })()">✅ Confirmer réception</button>
+      </div>
+    </div>`).join('')}
+  </div>` : ''}
   ${mesTickets.length ? section(
     `🎫 Mes tickets (${mesTickets.length})`, '#9b59b6', '🎫',
     mesTickets.map(t=>`
@@ -2639,7 +2657,10 @@ function renderTickets(){
 
   // Admin voit tout, commercial voit ses tickets + ceux de sa boutique
   let rows = DB.tickets.filter(t=>{
-    if(!isAdmin() && t.assigne!==moi && t.boutique!==state.boutique) return false;
+    // Tickets de paie : visible uniquement par l'assigné et la directrice
+    if(t.type==='💵 Bulletin de paie' && !isAdmin() && t.assigne!==moi) return false;
+    if(!isAdmin() && t.type!=='💵 Bulletin de paie' && t.assigne!==moi && t.boutique!==state.boutique) return false;
+    if(!isAdmin() && t.type==='💵 Bulletin de paie') return t.assigne===moi; // Seulement les siens
     if(f.statut && t.statut!==f.statut) return false;
     if(f.type && t.type!==f.type) return false;
     if(f.assigne && t.assigne!==f.assigne) return false;
@@ -2714,7 +2735,11 @@ function renderTickets(){
             ${t.clientTel||t.clientTel2?`<a href="https://wa.me/${(()=>{const tel=String(t.clientTel||t.clientTel2||''); return tel.startsWith('226')?tel:'226'+tel;})()}?text=${encodeURIComponent(bonjourClient(t.clientNom,t.clientPrenom||'',t.clientCivilite||'')+', nous vous contactons de Jéricho Optique concernant votre commande.')}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:4px;background:#25D366;color:#fff;text-decoration:none;padding:2px 8px;border-radius:5px;font-size:11px;font-weight:600;margin-top:3px;"><svg width="11" height="11" viewBox="0 0 24 24" fill="#fff"><path d="M12.04 2c-5.46 0-9.91 4.45-9.91 9.91 0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38c1.45.79 3.08 1.21 4.74 1.21 5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.816 9.816 0 0 0 12.04 2m.01 1.67c2.2 0 4.26.86 5.82 2.42a8.225 8.225 0 0 1 2.41 5.83c0 4.54-3.7 8.23-8.24 8.23-1.48 0-2.93-.39-4.19-1.15l-.3-.17-3.12.82.83-3.04-.2-.32a8.188 8.188 0 0 1-1.26-4.38c.01-4.54 3.7-8.24 8.25-8.24M8.53 7.33c-.16 0-.43.06-.66.31-.22.25-.87.86-.87 2.07 0 1.22.89 2.39 1 2.56.14.17 1.76 2.67 4.25 3.73.59.27 1.05.42 1.41.53.59.19 1.13.16 1.56.1.48-.07 1.46-.6 1.67-1.18.21-.58.21-1.07.14-1.18-.07-.11-.25-.17-.53-.31-.28-.14-1.66-.82-1.92-.91-.26-.09-.44-.14-.63.14-.19.28-.72.91-.88 1.09-.16.18-.32.2-.6.07-.28-.14-1.19-.44-2.26-1.4-.83-.75-1.4-1.67-1.56-1.95-.17-.28-.02-.44.12-.58.13-.13.28-.34.42-.51.14-.17.18-.29.28-.47.09-.19.05-.35-.02-.49-.07-.14-.63-1.52-.88-2.07-.24-.53-.48-.46-.66-.47-.16-.01-.35-.01-.53-.01Z"/></svg> WA</a>`:''}</td>
           <td><b>${escapeHtml(t.assigne||'—')}</b>${t.creepar?`<div style="font-size:10px;color:#aaa;">par ${escapeHtml(t.creepar)}</div>`:''}</td>
           <td>${badgePrio(t.priorite)}</td>
-          <td>${badgeStatut(t.statut)}</td>
+          <td>
+            ${t.type==='💵 Bulletin de paie'
+              ? `<div style="background:#FFF9EF;border:1px solid #E8A93B;border-radius:6px;padding:6px 10px;font-size:11px;white-space:pre-line;max-width:260px;">${escapeHtml((t.description||'').slice(0,200))}${(t.description||'').length>200?'…':''}</div>`
+              : badgeStatut(t.statut)}
+          </td>
           <td style="font-size:11px;color:#888;">${fmtDate(t.dateCreation)}${t.dateLimite?`<br><span style="color:#A6402E;">⏰ ${fmtDate(t.dateLimite)}</span>`:''}</td>
           <td><div class="row-actions">
             <button class="icon-btn" data-edit-ticket="${t.id}">Modifier</button>
@@ -2999,12 +3024,16 @@ function calculPrimeMensuelle(nomCommercial, annee, mois, utilisateur){
     return s;
   }
 
+  // Date de début du système de primes (configurable)
+  const DEBUT_PRIMES = '2026-09-01';
+
   // Toutes les ventes du mois (montures + lentilles, pas accessoires/réparations)
   const nomLower = nomCommercial.toLowerCase().trim();
   const ventesCommercial = DB.ventes.filter(v => {
     if((v.gestionnaire||'').toLowerCase().trim() !== nomLower) return false;
     const d = normDate(v.dateMiseEnRelation);
     if(!d || d < debutMois || d > finMois) return false;
+    if(d < DEBUT_PRIMES) return false; // Exclure ventes avant le système de primes
     const type = (v.typeArticle||'').toLowerCase();
     return type.includes('monture') || type.includes('lentille');
   });
@@ -3343,7 +3372,50 @@ async function sauvegarderBulletin(userId, nom, moisStr, solder){
       DB.paie.push(bulletin);
     }
     render();
-    showToast(solder ? `✅ Paie de ${nom} soldée pour ${moisStr}.` : `Bulletin de ${nom} enregistré.`);
+
+    // Créer ticket de paie si on solde
+    if(solder){
+      const MOIS_NOM = ["Janvier","Février","Mars","Avril","Mai","Juin","Juillet","Août","Septembre","Octobre","Novembre","Décembre"];
+      const [anneeT, moisT] = moisStr.split('-');
+      const moisNom = MOIS_NOM[Number(moisT)-1] + ' ' + anneeT;
+      const ticketPaie = {
+        id: 'tk_paie_'+nom+'_'+moisStr+'_'+Date.now(),
+        type: '💵 Bulletin de paie',
+        titre: `Paie ${moisNom} — ${nom}`,
+        description: [
+          `Salaire de base : ${fmtFCFA(bulletin.salaireBase||0)}`,
+          `Prime brute : ${fmtFCFA(bulletin.primeBrute||0)}`,
+          `  dont 70% versé : ${fmtFCFA(bulletin.prime70||0)}`,
+          `  dont 30% retenu : ${fmtFCFA(bulletin.prime30||0)}`,
+          bulletin.prime30Libere > 0 ? `  30% libéré : ${fmtFCFA(bulletin.prime30Libere||0)}` : '',
+          bulletin.totalAvances > 0 ? `Avances déduites : −${fmtFCFA(bulletin.totalAvances||0)}` : '',
+          `━━━━━━━━━━━━━━━━━━━━`,
+          `NET À PAYER : ${fmtFCFA(bulletin.netAPayer||0)}`,
+          bulletin.notes ? ('Note : ' + bulletin.notes) : '',
+        ].filter(Boolean).join('\n'),
+        assigne: nom,
+        priorite: 'Normale',
+        statut: 'À faire',
+        clientNom: '',
+        clientTel: '',
+        clientTel2: '',
+        clientCivilite: '',
+        clientPrenom: '',
+        labo: '',
+        boutique: 'Toutes',
+        dateCreation: todayISO(),
+        dateLimite: '',
+        venteId: '',
+        creepar: state.commercial,
+      };
+      try{
+        await apiUpsert('tickets', ticketPaie);
+        if(!Array.isArray(DB.tickets)) DB.tickets = [];
+        DB.tickets.unshift(ticketPaie);
+      }catch(e){ console.warn('Ticket paie non créé:', e); }
+    }
+
+    showToast(solder ? `✅ Paie de ${nom} soldée. Ticket envoyé.` : `Bulletin de ${nom} enregistré.`);
   }catch(e){
     showToast('Erreur de sauvegarde — vérifiez la feuille Paie dans Sheets.');
   }
