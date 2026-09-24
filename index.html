@@ -2979,8 +2979,9 @@ function calculPrimeMensuelle(nomCommercial, annee, mois, utilisateur){
   }
 
   // Toutes les ventes du mois (montures + lentilles, pas accessoires/réparations)
+  const nomLower = nomCommercial.toLowerCase().trim();
   const ventesCommercial = DB.ventes.filter(v => {
-    if(v.gestionnaire !== nomCommercial) return false;
+    if((v.gestionnaire||'').toLowerCase().trim() !== nomLower) return false;
     const d = normDate(v.dateMiseEnRelation);
     if(!d || d < debutMois || d > finMois) return false;
     const type = (v.typeArticle||'').toLowerCase();
