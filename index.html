@@ -2956,7 +2956,7 @@ function calculPrimeMensuelle(nomCommercial, annee, mois, utilisateur){
   const debutMois = `${annee}-${String(mois+1).padStart(2,'0')}-01`;
   const finMois   = `${annee}-${String(mois+1).padStart(2,'0')}-${new Date(annee, mois+1, 0).getDate()}`;
 
-  // Ventes du mois (montures + lentilles seulement, pas accessoires/réparations)
+  // Toutes les ventes du mois (montures + lentilles contact, pas accessoires/réparations)
   const ventesCommercial = DB.ventes.filter(v => {
     if(v.gestionnaire !== nomCommercial) return false;
     const d = v.dateMiseEnRelation || '';
@@ -2970,36 +2970,49 @@ function calculPrimeMensuelle(nomCommercial, annee, mois, utilisateur){
   try{ objMensuels = JSON.parse(utilisateur?.objectifsMensuels||'{}'); }catch(e){}
   const objMois = Number(objMensuels[mois]||utilisateur?.objectifAnnuel/12||0);
 
-  // Séparer progressif / unifocal
-  const ventesAvecMont = ventesCommercial.filter(v=>Number(v.prixVenteMonture||0)>=10000);
-  
   let caProg=0, nbProg=0, caUnif=0, nbUnif=0, primeMont=0;
   let detailProg=[], detailUnif=[];
 
   ventesCommercial.forEach(v => {
-    const prog = isProgressif(v);
-    const lent = Number(v.prixVenteLentilles||0);
-    const mont = Number(v.prixVenteMonture||0);
-    const remise = Number(v.remise||0);
-    const lentNet = Math.max(lent - remise*0.5, 0);
-    const montNet = Math.max(mont - remise*0.5, 0);
+    const type = (v.typeArticle||'').toLowerCase();
+    const isMonture = type.includes('monture'); // Monture/Verres correcteurs
+    const isLentilles = type.includes('lentille'); // Lentilles de contact
 
-    // Prime monture (toutes ventes avec monture >= 10k, progressif ET unifocal)
-    if(mont >= 10000){
-      const pm = primeMontureParVente(montNet);
-      primeMont += pm;
+    const remise = Number(v.remise||0);
+
+    // === PRIME MONTURE ===
+    // Pour une vente Monture/Verres : prime sur le prix de la monture seule
+    // Pour une vente Lentilles : pas de prime monture
+    const mont = Number(v.prixVenteMonture||0);
+    if(isMonture && mont >= 10000){
+      const montNet = Math.max(mont - remise*0.5, 0);
+      primeMont += primeMontureParVente(montNet);
     }
 
-    if(lent < 10000) return; // Pas de prime lentilles si < 10k
+    // === PRIME LENTILLES ===
+    // Pour Monture/Verres : les "lentilles" = verres correcteurs (prixVenteLentilles ou prixVenteMonture selon saisie)
+    // Pour Lentilles de contact : prixVenteLentilles = lentilles de contact
+    let prixLentCA = 0;
+    if(isMonture){
+      // CA lentilles = prix des VERRES (prixVenteLentilles dans une vente monture)
+      prixLentCA = Number(v.prixVenteLentilles||0);
+    } else if(isLentilles){
+      // CA lentilles = prix des lentilles de contact
+      prixLentCA = Number(v.prixVenteLentilles||0);
+    }
 
+    if(prixLentCA < 10000) return; // Pas de prime si verres/lentilles < 10k
+    const lentNet = Math.max(prixLentCA - remise*0.5, 0);
+
+    const prog = isProgressif(v);
     if(prog){
       caProg += lentNet;
       nbProg++;
-      detailProg.push({nom:v.nom||'', date:v.dateMiseEnRelation, lent:lentNet, mont:montNet, od:v.odAddition, og:v.ogAddition});
+      detailProg.push({nom:v.nom||'', date:v.dateMiseEnRelation, lent:lentNet, mont:mont>=10000?Math.max(mont-remise*0.5,0):0, od:v.odAddition, og:v.ogAddition, type:isMonture?'Monture':'Lentilles'});
     } else {
       caUnif += lentNet;
       nbUnif++;
-      detailUnif.push({nom:v.nom||'', date:v.dateMiseEnRelation, lent:lentNet, mont:montNet});
+      detailUnif.push({nom:v.nom||'', date:v.dateMiseEnRelation, lent:lentNet, mont:mont>=10000?Math.max(mont-remise*0.5,0):0, type:isMonture?'Monture':'Lentilles'});
     }
   });
 
@@ -3231,15 +3244,16 @@ function renderPrimesAdmin(annee, mois){
       <thead>
         <tr>
           <th>Commercial</th>
-          <th>Salaire base</th>
-          <th>P. Progressif</th>
-          <th>P. Unifocal</th>
+          <th>CA Verres/Lentilles</th>
+          <th>dont Progressif</th>
+          <th>dont Unifocal</th>
+          <th>P. Lentilles</th>
           <th>P. Montures</th>
           <th>Prime brute</th>
-          <th>Impayés</th>
           <th>Retenue 30%</th>
           <th>Prime nette</th>
-          <th>Total à payer</th>
+          <th style="background:#FFF9EF;">Salaire base</th>
+          <th style="background:#FFF9EF;">Total à payer</th>
           <th>Statut</th>
         </tr>
       </thead>
@@ -3248,25 +3262,42 @@ function renderPrimesAdmin(annee, mois){
           const p = calculPrimeMensuelle(u.nom, annee, mois, u);
           const salaire = Number(u.salaireBase||0);
           const totalAPayer = salaire + p.primeNette;
-          const statut = p.impayes > 0 ? '⏳ Partiel' : '✅ À verser';
+          const statut = p.impayes > 0 ? '⏳ Partiel' : '✅ Soldé';
           return `<tr>
-            <td><b>${escapeHtml(u.nom)}</b></td>
-            <td>
-              <input type="number" value="${u.salaireBase||''}" placeholder="Saisir..."
-                style="width:100px;padding:3px 6px;border:1px solid #ddd;border-radius:4px;font-size:12px;"
-                onchange="updateSalaireBase('${u.id}',this.value)">
-            </td>
-            <td style="color:#E8A93B;">${fmtFCFA(p.primeProg)}</td>
-            <td style="color:#68AAD1;">${fmtFCFA(p.primeUnif)}</td>
+            <td><b>${escapeHtml(u.nom)}</b><div style="font-size:11px;color:#888;">${p.nbVentesTotales} vente(s)</div></td>
+            <td style="font-weight:600;">${fmtFCFA(p.caProg+p.caUnif)}</td>
+            <td style="color:#185FA5;">🔵 ${fmtFCFA(p.caProg)}<div style="font-size:10px;color:#888;">${p.nbProg} vente(s)</div></td>
+            <td style="color:#555;">⚪ ${fmtFCFA(p.caUnif)}<div style="font-size:10px;color:#888;">${p.nbUnif} vente(s)</div></td>
+            <td style="color:#E8A93B;">${fmtFCFA(p.primeProg+p.primeUnif)}</td>
             <td>${fmtFCFA(p.primeMont)}</td>
             <td style="font-weight:600;">${fmtFCFA(p.primeBrute)}</td>
-            <td style="color:${p.impayes>0?'#A6402E':'#2d7a3a'};">${p.impayes>0?fmtFCFA(p.impayes):'—'}</td>
             <td style="color:#A6402E;">${p.retenue>0?'−'+fmtFCFA(p.retenue):'—'}</td>
             <td style="font-weight:700;color:#E8A93B;">${fmtFCFA(p.primeNette)}</td>
-            <td style="font-weight:700;font-size:14px;">${salaire>0?fmtFCFA(totalAPayer):'—'}</td>
-            <td><span style="background:${p.impayes>0?'#E8A93B':'#2d7a3a'};color:#fff;padding:2px 8px;border-radius:8px;font-size:11px;">${statut}</span></td>
+            <td style="background:#FFF9EF;">
+              <input type="number" value="${escapeAttr(u.salaireBase||'')}" placeholder="Saisir..."
+                style="width:110px;padding:4px 8px;border:1.5px solid #E8A93B;border-radius:6px;font-size:12px;font-weight:600;"
+                onchange="updateSalaireBase('${u.id}',this.value)">
+            </td>
+            <td style="background:#FFF9EF;font-weight:700;font-size:14px;color:#26282B;">${salaire>0?fmtFCFA(totalAPayer):'—'}</td>
+            <td><span style="background:${p.impayes>0?'#E8A93B':'#2d7a3a'};color:#fff;padding:2px 8px;border-radius:8px;font-size:11px;">${statut}</span>
+              ${p.impayes>0?`<div style="font-size:10px;color:#A6402E;margin-top:2px;">Impayés: ${fmtFCFA(p.impayes)}</div>`:''}
+            </td>
           </tr>`;
         }).join('')}
+        <tr style="background:#FFF9EF;font-weight:700;">
+          <td>TOTAL ÉQUIPE</td>
+          <td>${fmtFCFA(commerciaux.reduce((s,u)=>{const p=calculPrimeMensuelle(u.nom,annee,mois,u);return s+p.caProg+p.caUnif;},0))}</td>
+          <td>${fmtFCFA(commerciaux.reduce((s,u)=>{const p=calculPrimeMensuelle(u.nom,annee,mois,u);return s+p.caProg;},0))}</td>
+          <td>${fmtFCFA(commerciaux.reduce((s,u)=>{const p=calculPrimeMensuelle(u.nom,annee,mois,u);return s+p.caUnif;},0))}</td>
+          <td>${fmtFCFA(commerciaux.reduce((s,u)=>{const p=calculPrimeMensuelle(u.nom,annee,mois,u);return s+p.primeProg+p.primeUnif;},0))}</td>
+          <td>${fmtFCFA(commerciaux.reduce((s,u)=>{const p=calculPrimeMensuelle(u.nom,annee,mois,u);return s+p.primeMont;},0))}</td>
+          <td>${fmtFCFA(commerciaux.reduce((s,u)=>{const p=calculPrimeMensuelle(u.nom,annee,mois,u);return s+p.primeBrute;},0))}</td>
+          <td style="color:#A6402E;">${fmtFCFA(commerciaux.reduce((s,u)=>{const p=calculPrimeMensuelle(u.nom,annee,mois,u);return s+p.retenue;},0))}</td>
+          <td>${fmtFCFA(commerciaux.reduce((s,u)=>{const p=calculPrimeMensuelle(u.nom,annee,mois,u);return s+p.primeNette;},0))}</td>
+          <td style="background:#FFF9EF;">${fmtFCFA(commerciaux.reduce((s,u)=>s+Number(u.salaireBase||0),0))}</td>
+          <td style="background:#FFF9EF;">${fmtFCFA(commerciaux.reduce((s,u)=>{const p=calculPrimeMensuelle(u.nom,annee,mois,u);return s+Number(u.salaireBase||0)+p.primeNette;},0))}</td>
+          <td></td>
+        </tr>
       </tbody>
     </table>
   </div>
