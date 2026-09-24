@@ -5017,11 +5017,18 @@ function attachModalEvents(){
 
     // Recharger le cache depuis Google Sheets pour avoir les données fraîches
     await loadUsers();
-
     btn.textContent = 'Enregistrer le nouveau mot de passe'; btn.disabled = false;
 
-    const user = USERS_CACHE.find(u=>u.id===state.userId);
-    if(!user || user.motDePasse !== oldPwd){
+    // Chercher dans USERS_ALL_CACHE (tous) et USERS_CACHE (actifs)
+    const user = USERS_ALL_CACHE.find(u=>u.id===state.userId)
+               || USERS_CACHE.find(u=>u.id===state.userId)
+               || USERS_ALL_CACHE.find(u=>u.nom===state.commercial)
+               || USERS_CACHE.find(u=>u.nom===state.commercial);
+
+    if(!user){
+      errEl.textContent = 'Compte introuvable. Reconnectez-vous et réessayez.'; errEl.style.display=''; return;
+    }
+    if(user.motDePasse !== oldPwd){
       errEl.textContent = 'Mot de passe actuel incorrect.'; errEl.style.display=''; return;
     }
     if(newPwd !== newPwd2){
@@ -5034,13 +5041,15 @@ function attachModalEvents(){
     const updated = {...user, motDePasse: newPwd};
     try{
       await saveUser(updated);
-      // Mettre à jour le cache local immédiatement
-      const idx = USERS_CACHE.findIndex(u=>u.id===state.userId);
-      if(idx>=0) USERS_CACHE[idx].motDePasse = newPwd;
+      // Mettre à jour les deux caches
+      const idxAll = USERS_ALL_CACHE.findIndex(u=>u.id===user.id);
+      if(idxAll>=0) USERS_ALL_CACHE[idxAll].motDePasse = newPwd;
+      const idxActif = USERS_CACHE.findIndex(u=>u.id===user.id);
+      if(idxActif>=0) USERS_CACHE[idxActif].motDePasse = newPwd;
       document.getElementById('cp-old').value = '';
       document.getElementById('cp-new').value = '';
       document.getElementById('cp-new2').value = '';
-      showToast('Mot de passe changé avec succès.');
+      showToast('✅ Mot de passe changé avec succès.');
     }catch(err){ errEl.textContent = "Erreur d'enregistrement, réessaie."; errEl.style.display=''; }
   });
 }
