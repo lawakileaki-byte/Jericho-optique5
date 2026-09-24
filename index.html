@@ -507,8 +507,10 @@ function normTel(v){
   if(s.startsWith('00226')) s = s.slice(5);
   if(s.startsWith('+226')) s = s.slice(4);
   if(s.startsWith('226') && s.length > 9) s = s.slice(3);
-  // Retirer le 0 initial
-  if(s.startsWith('0') && s.length > 7) s = s.slice(1);
+  // Retirer le 0 initial SEULEMENT si le résultat donne 8 chiffres (numéros mobiles BF)
+  // Ex: 070626068 (9 chiffres) → 70626068 (8 chiffres) = OK
+  // Ex: 07062606 (8 chiffres avec 0) → on garde le 0 (fixe ou autre format)
+  if(s.startsWith('0') && s.length === 9) s = s.slice(1);
   return s;
 }
 
@@ -1397,6 +1399,8 @@ function venteReste(v){
 
 function renderVentes(){
   const f = state.filters.ventes;
+  // Commerciaux : limités à l'année en cours max
+  if(!isAdmin() && f.periode === 'tout') { f.periode = 'annee'; }
   const now = new Date();
   const today = now.toISOString().slice(0,10);
   const annee = now.getFullYear();
@@ -1439,7 +1443,7 @@ function renderVentes(){
 
   <!-- Filtre période -->
   <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
-    ${['semaine','mois','annee','tout'].map(p=>`
+    ${['semaine','mois','annee',...(isAdmin()?['tout']:[])].map(p=>`
       <button onclick="state.filters.ventes.periode=\`${p}\`;render();"
         style="padding:6px 14px;border-radius:16px;border:2px solid ${f.periode===p?'#E8A93B':'#ddd'};background:${f.periode===p?'#E8A93B':'#fff'};color:${f.periode===p?'#26282B':'#666'};font-weight:${f.periode===p?'700':'400'};font-size:12px;cursor:pointer;">
         ${{semaine:'Cette semaine',mois:'Ce mois',annee:'Cette année',tout:'Tout l\'historique'}[p]}
@@ -3535,8 +3539,8 @@ function attachGlobalEvents(){
       }
 
       // Admin utilisateurs
-      if(t.id==='btn-new-user'){ state.modal={type:'user',data:null}; render(); return; }
-      if(t.dataset.editUser){ const u=USERS_CACHE.find(x=>x.id===t.dataset.editUser); state.modal={type:'user',data:u}; render(); return; }
+      if(t.id==='btn-new-user'){ state.view='equipe'; state.modal={type:'user',data:null}; render(); return; }
+      if(t.dataset.editUser){ const u=USERS_CACHE.find(x=>x.id===t.dataset.editUser); state.view='equipe'; state.modal={type:'user',data:u}; render(); return; }
       if(t.dataset.toggleUser){
         const u=USERS_CACHE.find(x=>x.id===t.dataset.toggleUser);
         if(!u) return;
