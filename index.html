@@ -101,12 +101,21 @@ async function apiGet(table) {
   if (!Array.isArray(rows)) return [];
   return rows.map(denormalizeRow);
 }
+// Convertir camelCase → minuscules pour Supabase
+function toSupabase(row) {
+  const out = {};
+  for (const [k, v] of Object.entries(row)) {
+    out[k.toLowerCase()] = v;
+  }
+  return out;
+}
+
 async function apiUpsert(table, row) {
   const url = SUPABASE_URL + '/rest/v1/' + table;
   const res = await fetch(url, {
     method: 'POST',
     headers: { ...sbH(), 'Prefer': 'resolution=merge-duplicates,return=representation' },
-    body: JSON.stringify(row)
+    body: JSON.stringify(toSupabase(row))
   });
   if (!res.ok) { const e = await res.text(); throw new Error('UPSERT ' + table + ': ' + e); }
   return await res.json();
