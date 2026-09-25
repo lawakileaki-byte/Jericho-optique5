@@ -977,7 +977,7 @@ function renderClients(){
       if(!hay.includes(q)) return false;
     }
     return true;
-  }).sort((a,b)=>b.dateCreation.localeCompare(a.dateCreation));
+  }).sort((a,b)=>(b.dateCreation||'').localeCompare(a.dateCreation||''));
 
   const fs = state.filters.sav;
   let ticketsRows = DB.sav.filter(t=>{
@@ -985,7 +985,7 @@ function renderClients(){
     if(fs.boutique && t.boutique!==fs.boutique) return false;
     if(fs.q && !t.clientNom.toLowerCase().includes(fs.q.toLowerCase())) return false;
     return true;
-  }).sort((a,b)=>b.dateOuverture.localeCompare(a.dateOuverture));
+  }).sort((a,b)=>(b.dateOuverture||'').localeCompare(a.dateOuverture||''));
 
   return `
   <div class="main-head">
@@ -1190,7 +1190,7 @@ function renderStock(){
     if(f.categorie && s.categorie!==f.categorie) return false;
     if(f.q && !(s.designation.toLowerCase().includes(f.q.toLowerCase()) || (s.reference||'').toLowerCase().includes(f.q.toLowerCase()))) return false;
     return true;
-  }).sort((a,b)=>a.designation.localeCompare(b.designation));
+  }).sort((a,b)=>(a.designation||'').localeCompare(b.designation||''));
 
   const valeurTotale = rows.reduce((a,x)=>a+(Number(x.quantite)||0)*(Number(x.prixUnitaire)||0),0);
 
@@ -1965,7 +1965,7 @@ function renderJournee(){
   // 3. RDV passés non soldés (à relancer)
   const rdvDepasses = mesVentes.filter(v=>
     v.dateRdv && v.dateRdv < today && venteReste(v)>0
-  ).sort((a,b)=>b.dateRdv.localeCompare(a.dateRdv)).slice(0,5);
+  ).sort((a,b)=>(b.dateRdv||'').localeCompare(a.dateRdv||'')).slice(0,5);
 
   // 4. Prospects à relancer
   const prospRdvPris = mesProspects.filter(p=>{
