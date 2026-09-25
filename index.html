@@ -266,6 +266,26 @@ function fmtFCFA(n){
   // Séparateurs de milliers avec espace insécable, pas de décimales
   return n.toLocaleString('fr-FR', {maximumFractionDigits:0}) + ' FCFA';
 }
+// Modal de confirmation intégrée (remplace confirm() natif qui peut boucler)
+function showConfirm(message, onOk) {
+  // Créer une modal de confirmation
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center;';
+  overlay.innerHTML = `
+    <div style="background:#fff;border-radius:12px;padding:28px 32px;max-width:360px;width:90%;text-align:center;box-shadow:0 8px 32px rgba(0,0,0,0.2);">
+      <div style="font-size:15px;color:#26282B;margin-bottom:20px;font-weight:500;">${message}</div>
+      <div style="display:flex;gap:12px;justify-content:center;">
+        <button id="confirm-cancel" style="padding:10px 24px;border-radius:8px;border:1.5px solid #ddd;background:#fff;font-size:14px;cursor:pointer;">Annuler</button>
+        <button id="confirm-ok" style="padding:10px 24px;border-radius:8px;border:none;background:#A6402E;color:#fff;font-size:14px;font-weight:600;cursor:pointer;">Supprimer</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  document.getElementById('confirm-cancel').onclick = () => document.body.removeChild(overlay);
+  document.getElementById('confirm-ok').onclick = () => { document.body.removeChild(overlay); onOk(); };
+  // Fermer si clic sur l'overlay
+  overlay.addEventListener('click', (e) => { if(e.target === overlay) document.body.removeChild(overlay); });
+}
+
 function showToast(msg){
   const t = document.getElementById('toast');
   t.textContent = msg;
@@ -4012,9 +4032,7 @@ function attachGlobalEvents(){
         return;
       }
       if(t.dataset.delProspect){
-        if(!confirm('Supprimer ce prospect ?')) return;
-        const id=t.dataset.delProspect;
-        try{ await apiDelete('prospects',id); DB.prospects=DB.prospects.filter(p=>p.id!==id); render(); showToast('Prospect supprimé.'); }catch(err){ showToast("Erreur, réessaie."); } return;
+        showConfirm('Supprimer ce prospect ?', async()=>{ const id=t.dataset.delProspect; try{ await apiDelete('prospects',id); DB.prospects=DB.prospects.filter(p=>p.id!==id); render(); showToast('Prospect supprimé.'); }catch(err){ showToast('Erreur, réessaie.'); } }); return;
       }
 
       // Clients
@@ -4022,9 +4040,7 @@ function attachGlobalEvents(){
       if(t.dataset.viewClient){ state.view='equipe'; state.modal={type:'client-view',data:DB.clients.find(c=>c.id===t.dataset.viewClient)||null}; render(); return; }
       if(t.dataset.editClient){ state.modal={type:'client',data:DB.clients.find(c=>c.id===t.dataset.editClient)||null}; render(); return; }
       if(t.dataset.delClient){
-        if(!confirm('Supprimer ce client ?')) return;
-        const id=t.dataset.delClient;
-        try{ await apiDelete('clients',id); DB.clients=DB.clients.filter(c=>c.id!==id); render(); showToast('Client supprimé.'); }catch(err){ showToast("Erreur, réessaie."); } return;
+        showConfirm('Supprimer ce client ?', async()=>{ const id=t.dataset.delClient; try{ await apiDelete('clients',id); DB.clients=DB.clients.filter(c=>c.id!==id); render(); showToast('Client supprimé.'); }catch(err){ showToast('Erreur, réessaie.'); } }); return;
       }
 
       // SAV
@@ -4061,9 +4077,7 @@ function attachGlobalEvents(){
         return;
       }
       if(t.dataset.delSav){
-        if(!confirm('Supprimer ce ticket ?')) return;
-        const id=t.dataset.delSav;
-        try{ await apiDelete('sav',id); DB.sav=DB.sav.filter(s=>s.id!==id); render(); showToast('Ticket supprimé.'); }catch(err){ showToast("Erreur, réessaie."); } return;
+        showConfirm('Supprimer ce ticket ?', async()=>{ const id=t.dataset.delSav; try{ await apiDelete('sav',id); DB.sav=DB.sav.filter(s=>s.id!==id); render(); showToast('Ticket supprimé.'); }catch(err){ showToast('Erreur, réessaie.'); } }); return;
       }
 
       // Ventes
@@ -4124,9 +4138,7 @@ function attachGlobalEvents(){
       }
       if(t.dataset.editVente){ state.modal={type:'vente',data:DB.ventes.find(v=>v.id===t.dataset.editVente)||null}; render(); return; }
       if(t.dataset.delVente){
-        if(!confirm('Supprimer cette vente ?')) return;
-        const id=t.dataset.delVente;
-        try{ await apiDelete('ventes',id); DB.ventes=DB.ventes.filter(v=>v.id!==id); render(); showToast('Vente supprimée.'); }catch(err){ showToast("Erreur, réessaie."); } return;
+        showConfirm('Supprimer cette vente ?', async()=>{ const id=t.dataset.delVente; try{ await apiDelete('ventes',id); DB.ventes=DB.ventes.filter(v=>v.id!==id); render(); showToast('Vente supprimée.'); }catch(err){ showToast('Erreur, réessaie.'); } }); return;
       }
 
       // Stock
@@ -4134,9 +4146,7 @@ function attachGlobalEvents(){
       if(t.id==='btn-export-stock'){ exportCSV(DB.stock,['reference','designation','categorie','boutique','quantite','prixUnitaire','seuilAlerte'],'stock_jericho.csv'); return; }
       if(t.dataset.editStock){ state.modal={type:'stock',data:DB.stock.find(s=>s.id===t.dataset.editStock)||null}; render(); return; }
       if(t.dataset.delStock){
-        if(!confirm('Supprimer cet article ?')) return;
-        const id=t.dataset.delStock;
-        try{ await apiDelete('stock',id); DB.stock=DB.stock.filter(s=>s.id!==id); render(); showToast('Article supprimé.'); }catch(err){ showToast("Erreur, réessaie."); } return;
+        showConfirm('Supprimer cet article ?', async()=>{ const id=t.dataset.delStock; try{ await apiDelete('stock',id); DB.stock=DB.stock.filter(s=>s.id!==id); render(); showToast('Article supprimé.'); }catch(err){ showToast('Erreur, réessaie.'); } }); return;
       }
 
       // Admin utilisateurs
