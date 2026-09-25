@@ -118,7 +118,10 @@ async function apiUpsert(table, row) {
     body: JSON.stringify(toSupabase(row))
   });
   if (!res.ok) { const e = await res.text(); throw new Error('UPSERT ' + table + ': ' + e); }
-  return await res.json();
+  const data = await res.json();
+  // Supabase retourne un tableau - normaliser en objet
+  const result = Array.isArray(data) ? (data[0] || {}) : data;
+  return { ok: true, ...result };
 }
 async function apiDelete(table, id) {
   const url = SUPABASE_URL + '/rest/v1/' + table + '?id=eq.' + encodeURIComponent(id);
@@ -4518,8 +4521,9 @@ function attachModalEvents(){
       }catch(e){ console.warn('Ticket labo non créé:', e.message); }
 
       state.modal=null; render();
+      window._jCache=null;
       showToast(idx>=0 ? 'Vente mise à jour.' : 'Vente enregistrée. Ticket labo créé automatiquement.');
-    }catch(err){ showToast("Erreur d'enregistrement, réessaie."); }
+    }catch(err){ showToast("Erreur: " + (err.message||'inconnue')); console.error('Vente err:', err); }
   });
 
   // Formulaire création/modification d'utilisateur
