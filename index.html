@@ -330,6 +330,7 @@ var state = {
   analyseDebut: '',
   analyseFin: '',
   primesMois: new Date().getMonth(),
+  pages: { clients: 1, prospects: 1, ventes: 1, tickets: 1 },
   primesAnnee: new Date().getFullYear(),
   filters: { prospects:{statut:'', boutique:'', q:''}, clients:{boutique:'', q:''}, sav:{statut:'', boutique:'', q:''}, stock:{boutique:'', categorie:'', q:''}, ventes:{boutique:'', typeArticle:'', q:'', periode:'mois'}, tickets:{q:'',statut:'',type:'',assigne:''} },
   modal: null,
@@ -385,7 +386,7 @@ const STATUTS_SAV = ["Ouvert","En cours","En attente de pièce","Résolu"];
 const CATEGORIES_STOCK = ["Monture optique","Monture solaire","Verres correcteurs","Lentilles de contact","Accessoires","Autre"];
 
 const TYPES_ARTICLE = ["Monture / Verres correcteurs","Lentilles","Accessoires","Réparation et entretien"];
-const TYPES_TICKET = ['🔬 Commande labo','🔧 SAV / Réparation','📞 Rappel client','📦 Réception commande','🎯 Tâche libre','💵 Bulletin de paie'];
+const TYPES_TICKET = ['🔬 Commande labo','🔧 SAV / Réparation','📞 Rappel client','📦 Réception commande','🎯 Tâche libre','💵 Bulletin de paie','💰 Demande d\'avance'];
 const STATUTS_TICKET = ['À faire','En cours','En attente','Terminé'];
 const PRIORITES_TICKET = ['Haute','Normale','Basse'];
 const STAFF = ["Paloma","Alima","Ali","Amandine","Amande","Rabi","Autre"];
@@ -981,6 +982,7 @@ function renderProspects(){
       </tbody>
     </table>
   </div>
+  ${renderPagination('prospects', totalProspects, pageP)}
   `;
 }
 
@@ -989,6 +991,7 @@ function renderProspects(){
    --------------------------------------------------------- */
 function renderClients(){
   const f = state.filters.clients;
+  const PAGE_SIZE = 10;
   let clients = DB.clients.filter(c=>{
     if(f.boutique && c.boutique!==f.boutique) return false;
     if(f.q){
@@ -998,6 +1001,13 @@ function renderClients(){
     }
     return true;
   }).sort((a,b)=>(b.dateCreation||'').localeCompare(a.dateCreation||''));
+
+  // Réinitialiser page si filtre change
+  if(!state.pages) state.pages = {clients:1,prospects:1,ventes:1,tickets:1};
+  const totalClients = clients.length;
+  const pageCl = Math.min(state.pages.clients||1, Math.ceil(totalClients/PAGE_SIZE)||1);
+  state.pages.clients = pageCl;
+  clients = clients.slice((pageCl-1)*PAGE_SIZE, pageCl*PAGE_SIZE);
 
   const fs = state.filters.sav;
   let ticketsRows = DB.sav.filter(t=>{
@@ -1078,6 +1088,7 @@ function renderClients(){
       </tbody>
     </table>
   </div>
+  ${renderPagination('clients', totalClients, pageCl)}
   `;
 }
 
@@ -1320,6 +1331,7 @@ function prospectForm(data){
       <div class="field"><label>Source</label><select id="p-source">${SOURCES.map(s=>`<option ${d.source===s?'selected':''}>${s}</option>`).join('')}</select></div>
       <div class="field"><label>Statut</label><select id="p-statut">${STATUTS_PROSPECT.map(s=>`<option ${d.statut===s?'selected':''}>${s}</option>`).join('')}</select></div>
       <div class="field full"><label>Commercial en charge</label><input id="p-commercial" value="${escapeAttr(d.commercial)}"></div>
+      <div class="field"><label>Date de naissance <span style="font-size:11px;color:#888;">(optionnel)</span></label><input type="date" id="p-dob" value="${escapeAttr(d.dateNaissance||'')}"></div>
       <div class="field full"><label>Notes</label><textarea id="p-notes">${escapeHtml(d.notes)}</textarea></div>
     </div>
     <div class="modal-actions">
@@ -1351,6 +1363,7 @@ function clientForm(data, isConversion=false){
       <div class="field full"><label>Adresse de résidence</label><input id="c-adresse" value="${escapeAttr(d.adresse)}" placeholder="Quartier, secteur..."></div>
       <div class="field"><label>Email</label><input id="c-email" value="${escapeAttr(d.email)}" placeholder="optionnel"></div>
       <div class="field"><label>Boutique</label><select id="c-boutique">${BOUTIQUES.map(b=>`<option ${d.boutique===b?'selected':''}>${b}</option>`).join('')}</select></div>
+      <div class="field"><label>Date de naissance <span style="font-size:11px;color:#888;">(optionnel)</span></label><input type="date" id="c-dob" value="${escapeAttr(d.dateNaissance||'')}"></div>
       <div class="field full"><label>Notes</label><textarea id="c-notes">${escapeHtml(d.notes||'')}</textarea></div>
     </div>
     <div class="modal-actions">
@@ -1963,6 +1976,27 @@ function renderJournee(){
   // Mes tickets assignés non terminés
   if(!DB.tickets || !Array.isArray(DB.tickets)) DB.tickets = [];
   const mesTickets = DB.tickets.filter(t=>t.assigne===nom && t.statut!=='Terminé' && t.type!=='💵 Bulletin de paie');
+
+  // === ANNIVERSAIRES & FIDÉLITÉ ===
+  const mmJj = todayISO().slice(5);
+  const anneeAct = new Date().getFullYear();
+  const PALIERS = [1,2,3,5,10];
+  const anniversairesNaissance = [...DB.clients,...DB.prospects].filter(c=>{
+    const dob = c.dateNaissance||c.datenaissance||'';
+    return dob && dob.slice(5)===mmJj;
+  });
+  const anniversairesFidelite = [];
+  const _fidKeys = new Set();
+  DB.ventes.forEach(v=>{
+    const d = v.dateMiseEnRelation||''; if(!d) return;
+    const ans = anneeAct - Number(d.slice(0,4));
+    if(!PALIERS.includes(ans)) return;
+    if(d.slice(5)!==mmJj) return;
+    const key=(v.telephone||'')+v.nom;
+    if(_fidKeys.has(key)) return;
+    _fidKeys.add(key);
+    anniversairesFidelite.push({...v, anneesEcoulees:ans});
+  });
   const mesTicketsPaie = DB.tickets.filter(t=>t.assigne===nom && t.type==='💵 Bulletin de paie' && t.statut!=='Terminé');
   const ticketsLabo = isAdmin() ? DB.tickets.filter(t=>t.type==='🔬 Commande labo' && t.statut==='À faire') : [];
 
@@ -2211,6 +2245,31 @@ function renderJournee(){
     'Aucun ticket SAV ouvert.'
   )}
 
+  <!-- ANNIVERSAIRES & FIDÉLITÉ -->
+  ${(anniversairesNaissance.length + anniversairesFidelite.length) > 0 ? `
+  <div class="panel" style="border-left:4px solid #E8A93B;margin-bottom:16px;">
+    <h3 style="margin-bottom:12px;">🎂 Aujourd'hui</h3>
+    ${anniversairesNaissance.map(c=>{
+      const tel = c.telephone||c.telephone2||'';
+      const num = tel.startsWith('226') ? tel : '226'+tel;
+      const msg = encodeURIComponent('Joyeux anniversaire '+(c.civilite||'')+' '+(c.nom||'')+' ! Toute l\'équipe Jéricho Optique vous souhaite une excellente journée 🎉');
+      return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--line);">'
+        +'<div>🎁 <b>'+escapeHtml(bonjourClient(c.nom,c.prenom,c.civilite))+'</b> <span style="font-size:11px;color:#888;">— Anniversaire</span></div>'
+        +(tel ? '<a href="https://wa.me/'+num+'?text='+msg+'" target="_blank" style="background:#25D366;color:#fff;padding:4px 10px;border-radius:6px;font-size:12px;text-decoration:none;font-weight:600;">WhatsApp 🎂</a>' : '')
+        +'</div>';
+    }).join('')}
+    ${anniversairesFidelite.map(v=>{
+      const tel = v.telephone||'';
+      const num = tel.startsWith('226') ? tel : '226'+tel;
+      const ans = v.anneesEcoulees;
+      const msg = encodeURIComponent('Bonjour '+(v.civilite||'')+' '+(v.nom||'')+', cela fait exactement '+ans+' an'+(ans>1?'s':'')+' que vous êtes client(e) chez Jéricho Optique ! Merci pour votre fidélité 🏆 Nous avons une offre spéciale pour vous.');
+      return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--line);">'
+        +'<div>🏆 <b>'+escapeHtml(bonjourClient(v.nom,v.prenom,v.civilite))+'</b> <span style="font-size:11px;color:#E8A93B;">'+ans+' an'+(ans>1?'s':'')+' de fidélité !</span></div>'
+        +(tel ? '<a href="https://wa.me/'+num+'?text='+msg+'" target="_blank" style="background:#25D366;color:#fff;padding:4px 10px;border-radius:6px;font-size:12px;text-decoration:none;font-weight:600;">WhatsApp 🏆</a>' : '')
+        +'</div>';
+    }).join('')}
+  </div>` : ''}
+
   <!-- BULLETIN DE PAIE EN ATTENTE -->
   ${mesTicketsPaie.length ? `
   <div class="panel" style="border-left:4px solid #E8A93B;margin-bottom:16px;">
@@ -2428,6 +2487,7 @@ function renderTickets(){
           <td style="font-size:11px;color:#888;">${fmtDate(t.dateCreation)}${t.dateLimite?`<br><span style="color:#A6402E;">⏰ ${fmtDate(t.dateLimite)}</span>`:''}</td>
           <td><div class="row-actions">
             <button class="icon-btn" data-edit-ticket="${t.id}">Modifier</button>
+            ${t.type==="💰 Demande d'avance" && isAdmin() && t.statut!=='Terminé' ? `<button class="btn-sm" style="font-size:11px;background:#E8A93B;margin-left:4px;" data-traiter-avance="${t.id}">💰 Traiter</button>` : ''}
             ${isAdmin()?`<button class="icon-btn danger" data-del-ticket="${t.id}">Suppr.</button>`:''}
           </div></td>
         </tr>`).join('')
@@ -2461,6 +2521,14 @@ function ticketForm(data){
       <div class="field"><label>Priorité</label><select id="tk-priorite">${PRIORITES_TICKET.map(p=>`<option ${d.priorite===p?'selected':''}>${p}</option>`).join('')}</select></div>
       <div class="field full"><label>Titre <span style="color:#A6402E;">*</span></label><input required id="tk-titre" value="${escapeAttr(d.titre)}" placeholder="Ex: Commander verres progressifs pour TRAORE"></div>
       <div class="field full"><label>Description / Instructions</label><textarea id="tk-desc">${escapeHtml(d.description||'')}</textarea></div>
+      <!-- Champs spéciaux pour demande d'avance -->
+      <div id="avance-fields" style="display:${d.type==="💰 Demande d'avance"?'contents':'none'}">
+        <div class="form-section-title" style="color:#E8A93B;">Détails de la demande</div>
+        <div class="field"><label>Montant demandé (FCFA)</label><input type="number" id="tk-avance-montant" min="0" step="5000" value="${escapeAttr(d.avanceMontant||'')}" placeholder="ex: 50000"></div>
+        <div class="field"><label>Durée souhaitée (mois)</label><input type="number" id="tk-avance-duree" min="1" max="12" value="${escapeAttr(d.avanceDuree||'3')}"></div>
+        <div class="field"><label>Début remboursement souhaité</label><input type="month" id="tk-avance-debut" value="${escapeAttr(d.avanceDebut||'')}"></div>
+        <div class="field"><label>Motif</label><input type="text" id="tk-avance-motif" value="${escapeAttr(d.avanceMotif||'')}" placeholder="Ex: Frais médicaux, urgence..."></div>
+      </div>
       <div class="field"><label>Statut</label><select id="tk-statut">${STATUTS_TICKET.map(s=>`<option ${d.statut===s?'selected':''}>${s}</option>`).join('')}</select></div>
       <div class="field"><label>Assigné à <span style="color:#A6402E;">*</span></label>
         ${canChangeAssigne
@@ -3092,6 +3160,10 @@ async function sauvegarderBulletin(userId, nom, moisStr, solder){
         dateLimite: '',
         venteId: '',
         creepar: state.commercial,
+      avanceMontant: document.getElementById('tk-avance-montant')?.value||'',
+      avanceDuree: document.getElementById('tk-avance-duree')?.value||'',
+      avanceDebut: document.getElementById('tk-avance-debut')?.value||'',
+      avanceMotif: document.getElementById('tk-avance-motif')?.value||'',
       };
       try{
         await apiUpsert('tickets', ticketPaie);
@@ -3470,7 +3542,7 @@ async function detecterDoublons(){
 
   const msg = `${doublons.length} doublon(s) détecté(s).\n\nExemples :\n${doublons.slice(0,3).map(v=>`• ${v.nom||''} ${v.prenom||''} — ${v.dateMiseEnRelation||''} — ${v.prixVenteTotalSansRemise||''} FCFA`).join('\n')}\n\nSupprimer ces doublons ?`;
 
-  if(!confirm(msg)) return;
+  let _confirmed = false; await new Promise(res=>showConfirm(msg, ()=>{_confirmed=true;res();})); if(!_confirmed) return;
 
   showToast('Suppression en cours...');
   let supprimés = 0;
@@ -3503,6 +3575,36 @@ async function updateSalaireBase(userId, valeur){
   }catch(e){
     showToast('Erreur — vérifiez la connexion.');
   }
+}
+
+// Composant pagination réutilisable
+function renderPagination(table, total, current, pageSize=10) {
+  if(total <= pageSize) return '';
+  const nbPages = Math.ceil(total / pageSize);
+  const maxVisible = 7;
+  let pages = [];
+
+  if(nbPages <= maxVisible) {
+    for(let i=1; i<=nbPages; i++) pages.push(i);
+  } else {
+    pages = [1];
+    let start = Math.max(2, current-2);
+    let end = Math.min(nbPages-1, current+2);
+    if(start > 2) pages.push('...');
+    for(let i=start; i<=end; i++) pages.push(i);
+    if(end < nbPages-1) pages.push('...');
+    pages.push(nbPages);
+  }
+
+  return '<div style="display:flex;align-items:center;gap:4px;justify-content:center;padding:16px 0;flex-wrap:wrap;">'
+    + '<span style="font-size:12px;color:#888;margin-right:8px;">' + total + ' résultats</span>'
+    + (current > 1 ? '<button onclick="state.pages.'+table+'='+(current-1)+';render();" style="padding:6px 10px;border:1px solid #ddd;border-radius:6px;background:#fff;cursor:pointer;font-size:13px;">‹</button>' : '')
+    + pages.map(p => p === '...'
+        ? '<span style="padding:4px 2px;color:#888;">…</span>'
+        : '<button onclick="state.pages.'+table+'='+p+';render();" style="padding:6px 10px;border:1px solid '+(p===current?'#E8A93B':'#ddd')+';border-radius:6px;background:'+(p===current?'#E8A93B':'#fff')+';color:'+(p===current?'#fff':'#333')+';cursor:pointer;font-size:13px;font-weight:'+(p===current?'700':'400')+';">'+p+'</button>'
+      ).join('')
+    + (current < nbPages ? '<button onclick="state.pages.'+table+'='+(current+1)+';render();" style="padding:6px 10px;border:1px solid #ddd;border-radius:6px;background:#fff;cursor:pointer;font-size:13px;">›</button>' : '')
+    + '</div>';
 }
 
 function renderAnalyse(){
@@ -3996,7 +4098,7 @@ function attachGlobalEvents(){
   const app = document.getElementById('app');
   if(app){
     app.addEventListener('click', async (e)=>{
-      const t = e.target.closest('button, a[data-nav], [data-tab], [data-del-prospect], [data-del-client], [data-del-sav], [data-del-vente], [data-del-stock], [data-edit-prospect], [data-edit-client], [data-edit-sav], [data-edit-vente], [data-edit-stock], [data-view-client], [data-convert-prospect], [data-edit-user], [data-toggle-user], [data-nav], [data-print-vente], [data-view-vente-client], [data-edit-ticket], [data-del-ticket], [data-edit-apporteur], [data-toggle-apporteur], [data-edit-avance], [data-kpi-action], [data-periode]');
+      const t = e.target.closest('button, a[data-nav], [data-tab], [data-del-prospect], [data-del-client], [data-del-sav], [data-del-vente], [data-del-stock], [data-edit-prospect], [data-edit-client], [data-edit-sav], [data-edit-vente], [data-edit-stock], [data-view-client], [data-convert-prospect], [data-edit-user], [data-toggle-user], [data-nav], [data-print-vente], [data-view-vente-client], [data-edit-ticket], [data-del-ticket], [data-edit-apporteur], [data-toggle-apporteur], [data-edit-avance], [data-traiter-avance], [data-kpi-action], [data-periode]');
       if(!t) return;
 
       // Navigation publique
@@ -4110,12 +4212,32 @@ function attachGlobalEvents(){
       if(t.id==='btn-new-ticket'){ state.modal={type:'ticket',data:null}; render(); return; }
       if(t.dataset.editTicket){ state.modal={type:'ticket',data:DB.tickets.find(x=>x.id===t.dataset.editTicket)||null}; render(); return; }
       if(t.dataset.delTicket){
-        if(!confirm('Supprimer ce ticket ?')) return;
+        showConfirm('Supprimer ce ticket ?', async()=>{ return; }); return;
         const id=t.dataset.delTicket;
         try{ await apiDelete('tickets',id); DB.tickets=DB.tickets.filter(x=>x.id!==id); render(); showToast('Ticket supprimé.'); }catch(e){ showToast('Erreur, réessaie.'); } return;
       }
       if(t.id==='btn-new-apporteur'){ state.modal={type:'apporteur',data:null}; render(); return; }
       if(t.id==='btn-new-avance'){ state.view='equipe'; state.modal={type:'avance',data:null}; render(); return; }
+      if(t.dataset.traiterAvance){
+        const tk = DB.tickets.find(x=>x.id===t.dataset.traiterAvance);
+        if(tk){
+          // Pré-remplir le formulaire avance avec les données de la demande
+          const avanceData = {
+            id: '',
+            commercial: tk.assigne || tk.creepar || '',
+            montant: tk.avanceMontant || tk.avancemontant || '',
+            motif: tk.avanceMotif || tk.avancemotif || tk.description || '',
+            echeances: '[]',
+            statut: 'en_cours',
+            dateCreation: todayISO(),
+            _fromTicketId: tk.id,
+            _duree: tk.avanceDuree || tk.avanceduree || '3',
+            _debut: tk.avanceDebut || tk.avancedebut || '',
+          };
+          state.view='equipe'; state.modal={type:'avance',data:avanceData}; render();
+        }
+        return;
+      }
       if(t.dataset.editAvance){ state.view='equipe'; state.modal={type:'avance',data:DB.avances.find(a=>a.id===t.dataset.editAvance)||null}; render(); return; }
       if(t.dataset.editApporteur){ state.modal={type:'apporteur',data:DB.apporteurs.find(a=>a.id===t.dataset.editApporteur)||null}; render(); return; }
       if(t.dataset.toggleApporteur){
@@ -4124,21 +4246,13 @@ function attachGlobalEvents(){
       }
       if(t.dataset.editTicket){ state.modal={type:'ticket',data:DB.tickets.find(x=>x.id===t.dataset.editTicket)||null}; render(); return; }
       if(t.dataset.delTicket){
-        if(!confirm('Supprimer ce ticket ?')) return;
-        await apiDelete('tickets', t.dataset.delTicket);
-        DB.tickets = DB.tickets.filter(x=>x.id!==t.dataset.delTicket);
-        render(); return;
+        showConfirm('Supprimer ce ticket ?', async()=>{ const _tid=t.dataset.delTicket; try{ await apiDelete('tickets',_tid); DB.tickets=DB.tickets.filter(x=>x.id!==_tid); render(); showToast('Ticket supprimé.'); }catch(e){ showToast('Erreur.'); } }); return;
       }
       if(t.id==='btn-export-ventes'){ exportCSV(DB.ventes,['dateMiseEnRelation','civilite','nom','prenom','adresse','telephone','typeArticle','businessUnit','gestionnaire','saisePar','assurance','prixVenteTotalSansRemise','remise','avance','dateRdv','commentaire'],'ventes_jericho.csv'); return; }
       if(t.id==='btn-new-vente'){ state.modal={type:'vente',data:null}; render(); return; }
       if(t.dataset.editVente){ state.modal={type:'vente',data:DB.ventes.find(v=>v.id===t.dataset.editVente)||null}; render(); return; }
       if(t.dataset.delVente){
-        if(!confirm('Supprimer cette vente ?')) return;
-        try{ await apiDelete('ventes',t.dataset.delVente); DB.ventes=DB.ventes.filter(v=>v.id!==t.dataset.delVente); render(); showToast('Vente supprimée.'); }catch(e){ showToast('Erreur, réessaie.'); } return;
-      }
-      if(t.dataset.editVente){ state.modal={type:'vente',data:DB.ventes.find(v=>v.id===t.dataset.editVente)||null}; render(); return; }
-      if(t.dataset.delVente){
-        showConfirm('Supprimer cette vente ?', async()=>{ const id=t.dataset.delVente; try{ await apiDelete('ventes',id); DB.ventes=DB.ventes.filter(v=>v.id!==id); render(); showToast('Vente supprimée.'); }catch(err){ showToast('Erreur, réessaie.'); } }); return;
+        showConfirm('Supprimer cette vente ?', async()=>{ const _vid=t.dataset.delVente; try{ await apiDelete('ventes',_vid); DB.ventes=DB.ventes.filter(v=>v.id!==_vid); render(); showToast('Vente supprimée.'); }catch(e){ showToast('Erreur.'); } }); return;
       }
 
       // Stock
@@ -4346,7 +4460,8 @@ function attachModalEvents(){
       source: document.getElementById('p-source').value,
       statut: document.getElementById('p-statut').value,
       commercial: document.getElementById('p-commercial').value.trim(),
-      notes: document.getElementById('p-notes').value.trim(),
+      notes: document.getElementById('p-notes').value,
+      dateNaissance: document.getElementById('p-dob')?.value||''.trim(),
       dateMiseEnRelation: document.getElementById('p-date').value || todayISO(),
       dateCreation: (state.modal.data && state.modal.data.dateCreation) || todayISO()
     };
@@ -4375,7 +4490,8 @@ function attachModalEvents(){
       telephone2: document.getElementById('c-tel2')?.value.replace(/[^0-9]/g,'')||'',
       email: document.getElementById('c-email').value.trim(),
       boutique: document.getElementById('c-boutique').value,
-      notes: document.getElementById('c-notes').value.trim(),
+      notes: document.getElementById('c-notes').value,
+      dateNaissance: document.getElementById('c-dob')?.value||''.trim(),
       dateCreation: (existing && existing.dateCreation) || todayISO(),
       historique: (existing && existing.historique) || []
     };
@@ -4552,6 +4668,15 @@ function attachModalEvents(){
   // Formulaire création/modification d'utilisateur
   // Formulaire ticket
   const ftk = document.getElementById('form-ticket');
+  // Toggle champs avance selon type ticket
+  const tkTypeEl = document.getElementById('tk-type');
+  if(tkTypeEl){
+    const toggleAvance = ()=>{
+      const av = document.getElementById('avance-fields');
+      if(av) av.style.display = tkTypeEl.value === "💰 Demande d'avance" ? 'contents' : 'none';
+    };
+    tkTypeEl.addEventListener('change', toggleAvance);
+  }
   if(ftk) ftk.addEventListener('submit', async(e)=>{
     e.preventDefault();
     const id = document.getElementById('tk-id')?.value || ('tk_'+Date.now()+'_'+Math.random().toString(36).slice(2,7));
@@ -4559,9 +4684,21 @@ function attachModalEvents(){
     const obj = {
       id,
       type: document.getElementById('tk-type').value,
-      titre: document.getElementById('tk-titre').value.trim(),
+      titre: (()=>{
+        const titre = document.getElementById('tk-titre').value.trim();
+        const type = document.getElementById('tk-type').value;
+        if(type === "💰 Demande d'avance" && !titre){
+          const montant = document.getElementById('tk-avance-montant')?.value||'';
+          return 'Demande d\'avance — '+state.commercial+(montant?' — '+fmtFCFA(Number(montant)):'');
+        }
+        return titre;
+      })(),
       description: document.getElementById('tk-desc').value.trim(),
-      assigne: document.getElementById('tk-assigne').value,
+      assigne: (()=>{
+        const type = document.getElementById('tk-type').value;
+        if(type === "💰 Demande d'avance") return 'Directrice';
+        return document.getElementById('tk-assigne').value;
+      })(),
       priorite: document.getElementById('tk-priorite').value,
       statut: document.getElementById('tk-statut').value,
       clientNom: document.getElementById('tk-client').value.trim(),
