@@ -11,6 +11,7 @@
 <div class="toast" id="toast"></div>
 
 <script>
+console.log("JERICHO v3.0 SUPABASE - " + new Date().toISOString());
 /* =========================================================
    DONNEES / API GOOGLE SHEETS
    ========================================================= */
@@ -249,7 +250,7 @@ function sessionStorageSafe(k){
   try{ return sessionStorage.getItem(k) || null; }catch(e){ return null; }
 }
 
-const state = {
+var state = {
   view: 'accueil',
   commercial: sessionStorageSafe('jo_commercial') || '',
   userId: sessionStorageSafe('jo_userId') || '',
@@ -340,6 +341,7 @@ const LOGO_SONAR = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQQAAACICAMAAA
    ========================================================= */
 function render(){
   const app = document.getElementById('app');
+  if(typeof state === 'undefined'){ console.error("state not defined!"); return; }
   if(state.view==='accueil'){
     app.innerHTML = renderPublic();
   } else {
