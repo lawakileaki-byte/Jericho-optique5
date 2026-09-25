@@ -53,12 +53,53 @@ function sbH() {
     'Prefer': 'return=representation'
   };
 }
+// Mapping colonnes Supabase (minuscules) → camelCase app
+const COL_MAP = {
+  // Ventes
+  'dateMiseEnRelation': 'datemiseenrelation',
+  'businessUnit': 'businessunit',
+  'typeArticle': 'typearticle',
+  'assuranceAutre': 'assuranceautre',
+  'saisePar': 'saisepar',
+  'odSphere': 'odsphere', 'odCylindre': 'odcylindre', 'odAxe': 'odaxe', 'odAddition': 'odaddition',
+  'ogSphere': 'ogsphere', 'ogCylindre': 'ogcylindre', 'ogAxe': 'ogaxe', 'ogAddition': 'ogaddition',
+  'caracteristiqueVerre': 'caracteristiqueverre',
+  'prixVenteMonture': 'prixventemonture', 'prixVenteLentilles': 'prixventelentilles',
+  'prixVenteLentilles2e': 'prixventelentilles2e', 'prixVenteMonture2e': 'prixventemonture2e',
+  'prixVenteTotalSansRemise': 'prixventetotalsansremise',
+  'montantBonNonEncaisse': 'montantbonnonencaisse',
+  'dateRdv': 'daterdv',
+  'apporteurAffaire': 'apporteuraffaire', 'apporteurAffaireAutre': 'apporteuraffaireautre',
+  // Prospects/Clients
+  'telephone2': 'telephone2',
+  // Tickets
+  'clientNom': 'clientnom', 'clientPrenom': 'clientprenom',
+  'clientCivilite': 'clientcivilite', 'clientTel': 'clienttel', 'clientTel2': 'clienttel2',
+  'dateCreation': 'datecreation', 'dateLimite': 'datelimite', 'venteId': 'venteid',
+  // Paie
+  'primeBrute': 'primebrute', 'prime70': 'prime70', 'prime30': 'prime30',
+  'prime30Libere': 'prime30libere', 'totalAvances': 'totalavances', 'netAPayer': 'netapayer',
+  'dateValidation': 'datevalidation',
+};
+
+function denormalizeRow(row) {
+  const out = {};
+  // Construire le mapping inverse : minuscule → camelCase
+  const inv = {};
+  for (const [camel, lower] of Object.entries(COL_MAP)) inv[lower] = camel;
+  for (const [k, v] of Object.entries(row)) {
+    out[inv[k] || k] = v;
+  }
+  return out;
+}
+
 async function apiGet(table) {
   const url = SUPABASE_URL + '/rest/v1/' + table + '?select=*&limit=5000';
   const res = await fetch(url, { headers: sbH() });
   if (!res.ok) throw new Error('GET ' + table + ' ' + res.status);
   const rows = await res.json();
-  return Array.isArray(rows) ? rows : [];
+  if (!Array.isArray(rows)) return [];
+  return rows.map(denormalizeRow);
 }
 async function apiUpsert(table, row) {
   const url = SUPABASE_URL + '/rest/v1/' + table;
@@ -76,11 +117,28 @@ async function apiDelete(table, id) {
   if (!res.ok) throw new Error('DELETE ' + table + ' ' + res.status);
   return true;
 }
+function normalizeUser(u) {
+  // Supabase retourne les colonnes en minuscules - on remet les bonnes clés
+  return {
+    id: u.id || '',
+    nom: u.nom || '',
+    motDePasse: u.motdepasse || u.motDePasse || '',
+    role: u.role || '',
+    boutique: u.boutique || '',
+    actif: u.actif || '',
+    objectifAnnuel: u.objectifannuel || u.objectifAnnuel || '',
+    objectifsMensuels: u.objectifsmensuels || u.objectifsMensuels || '{}',
+    salaireBase: u.salairebase || u.salaireBase || '',
+    dateCreation: u.datecreation || u.dateCreation || '',
+    derniereConnexion: u.derniereconnexion || u.derniereConnexion || '',
+  };
+}
 async function loadUsers() {
   try {
     const rows = await apiGet('utilisateurs');
-    USERS_ALL_CACHE = rows;
-    USERS_CACHE = rows.filter(u => u.actif === 'oui');
+    const normalized = rows.map(normalizeUser);
+    USERS_ALL_CACHE = normalized;
+    USERS_CACHE = normalized.filter(u => u.actif === 'oui');
   } catch(e) { console.error('loadUsers:', e); }
 }
 async function saveUser(userRow) {
