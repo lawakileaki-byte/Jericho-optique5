@@ -88,7 +88,13 @@ function denormalizeRow(row) {
   const inv = {};
   for (const [camel, lower] of Object.entries(COL_MAP)) inv[lower] = camel;
   for (const [k, v] of Object.entries(row)) {
-    out[inv[k] || k] = v;
+    const key = inv[k] || k;
+    // Parser automatiquement les champs JSON stockés comme string
+    if(key === 'historique' && typeof v === 'string'){
+      try{ out[key] = JSON.parse(v); }catch(e){ out[key] = []; }
+    } else {
+      out[key] = v;
+    }
   }
   return out;
 }
@@ -4385,7 +4391,10 @@ function attachModalEvents(){
     const clientId = document.getElementById('a-client-id').value;
     const client = DB.clients.find(c=>c.id===clientId);
     if(!client) return;
-    client.historique = client.historique || [];
+    if(typeof client.historique === 'string'){
+      try{ client.historique = JSON.parse(client.historique); }catch(e){ client.historique = []; }
+    }
+    client.historique = Array.isArray(client.historique) ? client.historique : [];
     client.historique.unshift({
       produit: document.getElementById('a-produit').value.trim(),
       montant: Number(document.getElementById('a-montant').value)||0,
@@ -4497,7 +4506,11 @@ function attachModalEvents(){
         client = { id: uid(), nom: obj.nom, prenom: obj.prenom, adresse: obj.adresse, telephone: obj.telephone, email:'', boutique: obj.businessUnit, notes:'', dateCreation: todayISO(), historique: [] };
         DB.clients.unshift(client);
       }
-      client.historique = client.historique || [];
+      // Parser historique si stocké comme string JSON dans Supabase
+      if(typeof client.historique === 'string'){
+        try{ client.historique = JSON.parse(client.historique); }catch(e){ client.historique = []; }
+      }
+      client.historique = Array.isArray(client.historique) ? client.historique : [];
       const total = venteTotal(obj);
       if(total > 0 && !existing){
         client.historique.unshift({ produit: obj.typeArticle, montant: total, boutique: obj.businessUnit, date: obj.dateMiseEnRelation || todayISO() });
