@@ -201,25 +201,9 @@ function showToast(msg){
 /* =========================================================
    ETAT GLOBAL UI
    ========================================================= */
-// ===== COMPTES EQUIPE (stockés dans Google Sheets - onglet Utilisateurs) =====
-const USERS_SHEET = "1epeNI7Xw4CPmzynQ76wknWssTUrBuojLMRJIXQ1WKRE";
-const SHEET_NAMES_USERS = { ...SHEET_NAMES, utilisateurs: "Utilisateurs" };
-
-// Cache local des utilisateurs (rechargé à chaque connexion)
+// Cache local des utilisateurs
 let USERS_CACHE = [];
 let USERS_ALL_CACHE = [];
-
-async function loadUsers(){
-  try{
-    const url = `${API_URL}?key=${encodeURIComponent(API_KEY)}&sheet=Utilisateurs`;
-    const res = await fetch(url);
-    const data = await res.json();
-    if(data.ok && data.rows) {
-      USERS_ALL_CACHE = data.rows;
-      USERS_CACHE = data.rows.filter(u=>u.actif==='oui');
-    }
-  }catch(e){ console.error('Erreur chargement utilisateurs', e); }
-}
 
 async function findAccount(identifiant, pwd){
   await loadUsers();
@@ -228,19 +212,8 @@ async function findAccount(identifiant, pwd){
   ) || null;
 }
 
-async function saveUser(userRow){
-  const res = await fetch(API_URL, {
-    method:'POST',
-    headers:{'Content-Type':'text/plain;charset=utf-8'},
-    body: JSON.stringify({key:API_KEY, sheet:'Utilisateurs', action:'upsert', row:userRow})
-  });
-  const data = await res.json();
-  if(data.error) throw new Error(data.error);
-  await loadUsers(); // Rafraîchir le cache
-}
-
 async function updateLastLogin(userId){
-  const user = USERS_CACHE.find(u=>u.id===userId);
+  const user = USERS_ALL_CACHE.find(u=>u.id===userId) || USERS_CACHE.find(u=>u.id===userId);
   if(user){ user.derniereConnexion = new Date().toISOString().slice(0,16).replace('T',' '); await saveUser(user); }
 }
 
