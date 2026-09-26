@@ -811,7 +811,7 @@ function renderDashboard(){
   const totalProspects = myProspects.length;
   const convertis = myProspects.filter(x=>x.statut==='Converti en client').length;
   const taux = totalProspects ? Math.round(convertis/totalProspects*100) : 0;
-  const savOuverts = s.filter(x=>x.statut!=='Résolu').length;
+  const savOuverts = DB.tickets.filter(t=>t.type==='🔧 SAV / Réparation' && t.statut!=='Terminé').length;
   const stockBas = st.filter(x=>Number(x.quantite)<=Number(x.seuilAlerte||0)).length;
 
   const user = USERS_CACHE.find(u=>u.id===state.userId);
@@ -852,7 +852,7 @@ function renderDashboard(){
           </div>
         </div>`;
       }).join('')}
-      ${clients.length>3?`<p style="font-size:12px;color:#E8A93B;margin-top:8px;text-align:center;">+${clients.length-3} autres clients dans la liste complète</p>`:''}
+      ${clients.length>3?`<p style="font-size:12px;margin-top:8px;text-align:center;"><button onclick="state.teamTab='clients';render();" style="background:none;border:none;color:#E8A93B;cursor:pointer;font-size:12px;font-weight:600;">+${clients.length-3} autres → Voir dans Clients</button></p>`:''}
     </div>`;
   }
 
@@ -1198,7 +1198,7 @@ function renderVentes(){
   const rows = rowsAll.slice((pageV-1)*PS_VENTES, pageV*PS_VENTES);
 
   const caTotal = rowsAll.reduce((a,v)=>a+venteTotal(v),0);
-  const resteTotal = rows.reduce((a,v)=>a+venteReste(v),0);
+  const resteTotal = rowsAll.reduce((a,v)=>a+venteReste(v),0);
   const periodeLabel = {mois:'Ce mois', semaine:'Cette semaine', annee:'Cette année', tout:'Tout l\'historique'};
   const titre = isAdmin() ? 'Toutes les ventes' : `Mes ventes : ${escapeHtml(state.commercial)}`;
 
@@ -1218,7 +1218,7 @@ function renderVentes(){
   </div>
 
   <div class="kpi-row">
-    <div class="kpi"><div class="lbl">Ventes</div><div class="val">${rows.length}</div><div class="sub">${periodeLabel[f.periode]}</div></div>
+    <div class="kpi"><div class="lbl">Ventes</div><div class="val">${totalVentes}</div><div class="sub">${periodeLabel[f.periode]}</div></div>
     <div class="kpi"><div class="lbl">CA ${periodeLabel[f.periode].toLowerCase()}</div><div class="val" style="font-size:${caTotal>9999999?'16px':'22px'};">${fmtFCFA(caTotal)}</div></div>
     <div class="kpi ${resteTotal>0?'warn':''}"><div class="lbl">Reste à encaisser</div><div class="val" style="font-size:${resteTotal>9999999?'16px':'22px'};">${fmtFCFA(resteTotal)}</div></div>
   </div>
@@ -2406,7 +2406,7 @@ function renderJournee(){
         </div>
       </div>`;
     }).join('')+
-    (boutique24.length>3?`<p style="font-size:12px;color:#E8A93B;margin-top:8px;text-align:center;">+${boutique24.length-3} autres dans le Tableau de bord</p>`:''),
+    (boutique24.length>3?`<p style="font-size:12px;margin-top:8px;text-align:center;"><button onclick="state.teamTab='dashboard';render();" style="background:none;border:none;color:#E8A93B;cursor:pointer;font-size:12px;font-weight:600;">+${boutique24.length-3} autres → Voir dans le Tableau de bord</button></p>`:''),
     'Aucun client en renouvellement urgent.'
   ) : ''}
 
@@ -2423,7 +2423,7 @@ function renderJournee(){
         </div>
       </div>`;
     }).join('')+
-    (boutique18.length>3?`<p style="font-size:12px;color:#E8A93B;margin-top:8px;text-align:center;">+${boutique18.length-3} autres dans le Tableau de bord</p>`:''),
+    (boutique18.length>3?`<p style="font-size:12px;margin-top:8px;text-align:center;"><button onclick="state.teamTab='dashboard';render();" style="background:none;border:none;color:#E8A93B;cursor:pointer;font-size:12px;font-weight:600;">+${boutique18.length-3} autres → Voir dans le Tableau de bord</button></p>`:''),
     'Aucun client à relancer.'
   ) : ''}
 
@@ -2452,7 +2452,7 @@ function renderJournee(){
         </div>
       </div>`;
     }).join('')+
-    (boutiqueLentilles.filter(c=>c.derniereDate>s24b).length>4?`<p style="font-size:12px;color:#E8A93B;margin-top:8px;text-align:center;">+${boutiqueLentilles.filter(c=>c.derniereDate>s24b).length-4} autres dans le Tableau de bord</p>`:''),
+    (boutiqueLentilles.filter(c=>c.derniereDate>s24b).length>4?`<p style="font-size:12px;color:#E8A93B;margin-top:8px;text-align:center;">+${boutiqueLentilles.filter(c=>c.derniereDate>s24b).length-4} autres → <button onclick="state.teamTab='dashboard';render();" style="background:none;border:none;color:#E8A93B;cursor:pointer;font-weight:600;">Tableau de bord</button></p>`:''),
     'Aucun renouvellement lentilles.'
   ) : ''}
   `;
@@ -2519,7 +2519,7 @@ function renderTickets(){
         <button class="icon-btn" data-edit-ticket="${t.id}">Traiter →</button>
       </div>
     </div>`).join('')}
-    ${ticketsLabo.length>3?`<p style="font-size:12px;color:#E8A93B;margin-top:8px;">+${ticketsLabo.length-3} autres dans la liste</p>`:''}
+    ${ticketsLabo.length>3?`<p style="font-size:12px;color:#E8A93B;margin-top:8px;">+${ticketsLabo.length-3} autres → <button onclick="state.teamTab='tickets';render();" style="background:none;border:none;color:#E8A93B;cursor:pointer;font-weight:600;text-decoration:underline;">Voir les tickets</button></p>`:''}
   </div>` : ''}
 
   <div class="toolbar">
