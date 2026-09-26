@@ -118,7 +118,13 @@ console.log("JERICHO v3.0 SUPABASE - " + new Date().toISOString());
 const SUPABASE_URL = 'https://hvlenkxjuauozezonsim.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh2bGVua3hqdWF1b3plem9uc2ltIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTAyNjkyNDIsImV4cCI6MjEwNTg0NTI0Mn0.DSA2FKKjlAQqEynjq3fe9LLDXj-oMwHf_X22wjHLAI4';
 
-let DB = { utilisateurs: [], prospects: [], clients: [], sav: [], stock: [], ventes: [], tickets: [], apporteurs: [], paie: [], avances: [] };
+let DB = { utilisateurs: [], prospects: [], clients: [], sav: [], stock: [], ventes: [], tickets: [], apporteurs: [], paie: [], avances: [], config: [] };
+const DEFAULT_PAYMENT_MODES = ['Espèces','Orange Money','Moov Money','Telecel Money','Chèque'];
+function getPaymentModes(){
+  const cfg = DB.config.find(c=>c.id==='modes_paiement');
+  if(cfg && cfg.valeur){ try{ const arr=JSON.parse(cfg.valeur); if(Array.isArray(arr)&&arr.length) return arr; }catch(e){} }
+  return [...DEFAULT_PAYMENT_MODES];
+}
 let loaded = false;
 let _clientIndexCache = null;
 let _clientIndexVentesLen = 0;
@@ -263,9 +269,16 @@ async function saveUser(userRow) {
   await apiUpsert('utilisateurs', userRow);
   await loadUsers();
 }
+async function savePaymentModes(modesArray) {
+  const row = { id: 'modes_paiement', valeur: JSON.stringify(modesArray) };
+  await apiUpsert('config', row);
+  // Mise à jour cache local
+  const idx = DB.config.findIndex(c=>c.id==='modes_paiement');
+  if(idx>=0) DB.config[idx]=row; else DB.config.push(row);
+}
 async function loadAll() {
   const prioritaires = ['utilisateurs', 'ventes', 'prospects', 'clients'];
-  const secondaires = ['sav', 'stock', 'tickets', 'apporteurs', 'paie', 'avances'];
+  const secondaires = ['sav', 'stock', 'tickets', 'apporteurs', 'paie', 'avances', 'config'];
   const resPrio = await Promise.allSettled(prioritaires.map(k => apiGet(k)));
   resPrio.forEach((r, i) => {
     const k = prioritaires[i];
@@ -1616,7 +1629,7 @@ function clientView(client){
   <!-- Historique achats -->
   <h4 style="font-size:13px;font-weight:700;margin-bottom:8px;">Historique (${ventesClient.length} achat${ventesClient.length>1?'s':''})</h4>
   ${ventesClient.length?`<div style="overflow-x:auto;"><table>
-    <thead><tr><th>Date</th><th>Type</th><th>Total</th><th>Remise</th><th>Avance</th><th>Reste</th><th>RDV</th><th>Gestionnaire</th><th></th></tr></thead>
+    <thead><tr><th>Date</th><th>Type</th><th>Total</th><th>Remise</th><th>Avance</th><th>Reste</th><th>Paiement</th><th>RDV</th><th>Gestionnaire</th><th></th></tr></thead>
     <tbody>${ventesClient.map(v=>`<tr>
       <td style="white-space:nowrap;">${fmtDate(v.dateMiseEnRelation)}</td>
       <td>${escapeHtml(v.typeArticle||'')}</td>
@@ -1624,6 +1637,7 @@ function clientView(client){
       <td>${v.remise&&Number(v.remise)>0?fmtFCFA(Number(v.remise)):'—'}</td>
       <td>${v.avance&&Number(v.avance)>0?fmtFCFA(Number(v.avance)):'—'}</td>
       <td>${venteReste(v)>0?`<span style="color:#A6402E;font-weight:600;">${fmtFCFA(venteReste(v))}</span>`:'<span style="color:#2d7a3a;">Soldé</span>'}</td>
+      <td style="font-size:11px;">${escapeHtml(v.modePaiement||'—')}</td>
       <td style="white-space:nowrap;">${fmtDate(v.dateRdv)}</td>
       <td style="font-size:11px;">${escapeHtml(v.gestionnaire||v.commercial||'')}</td>
       <td><button class="icon-btn" data-print-vente="${v.id}">🖨️</button></td>
@@ -1824,6 +1838,9 @@ function venteForm(data){
         </div>
       </div>
 
+      <div class="form-section-title">Paiement</div>
+      <div class="field"><label>Mode de paiement</label><select id="v-mode-paiement">${getPaymentModes().map(m=>`<option value="${escapeAttr(m)}" ${(d.modePaiement||'')===m?'selected':''}>${escapeHtml(m)}</option>`).join('')}</select></div>
+
       <div class="form-section-title">Suivi</div>
       <div class="field"><label>Date de RDV <span style="color:#A6402E;">*</span></label><input required type="date" id="v-rdv" value="${escapeAttr(d.dateRdv)}"></div>
       <div class="field"><label>Saisi par</label><input value="${escapeAttr(d.saisePar||state.commercial)}" readonly style="background:#f5f4f0;color:#888;cursor:not-allowed;"></div>
@@ -1955,6 +1972,29 @@ function renderAdminComptes(){
         }).join('') : `<tr class="empty-row"><td colspan="7">Aucun apporteur enregistré. Ajoutez vos ophtalmologues partenaires.</td></tr>`}
       </tbody>
     </table>
+  </div>
+
+  <!-- SECTION MODES DE PAIEMENT -->
+  <div class="main-head" style="margin-top:32px;">
+    <div><h2>Modes de paiement</h2><p>Liste des modes proposés dans le formulaire de vente. Modifiez-la librement.</p></div>
+    <button class="btn-sm" id="btn-add-paiement">+ Ajouter un mode</button>
+  </div>
+  <div class="panel" style="padding:0;">
+    <table>
+      <thead><tr><th>#</th><th>Libellé</th><th></th></tr></thead>
+      <tbody>
+        ${getPaymentModes().map((m,i)=>`
+          <tr>
+            <td style="color:#aaa;font-size:12px;">${i+1}</td>
+            <td><b>${escapeHtml(m)}</b></td>
+            <td><div class="row-actions">
+              <button class="icon-btn" data-edit-payment="${i}">Renommer</button>
+              <button class="icon-btn danger" data-del-payment="${i}">Supprimer</button>
+            </div></td>
+          </tr>`).join('')}
+      </tbody>
+    </table>
+    <div style="padding:10px 18px;font-size:12px;color:#999;">Les modes sont utilisés dans tous les nouveaux formulaires de vente. Modifier un libellé ici n'affecte pas les ventes déjà enregistrées.</div>
   </div>`;
 }
 
@@ -4212,6 +4252,7 @@ function imprimerRecu(v){
     ${avance ? `<div class="total-row"><span>Avance versée</span><span>- ${fmtFCFA(avance)}</span></div>` : ''}
     ${bon ? `<div class="total-row"><span>Bon assurance</span><span>- ${fmtFCFA(bon)}</span></div>` : ''}
     <div class="total-row remain"><span>${reste>0?'Reste à payer':'Soldé ✓'}</span><span>${reste>0?fmtFCFA(reste):'0'}</span></div>
+    ${v.modePaiement ? `<div class="total-row" style="opacity:0.75;font-size:12px;"><span>Mode de paiement</span><span>${escapeHtml(v.modePaiement)}</span></div>` : ''}
   </div>
 
   ${v.dateRdv ? `<div class="rdv-box">📅 <b>Date de rendez-vous :</b> ${fmtDate(v.dateRdv)}${v.commentaire?'<br>💬 '+escapeHtml(v.commentaire):''}</div>` : (v.commentaire?`<div class="rdv-box">💬 ${escapeHtml(v.commentaire)}</div>`:'')}
@@ -4276,7 +4317,7 @@ function attachGlobalEvents(){
   const app = document.getElementById('app');
   if(app){
     app.addEventListener('click', async (e)=>{
-      const t = e.target.closest('button, a[data-nav], [data-tab], [data-del-prospect], [data-del-client], [data-del-sav], [data-del-vente], [data-del-stock], [data-edit-prospect], [data-edit-client], [data-edit-sav], [data-edit-vente], [data-edit-stock], [data-view-client], [data-convert-prospect], [data-edit-user], [data-toggle-user], [data-nav], [data-print-vente], [data-view-vente-client], [data-edit-ticket], [data-del-ticket], [data-edit-apporteur], [data-toggle-apporteur], [data-edit-avance], [data-traiter-avance], [data-kpi-action], [data-periode]');
+      const t = e.target.closest('button, a[data-nav], [data-tab], [data-del-prospect], [data-del-client], [data-del-sav], [data-del-vente], [data-del-stock], [data-edit-prospect], [data-edit-client], [data-edit-sav], [data-edit-vente], [data-edit-stock], [data-view-client], [data-convert-prospect], [data-edit-user], [data-toggle-user], [data-nav], [data-print-vente], [data-view-vente-client], [data-edit-ticket], [data-del-ticket], [data-edit-apporteur], [data-toggle-apporteur], [data-edit-avance], [data-traiter-avance], [data-kpi-action], [data-periode], [data-edit-payment], [data-del-payment]');
       if(!t) return;
 
       // Navigation publique
@@ -4438,6 +4479,32 @@ function attachGlobalEvents(){
       // Admin utilisateurs
       if(t.id==='btn-new-user'){ state.view='equipe'; state.modal={type:'user',data:null}; render(); return; }
       if(t.id==='btn-dedup-ventes'){ await detecterDoublons(); return; }
+
+      // Modes de paiement
+      if(t.id==='btn-add-paiement'){
+        const lib = prompt('Libellé du nouveau mode de paiement :','');
+        if(!lib||!lib.trim()) return;
+        const modes = getPaymentModes(); modes.push(lib.trim());
+        await savePaymentModes(modes); render(); showToast('Mode ajouté.'); return;
+      }
+      if(t.dataset.editPayment !== undefined){
+        const idx = parseInt(t.dataset.editPayment);
+        const modes = getPaymentModes();
+        const ancien = modes[idx]||'';
+        const nv = prompt('Nouveau libellé :', ancien);
+        if(!nv||!nv.trim()) return;
+        modes[idx] = nv.trim();
+        await savePaymentModes(modes); render(); showToast('Mode mis à jour.'); return;
+      }
+      if(t.dataset.delPayment !== undefined){
+        const idx = parseInt(t.dataset.delPayment);
+        const modes = getPaymentModes();
+        if(modes.length<=1){ showToast('Il faut au moins un mode de paiement.'); return; }
+        showConfirm(`Supprimer "${modes[idx]}" ?`, async()=>{
+          modes.splice(idx,1);
+          await savePaymentModes(modes); render(); showToast('Mode supprimé.');
+        }); return;
+      }
       if(t.dataset.editUser){ const u=USERS_CACHE.find(x=>x.id===t.dataset.editUser); state.view='equipe'; state.modal={type:'user',data:u}; render(); return; }
       if(t.dataset.toggleUser){
         const u=USERS_CACHE.find(x=>x.id===t.dataset.toggleUser);
@@ -4785,6 +4852,7 @@ function attachModalEvents(){
       prixVenteLentilles2e: val('v-prix-lentilles-2e'), prixVenteMonture2e: val('v-prix-monture-2e'),
       prixVenteTotalSansRemise: val('v-prix-total'), remise: val('v-remise'),
       avance: val('v-avance'), montantBonNonEncaisse: val('v-bon'),
+      modePaiement: val('v-mode-paiement'),
       dateRdv: val('v-rdv'), commentaire: val('v-commentaire').trim(),
       saisePar: (existing && existing.saisePar) || state.commercial,
       commercial: (existing && existing.commercial) || state.commercial,
