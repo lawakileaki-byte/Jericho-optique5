@@ -2785,7 +2785,7 @@ function ticketForm(data){
           ? `<input value="Directrice" readonly style="background:#f5f4f0;color:#888;cursor:not-allowed;"><input type="hidden" id="tk-assigne" value="Directrice">`
           : canChangeAssigne
             ? `<select required id="tk-assigne">${STAFF_ALL.map(s=>`<option ${d.assigne===s?'selected':''}>${s}</option>`).join('')}</select>`
-            : `<input value="${escapeAttr(d.assigne)}" readonly style="background:#f5f4f0;color:#888;cursor:not-allowed;"><input type="hidden" id="tk-assigne" value="${escapeAttr(d.assigne)}">`
+            : `<input id="tk-assigne-display" value="${escapeAttr(d.assigne)}" readonly style="background:#f5f4f0;color:#888;cursor:not-allowed;"><input type="hidden" id="tk-assigne" value="${escapeAttr(d.assigne)}">`
         }
       </div>
       <div class="field"><label>Date limite</label><input type="date" id="tk-datelimite" value="${escapeAttr(d.dateLimite||'')}"></div>
@@ -4956,15 +4956,21 @@ function attachModalEvents(){
       if(av) av.style.display = isAvance ? 'contents' : 'none';
       if(cl) cl.style.display = isPayeAvance ? 'none' : 'contents';
       if(boutiqueWrap) boutiqueWrap.style.display = isAvance ? 'none' : '';
+      // Supprimer/restaurer required sur tk-client selon visibilité
+      const tkClientEl = document.getElementById('tk-client');
+      if(tkClientEl) tkClientEl.required = !isPayeAvance;
       // Assigné à : forcer Directrice pour demande d'avance
       const assigneEl = document.getElementById('tk-assigne');
-      if(assigneEl && isAvance){
-        if(assigneEl.tagName === 'SELECT'){
-          // Remplacer le select par un champ readonly
-          const wrap = assigneEl.parentElement;
-          assigneEl.outerHTML = `<input value="Directrice" readonly style="background:#f5f4f0;color:#888;cursor:not-allowed;" id="tk-assigne-display"><input type="hidden" id="tk-assigne" value="Directrice">`;
+      if(isAvance){
+        if(assigneEl && assigneEl.tagName === 'SELECT'){
+          // Admin : le select existe, le remplacer par readonly + hidden
+          assigneEl.outerHTML = `<input id="tk-assigne-display" value="Directrice" readonly style="background:#f5f4f0;color:#888;cursor:not-allowed;"><input type="hidden" id="tk-assigne" value="Directrice">`;
         } else {
-          assigneEl.value = 'Directrice';
+          // Non-admin : mettre à jour la valeur dans le hidden input
+          if(assigneEl) assigneEl.value = 'Directrice';
+          // Et mettre à jour l'affichage
+          const displayEl = document.getElementById('tk-assigne-display');
+          if(displayEl) displayEl.value = 'Directrice';
         }
       }
     };
