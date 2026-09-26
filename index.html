@@ -909,6 +909,19 @@ function renderPublic(){
         </div>
         <div id="rdv-form-wrap" style="background:#f8f8f6;border-radius:18px;padding:32px 28px;border:1px solid rgba(0,0,0,0.07);">
           <form id="rdv-public-form" autocomplete="off">
+            <div style="margin-bottom:14px;">
+              <label style="display:block;font-size:12px;font-weight:700;color:#444;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.04em;">Civilité *</label>
+              <div style="display:flex;gap:10px;">
+                <label style="display:flex;align-items:center;gap:7px;cursor:pointer;padding:10px 16px;border:1px solid #ddd;border-radius:9px;font-size:14px;background:#fff;flex:1;transition:border .15s;" id="rdv-civ-m-lbl">
+                  <input type="radio" name="rdv-civilite" id="rdv-civ-m" value="M." required style="accent-color:#E8A93B;width:15px;height:15px;" onchange="document.getElementById('rdv-civ-m-lbl').style.borderColor='#E8A93B';document.getElementById('rdv-civ-f-lbl').style.borderColor='#ddd';">
+                  Monsieur
+                </label>
+                <label style="display:flex;align-items:center;gap:7px;cursor:pointer;padding:10px 16px;border:1px solid #ddd;border-radius:9px;font-size:14px;background:#fff;flex:1;transition:border .15s;" id="rdv-civ-f-lbl">
+                  <input type="radio" name="rdv-civilite" id="rdv-civ-f" value="Mme" style="accent-color:#E8A93B;width:15px;height:15px;" onchange="document.getElementById('rdv-civ-f-lbl').style.borderColor='#E8A93B';document.getElementById('rdv-civ-m-lbl').style.borderColor='#ddd';">
+                  Madame
+                </label>
+              </div>
+            </div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;">
               <div>
                 <label style="display:block;font-size:12px;font-weight:700;color:#444;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.04em;">Prénom *</label>
@@ -1006,19 +1019,25 @@ function renderPublic(){
         e.preventDefault();
         const btn = document.getElementById('rdv-submit-btn');
         const errDiv = document.getElementById('rdv-msg-error');
+        const civRadio = document.querySelector('input[name="rdv-civilite"]:checked');
+        const civilite = civRadio ? civRadio.value : '';
         const prenom = document.getElementById('rdv-prenom').value.trim();
         const nom = document.getElementById('rdv-nom').value.trim();
         const tel = document.getElementById('rdv-tel').value.trim();
         const boutique = document.getElementById('rdv-boutique').value;
         const motif = document.getElementById('rdv-motif').value;
         errDiv.style.display = 'none';
+        if(!civilite){ errDiv.textContent='Merci de sélectionner votre civilité (M. ou Mme).'; errDiv.style.display='block'; return; }
         if(!prenom||!nom||!tel||!motif){ errDiv.textContent='Merci de remplir tous les champs obligatoires.'; errDiv.style.display='block'; return; }
         btn.textContent = 'Envoi en cours…'; btn.disabled = true;
         try{
           const today = new Date().toISOString().slice(0,10);
-          // Payload en minuscules = format attendu par Supabase (colonnes snake_case)
+          // Génération ID unique (même logique que uid() dans l'app)
+          const newId = Date.now().toString(36) + Math.random().toString(36).slice(2,7);
+          // Payload en minuscules = format attendu par Supabase
           const payload = {
-            id: uid(),
+            id: newId,
+            civilite: civilite,
             nom: nom,
             prenom: prenom,
             telephone: tel,
