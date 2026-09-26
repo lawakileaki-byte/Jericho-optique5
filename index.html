@@ -118,7 +118,7 @@ console.log("JERICHO v3.0 SUPABASE - " + new Date().toISOString());
 const SUPABASE_URL = 'https://hvlenkxjuauozezonsim.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh2bGVua3hqdWF1b3plem9uc2ltIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTAyNjkyNDIsImV4cCI6MjEwNTg0NTI0Mn0.DSA2FKKjlAQqEynjq3fe9LLDXj-oMwHf_X22wjHLAI4';
 
-let DB = { prospects: [], clients: [], sav: [], stock: [], ventes: [], tickets: [], apporteurs: [], paie: [], avances: [] };
+let DB = { utilisateurs: [], prospects: [], clients: [], sav: [], stock: [], ventes: [], tickets: [], apporteurs: [], paie: [], avances: [] };
 let loaded = false;
 let _clientIndexCache = null;
 let _clientIndexVentesLen = 0;
@@ -942,7 +942,7 @@ function renderDashboard(){
         const num = effTel.startsWith('226') ? effTel : '226'+effTel;
         const msg = encodeURIComponent(msgWA.replace('{nom}', bonjourClient(cl.nom,cl.prenom,cl.civilite)));
         return `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--line);flex-wrap:wrap;gap:8px;">
-          <div><b style="font-size:13px;">${escapeHtml(cl.nom)} ${escapeHtml(cl.prenom||'')}</b><span style="font-size:11px;color:#888;margin-left:8px;">Dernier achat : ${fmtDate(cl.derniereDate)} · ${cl.nbVentes} achat(s}</span></div>
+          <div><b style="font-size:13px;">${escapeHtml(cl.nom)} ${escapeHtml(cl.prenom||'')}</b><span style="font-size:11px;color:#888;margin-left:8px;">Dernier achat : ${fmtDate(cl.derniereDate)} · ${cl.nbVentes} achat(s)</span></div>
           <div style="display:flex;gap:8px;align-items:center;">
             <span style="font-size:12px;color:#555;">${escapeHtml(cl.telephone)}</span>
             <a href="https://wa.me/${num}?text=${msg}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:5px;background:#25D366;color:#fff;text-decoration:none;padding:5px 10px;border-radius:6px;font-size:11px;font-weight:600;">
@@ -4390,9 +4390,7 @@ function attachGlobalEvents(){
       if(t.id==='btn-new-ticket'){ state.modal={type:'ticket',data:null}; render(); return; }
       if(t.dataset.editTicket){ state.modal={type:'ticket',data:DB.tickets.find(x=>x.id===t.dataset.editTicket)||null}; render(); return; }
       if(t.dataset.delTicket){
-        showConfirm('Supprimer ce ticket ?', async()=>{ return; }); return;
-        const id=t.dataset.delTicket;
-        try{ await apiDelete('tickets',id); DB.tickets=DB.tickets.filter(x=>x.id!==id); render(); showToast('Ticket supprimé.'); }catch(e){ showToast('Erreur, réessaie.'); } return;
+        showConfirm('Supprimer ce ticket ?', async()=>{ const id=t.dataset.delTicket; try{ await apiDelete('tickets',id); DB.tickets=DB.tickets.filter(x=>x.id!==id); render(); showToast('Ticket supprimé.'); }catch(e){ showToast('Erreur, réessaie.'); } }); return;
       }
       if(t.id==='btn-new-apporteur'){ state.modal={type:'apporteur',data:null}; render(); return; }
       if(t.id==='btn-new-avance'){ state.view='equipe'; state.modal={type:'avance',data:null}; render(); return; }
@@ -4421,10 +4419,6 @@ function attachGlobalEvents(){
       if(t.dataset.toggleApporteur){
         const a = DB.apporteurs.find(x=>x.id===t.dataset.toggleApporteur);
         if(a){ a.actif = (a.actif==='false'||a.actif===false) ? true : false; await apiUpsert('apporteurs',a); render(); } return;
-      }
-      if(t.dataset.editTicket){ state.modal={type:'ticket',data:DB.tickets.find(x=>x.id===t.dataset.editTicket)||null}; render(); return; }
-      if(t.dataset.delTicket){
-        showConfirm('Supprimer ce ticket ?', async()=>{ const _tid=t.dataset.delTicket; try{ await apiDelete('tickets',_tid); DB.tickets=DB.tickets.filter(x=>x.id!==_tid); render(); showToast('Ticket supprimé.'); }catch(e){ showToast('Erreur.'); } }); return;
       }
       if(t.id==='btn-export-ventes'){ exportCSV(DB.ventes,['dateMiseEnRelation','civilite','nom','prenom','adresse','telephone','typeArticle','businessUnit','gestionnaire','saisePar','assurance','prixVenteTotalSansRemise','remise','avance','dateRdv','commentaire'],'ventes_jericho.csv'); return; }
       if(t.id==='btn-new-vente'){ state.modal={type:'vente',data:null}; render(); return; }
@@ -4669,7 +4663,7 @@ function attachModalEvents(){
       email: document.getElementById('c-email').value.trim(),
       boutique: document.getElementById('c-boutique').value,
       notes: document.getElementById('c-notes').value,
-      dateNaissance: document.getElementById('c-dob')?.value||''.trim(),
+      dateNaissance: (document.getElementById('c-dob')?.value||'').trim(),
       dateCreation: (existing && existing.dateCreation) || todayISO(),
       historique: (existing && existing.historique) || []
     };
