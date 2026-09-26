@@ -2749,6 +2749,20 @@ function reunionExport(semKey){
 /* =========================================================
    ADMIN — GESTION DES COMPTES
    ========================================================= */
+window.setAdminTab = function(tab){
+  var tabs = ['comptes','objectifs','apporteurs','paiements','assureurs','laboratoires'];
+  tabs.forEach(function(t){
+    var sec = document.getElementById('admin-section-'+t);
+    var btn = document.getElementById('admin-tab-'+t);
+    if(sec) sec.style.display = (t===tab) ? '' : 'none';
+    if(btn){
+      btn.style.color = (t===tab) ? 'var(--ink)' : '#888';
+      btn.style.borderBottomColor = (t===tab) ? 'var(--gold)' : 'transparent';
+      btn.style.fontWeight = (t===tab) ? '700' : '600';
+    }
+  });
+};
+
 function renderAdminComptes(){
   const users = USERS_CACHE;
   const nowM = new Date();
@@ -2788,9 +2802,22 @@ function renderAdminComptes(){
 
   return `
   <div class="main-head">
-    <div><h2>Gestion des comptes</h2><p>Comptes, objectifs et suivi de l'équipe en temps réel.</p></div>
+    <div><h2>Administration</h2><p>Comptes, paramètres et référentiels de l'application.</p></div>
+  </div>
+
+  <!-- Onglets de navigation admin -->
+  <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:24px;border-bottom:2px solid var(--line);padding-bottom:0;">
+    ${['comptes','objectifs','apporteurs','paiements','assureurs','laboratoires'].map(tab=>`
+    <button onclick="setAdminTab('${tab}')" id="admin-tab-${tab}"
+      style="padding:9px 16px;border:none;border-bottom:2px solid transparent;margin-bottom:-2px;background:none;font-size:13.5px;font-weight:600;cursor:pointer;color:#888;border-radius:4px 4px 0 0;transition:color .15s,border-color .15s;"
+      class="admin-tab-btn">${{'comptes':'👥 Comptes','objectifs':'🎯 Objectifs','apporteurs':'🤝 Apporteurs','paiements':'💳 Paiements','assureurs':'🏥 Assureurs','laboratoires':'🔬 Laboratoires'}[tab]}</button>`).join('')}
+  </div>
+
+  <div id="admin-section-comptes">
+  <div class="main-head" style="margin-top:0;">
+    <div><h3 style="font-size:18px;">Comptes utilisateurs</h3></div>
     <button class="btn-sm" id="btn-new-user">+ Nouveau compte</button>
-    <button class="btn-sm btn-ghost" id="btn-dedup-ventes" style="font-size:12px;">🔍 Détecter doublons ventes</button>
+    <button class="btn-sm btn-ghost" id="btn-dedup-ventes" style="font-size:12px;">🔍 Détecter doublons</button>
   </div>
 
   ${commerciaux.length ? `
@@ -2835,10 +2862,38 @@ function renderAdminComptes(){
       </tbody>
     </table>
   </div>
+  </div><!-- fin #admin-section-comptes -->
+
+  <!-- SECTION OBJECTIFS -->
+  <div id="admin-section-objectifs" style="display:none;">
+  <div class="main-head" style="margin-top:0;">
+    <div><h3 style="font-size:18px;">Suivi des objectifs</h3><p>Objectifs mensuels et annuels par commercial.</p></div>
+  </div>
+  ${commerciaux.length ? `
+  <div class="panel">
+    <div style="overflow-x:auto;"><table>
+      <thead>
+        <tr>
+          <th>Commercial</th>
+          <th style="text-align:right;">Obj. mois</th>
+          <th style="text-align:right;">CA mois</th>
+          <th style="text-align:right;">%</th>
+          <th>Statut</th>
+          <th style="text-align:right;">Obj. annuel</th>
+          <th style="text-align:right;">CA année</th>
+          <th style="text-align:right;">%</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>${suiviRows}</tbody>
+    </table></div>
+  </div>` : '<div class="panel"><p style="color:#888;text-align:center;padding:20px;">Aucun commercial actif.</p></div>'}
+  </div><!-- fin #admin-section-objectifs -->
 
   <!-- SECTION APPORTEURS D'AFFAIRE -->
-  <div class="main-head" style="margin-top:32px;">
-    <div><h2>Apporteurs d'affaire</h2><p>Ophtalmologues et médecins qui orientent des clients vers Jéricho Optique.</p></div>
+  <div id="admin-section-apporteurs" style="display:none;">
+  <div class="main-head" style="margin-top:0;">
+    <div><h3 style="font-size:18px;">Apporteurs d'affaire</h3><p>Ophtalmologues et médecins qui orientent des clients vers Jéricho Optique.</p></div>
     <button class="btn-sm" id="btn-new-apporteur">+ Nouvel apporteur</button>
   </div>
   <div class="panel" style="padding:0;">
@@ -2866,10 +2921,12 @@ function renderAdminComptes(){
       </tbody>
     </table>
   </div>
+  </div><!-- fin #admin-section-apporteurs -->
 
   <!-- SECTION MODES DE PAIEMENT -->
-  <div class="main-head" style="margin-top:32px;">
-    <div><h2>Modes de paiement</h2><p>Liste des modes proposés dans le formulaire de vente. Modifiez-la librement.</p></div>
+  <div id="admin-section-paiements" style="display:none;">
+  <div class="main-head" style="margin-top:0;">
+    <div><h3 style="font-size:18px;">Modes de paiement</h3><p>Liste des modes proposés dans le formulaire de vente. Modifiez-la librement.</p></div>
     <button class="btn-sm" id="btn-add-paiement">+ Ajouter un mode</button>
   </div>
   <div class="panel" style="padding:0;">
@@ -2889,10 +2946,12 @@ function renderAdminComptes(){
     </table>
     <div style="padding:10px 18px;font-size:12px;color:#999;">Les modes sont utilisés dans tous les nouveaux formulaires de vente. Modifier un libellé ici n'affecte pas les ventes déjà enregistrées.</div>
   </div>
+  </div><!-- fin #admin-section-paiements -->
 
   <!-- SECTION ASSURANCES -->
-  <div class="main-head" style="margin-top:32px;">
-    <div><h2>Assureurs</h2><p>Liste des compagnies d'assurance proposées dans le formulaire de vente.</p></div>
+  <div id="admin-section-assureurs" style="display:none;">
+  <div class="main-head" style="margin-top:0;">
+    <div><h3 style="font-size:18px;">Assureurs</h3><p>Liste des compagnies d'assurance proposées dans le formulaire de vente.</p></div>
     <button class="btn-sm" id="btn-add-assurance">+ Ajouter</button>
   </div>
   <div class="panel" style="padding:0;">
@@ -2912,10 +2971,12 @@ function renderAdminComptes(){
     </table>
     <div style="padding:10px 18px;font-size:12px;color:#999;">« Pas d'assurance » ne peut pas être supprimé.</div>
   </div>
+  </div><!-- fin #admin-section-assureurs -->
 
   <!-- SECTION LABORATOIRES -->
-  <div class="main-head" style="margin-top:32px;">
-    <div><h2>Laboratoires</h2><p>Labos optiques partenaires disponibles dans le formulaire de vente.</p></div>
+  <div id="admin-section-laboratoires" style="display:none;">
+  <div class="main-head" style="margin-top:0;">
+    <div><h3 style="font-size:18px;">Laboratoires</h3><p>Labos optiques partenaires disponibles dans le formulaire de vente.</p></div>
     <button class="btn-sm" id="btn-add-labo">+ Ajouter</button>
   </div>
   <div class="panel" style="padding:0;">
@@ -2934,7 +2995,13 @@ function renderAdminComptes(){
       </tbody>
     </table>
     <div style="padding:10px 18px;font-size:12px;color:#999;">« Autre » permet une saisie libre dans le formulaire de vente.</div>
-  </div>`;
+  </div>
+  </div><!-- fin #admin-section-laboratoires -->
+
+  <script>
+  // Activer l'onglet "comptes" par défaut au premier rendu
+  setTimeout(function(){ if(typeof setAdminTab==='function') setAdminTab('comptes'); }, 0);
+  </script>`;
 }
 
 function apporteurForm(data){
@@ -5702,8 +5769,9 @@ function attachVenteConditionalLogic(){
     if(!list || !jsonInput) return;
     let versements = [];
     try{ versements = JSON.parse(jsonInput.value||'[]'); }catch(e){}
+    const today = new Date().toISOString().slice(0,10);
     list.innerHTML = versements.map((v,i)=>`
-      <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:6px;align-items:center;" data-vidx="${i}">
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:6px;align-items:center;" data-vidx="${i}">
         <input type="number" min="0" step="500" placeholder="Montant" value="${Number(v.montant)||''}"
           style="padding:8px 10px;border:1px solid #ddd;border-radius:7px;font-size:14px;font-weight:600;"
           oninput="updateVersement(${i},'montant',this.value)">
@@ -5711,6 +5779,9 @@ function attachVenteConditionalLogic(){
           onchange="updateVersement(${i},'mode',this.value)">
           ${modes.map(m=>`<option value="${escapeAttr(m)}" ${v.mode===m?'selected':''}>${escapeHtml(m)}</option>`).join('')}
         </select>
+        <input type="date" value="${escapeAttr(v.date||today)}"
+          style="padding:8px 10px;border:1px solid #ddd;border-radius:7px;font-size:13px;"
+          onchange="updateVersement(${i},'date',this.value)">
         <button type="button" onclick="removeVersement(${i})"
           style="width:30px;height:30px;border:none;border-radius:6px;background:#fee2e2;color:#A6402E;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;">×</button>
       </div>`).join('');
@@ -5727,7 +5798,7 @@ function attachVenteConditionalLogic(){
     if(!jsonInput) return;
     let versements = [];
     try{ versements = JSON.parse(jsonInput.value||'[]'); }catch(e){}
-    versements.push({ montant:'', mode: getPaymentModes()[0] || 'Espèces' });
+    versements.push({ montant:'', mode: getPaymentModes()[0] || 'Espèces', date: new Date().toISOString().slice(0,10) });
     jsonInput.value = JSON.stringify(versements);
     renderVersements();
   };
