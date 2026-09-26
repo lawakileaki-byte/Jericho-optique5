@@ -1186,7 +1186,8 @@ function renderDashboard(){
   const debutMois = `${annee}-${String(moisIdx+1).padStart(2,'0')}-01`;
   const debutAnnee = `${annee}-01-01`;
 
-  const mesVentes = iAmAdmin ? DB.ventes : DB.ventes.filter(v=>v.gestionnaire===myName); // CA porté par le gestionnaire
+  // CA porté par le gestionnaire, excluant les ventes avec apporteur d'affaire
+  const mesVentes = iAmAdmin ? DB.ventes : DB.ventes.filter(v=>v.gestionnaire===myName && !aApporteur(v));
   const myProspects = iAmAdmin ? p : p.filter(x=>x.commercial===myName);
 
   const ventesMois = mesVentes.filter(v=>(v.dateMiseEnRelation||'').slice(0,10)>=debutMois);
@@ -1598,6 +1599,16 @@ function venteTotal(v){
   if(v.typeArticle==='Accessoires') return (Number(v.prixVenteMontureAcc)||0) - (Number(v.remiseAcc)||0) + (Number(v.montantAchatSpray)||0) + (Number(v.montantVenteEtui)||0) + (Number(v.montantVenteEssuieVerre)||0);
   return (Number(v.prixVenteTotalSansRemise)||0) - (Number(v.remise)||0);
 }
+// Retourne true si la vente est apportée par un apporteur d'affaire
+// → dans ce cas, le CA est attribué à l'apporteur et NON au commercial/gestionnaire
+function aApporteur(v){
+  const a = (v.apporteurAffaire||'').trim();
+  return a !== '' && a !== 'Autre';
+}
+// Filtre à appliquer sur les ventes d'un commercial : exclut les ventes avec apporteur
+function ventesCommercial(ventes, nom){
+  return ventes.filter(v => v.gestionnaire === nom && !aApporteur(v));
+}
 function venteReste(v){
   // Bon non encaissé ne s'applique que s'il y a une assurance (pas "Pas d'assurance")
   const avance = Number(v.avance)||0;
@@ -1644,7 +1655,9 @@ function renderVentes(){
   state.pages.ventes = pageV;
   const rows = rowsAll.slice((pageV-1)*PS_VENTES, pageV*PS_VENTES);
 
-  const caTotal = rowsAll.reduce((a,v)=>a+venteTotal(v),0);
+  // CA = ventes sans apporteur uniquement ; les ventes avec apporteur sont visibles mais hors CA perso
+  const caTotal = rowsAll.filter(v=>!aApporteur(v)).reduce((a,v)=>a+venteTotal(v),0);
+  const caTotalApporteur = rowsAll.filter(v=>aApporteur(v)).reduce((a,v)=>a+venteTotal(v),0);
   const resteTotal = rowsAll.reduce((a,v)=>a+venteReste(v),0);
   const periodeLabel = {mois:'Ce mois', semaine:'Cette semaine', annee:'Cette année', tout:'Tout l\'historique'};
   const titre = isAdmin() ? 'Toutes les ventes' : `Mes ventes : ${escapeHtml(state.commercial)}`;
@@ -1666,7 +1679,8 @@ function renderVentes(){
 
   <div class="kpi-row">
     <div class="kpi"><div class="lbl">Ventes</div><div class="val">${totalVentes}</div><div class="sub">${periodeLabel[f.periode]}</div></div>
-    <div class="kpi"><div class="lbl">CA ${periodeLabel[f.periode].toLowerCase()}</div><div class="val" style="font-size:${caTotal>9999999?'16px':'22px'};">${fmtFCFA(caTotal)}</div></div>
+    <div class="kpi"><div class="lbl">Mon CA ${periodeLabel[f.periode].toLowerCase()}</div><div class="val" style="font-size:${caTotal>9999999?'16px':'22px'};">${fmtFCFA(caTotal)}</div>${!isAdmin()&&caTotalApporteur>0?`<div class="sub" style="color:#888;">+ ${fmtFCFA(caTotalApporteur)} apporteurs (hors CA)</div>`:''}
+    </div>
     <div class="kpi ${resteTotal>0?'warn':''}"><div class="lbl">Reste à encaisser</div><div class="val" style="font-size:${resteTotal>9999999?'16px':'22px'};">${fmtFCFA(resteTotal)}</div></div>
   </div>
 
@@ -1686,19 +1700,22 @@ function renderVentes(){
 
   <div class="panel" style="padding:0;">
     <table>
-      <thead><tr><th>Client</th><th>Contact</th><th>Article</th><th>Boutique</th><th>Gestionnaire</th><th>Saisi par</th><th>Total</th><th>Reste à payer</th><th>RDV</th><th></th></tr></thead>
+      <thead><tr><th>Client</th><th>Contact</th><th>Article</th><th>Boutique</th><th>Gestionnaire</th><th>Apporteur</th><th>Total</th><th>Reste à payer</th><th>RDV</th><th></th></tr></thead>
       <tbody>
         ${rows.length ? rows.map(v=>{
           const reste = venteReste(v);
+          const hasApporteur = aApporteur(v);
+          const apporteurLabel = v.apporteurAffaire==='Autre' ? (v.apporteurAffaireAutre||'Autre') : (v.apporteurAffaire||'');
           return `
-          <tr>
+          <tr${hasApporteur?' style="background:rgba(99,102,241,0.04);"':''}>
             <td><div style="font-size:11px;color:#888;margin-bottom:1px;">${v.civilite?escapeHtml(v.civilite):''}</div><b>${escapeHtml(v.nom)} ${escapeHtml(v.prenom||'')}</b><div style="font-size:11px;color:#888;">${fmtDate(v.dateMiseEnRelation)}</div></td>
             <td>${escapeHtml(v.telephone||'—')}</td>
             <td>${escapeHtml(v.typeArticle)}</td>
             <td>${escapeHtml(v.businessUnit||'—')}</td>
             <td>${escapeHtml(v.gestionnaire==='Autre'?(v.gestionnaireAutre||'—'):(v.gestionnaire||'—'))}</td>
-            <td style="font-size:11px;color:#888;">${escapeHtml(v.saisePar||v.commercial||'—')}</td>
-            <td>${fmtFCFA(venteTotal(v))}</td>
+            <td>${hasApporteur?`<span class="badge" style="background:#ede9fe;color:#5b21b6;font-size:10px;">${escapeHtml(apporteurLabel)}</span>`:'<span style="color:#bbb;font-size:11px;">—</span>'}</td>
+            <td>${fmtFCFA(venteTotal(v))}${hasApporteur?` <span title="CA hors quota commercial" style="font-size:10px;color:#7c3aed;">🔗</span>`:''}
+            </td>
             <td>${reste>0 ? `<span class="badge b-lowstock">${fmtFCFA(reste)}</span>` : `<span class="badge b-okstock">Soldé</span>`}</td>
             <td>${fmtDate(v.dateRdv)}</td>
             <td><div class="row-actions">
@@ -1708,7 +1725,7 @@ function renderVentes(){
               ${isAdmin() ? `<button class="icon-btn danger" data-del-vente="${v.id}">Suppr.</button>` : ''}
             </div></td>
           </tr>`;
-        }).join('') : `<tr class="empty-row"><td colspan="9">Aucune vente sur cette période. Change la période ou ajoute une nouvelle vente.</td></tr>`}
+        }).join('') : `<tr class="empty-row"><td colspan="10">Aucune vente sur cette période. Change la période ou ajoute une nouvelle vente.</td></tr>`}
       </tbody>
     </table>
   </div>
@@ -2237,9 +2254,10 @@ function renderReunion(){
   // Données par commercial
   const dataCommerciaux = commerciaux.map(u=>{
     const nom = u.nom;
-    const vSem = ventesToutes.filter(v=>v.gestionnaire===nom && venteSem(v));
-    const vSemPrec = ventesToutes.filter(v=>v.gestionnaire===nom && ventePrecSem(v));
-    const vMois = ventesToutes.filter(v=>v.gestionnaire===nom && venteMois(v));
+    // Exclut les ventes avec apporteur d'affaire (CA attribué à l'apporteur)
+    const vSem = ventesToutes.filter(v=>v.gestionnaire===nom && !aApporteur(v) && venteSem(v));
+    const vSemPrec = ventesToutes.filter(v=>v.gestionnaire===nom && !aApporteur(v) && ventePrecSem(v));
+    const vMois = ventesToutes.filter(v=>v.gestionnaire===nom && !aApporteur(v) && venteMois(v));
     const caSem = vSem.reduce((a,v)=>a+venteTotal(v),0);
     const caSemPrec = vSemPrec.reduce((a,v)=>a+venteTotal(v),0);
     const caMois = vMois.reduce((a,v)=>a+venteTotal(v),0);
@@ -2264,6 +2282,9 @@ function renderReunion(){
   const totalCaSemPrec = dataCommerciaux.reduce((a,d)=>a+d.caSemPrec,0);
   const totalCaMois = dataCommerciaux.reduce((a,d)=>a+d.caMois,0);
   const totalObjMois = dataCommerciaux.reduce((a,d)=>a+d.objMois,0);
+  // CA des apporteurs d'affaire (séparé du CA commercial)
+  const caApporteursSem = ventesToutes.filter(v=>aApporteur(v)&&venteSem(v)).reduce((a,v)=>a+venteTotal(v),0);
+  const caApporteursMois = ventesToutes.filter(v=>aApporteur(v)&&venteMois(v)).reduce((a,v)=>a+venteTotal(v),0);
   const totalPct = totalObjMois>0 ? Math.min(Math.round(totalCaMois/totalObjMois*100),150) : null;
   const evolGlobal = totalCaSemPrec>0 ? Math.round((totalCaSem-totalCaSemPrec)/totalCaSemPrec*100) : null;
 
@@ -2275,14 +2296,14 @@ function renderReunion(){
     const dim = new Date(lundi); dim.setDate(dim.getDate()+6);
     const d = lundi.toISOString().slice(0,10);
     const f = dim.toISOString().slice(0,10);
-    const ca = ventesToutes.filter(v=>{const vd=(v.dateMiseEnRelation||'').slice(0,10);return vd>=d&&vd<=f;}).reduce((a,v)=>a+venteTotal(v),0);
+    const ca = ventesToutes.filter(v=>{const vd=(v.dateMiseEnRelation||'').slice(0,10);return !aApporteur(v)&&vd>=d&&vd<=f;}).reduce((a,v)=>a+venteTotal(v),0);
     sem6.push({ label:'S'+(6-i), ca, lundi:d });
   }
   const maxSem6 = Math.max(...sem6.map(s=>s.ca), 1);
 
   // CA par boutique cette semaine
   const parBoutique = {};
-  ventesToutes.filter(venteSem).forEach(v=>{const b=v.businessUnit||'?';parBoutique[b]=(parBoutique[b]||0)+venteTotal(v);});
+  ventesToutes.filter(v=>venteSem(v)&&!aApporteur(v)).forEach(v=>{const b=v.businessUnit||'?';parBoutique[b]=(parBoutique[b]||0)+venteTotal(v);});
 
   // Prospects non assignés
   const prospNonAssignes = DB.prospects.filter(p=>(p.source||'')==='Site web' && (!p.commercial||p.commercial===''));
@@ -2373,6 +2394,11 @@ function renderReunion(){
     <div class="lbl">Ventes semaine</div>
     <div class="val">${ventesToutes.filter(venteSem).length}</div>
     <div class="sub">${Object.entries(parBoutique).map(([b,ca])=>`${escapeHtml(b)} : ${fmtFCFA(ca)}`).join(' · ')}</div>
+  </div>
+  <div class="kpi">
+    <div class="lbl">CA Apporteurs semaine</div>
+    <div class="val" style="font-size:${String(fmtFCFA(caApporteursSem)).length>10?'15px':'22px'};color:#7c3aed;">${fmtFCFA(caApporteursSem)}</div>
+    <div class="sub" style="color:#888;">Mois : ${fmtFCFA(caApporteursMois)} · hors quota commerciaux</div>
   </div>
   <div class="kpi ${prospNonAssignes.length>0?'warn':''}">
     <div class="lbl">Prospects web non assignés</div>
@@ -2636,7 +2662,8 @@ function renderAdminComptes(){
     if(u.objectifsMensuels){ try{ objMensuels = JSON.parse(u.objectifsMensuels); }catch(e){} }
     const objMois = Number(objMensuels[moisIdx])||0;
     const objAnnuel = Number(u.objectifAnnuel)||0;
-    const ventes = DB.ventes.filter(v=>v.commercial===u.nom||v.gestionnaire===u.nom);
+    // Exclut les ventes avec apporteur d'affaire
+    const ventes = DB.ventes.filter(v=>(v.commercial===u.nom||v.gestionnaire===u.nom) && !aApporteur(v));
     const caMois = ventes.filter(v=>{const d=(v.dateMiseEnRelation||'').slice(0,10);return d>=debutMois&&d<=finMois;}).reduce((a,v)=>a+venteTotal(v),0);
     const caAnnee = ventes.filter(v=>{const d=(v.dateMiseEnRelation||'').slice(0,10);return d>=debutAnnee&&d<=finMois;}).reduce((a,v)=>a+venteTotal(v),0);
     const pctM = objMois>0?Math.round(caMois/objMois*100):null;
@@ -2939,10 +2966,10 @@ function renderJournee(){
   const debutMois = `${annee}-${String(moisIdx+1).padStart(2,'0')}-01`;
   const debutAnnee = `${annee}-01-01`;
 
-  // Mes ventes = gestionnaire (porte le CA)
+  // Mes ventes = gestionnaire (porte le CA), hors ventes avec apporteur d'affaire
   const mesVentes = isAdmin()
     ? DB.ventes
-    : DB.ventes.filter(v=>v.gestionnaire===nom);
+    : DB.ventes.filter(v=>v.gestionnaire===nom && !aApporteur(v));
 
   // Ventes boutique = tous les clients de ma boutique (pour les relances)
   const maBoutique = state.boutique;
