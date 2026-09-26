@@ -3035,6 +3035,21 @@ document.addEventListener('click', e=>{
   }
 });
 
+// ===== DÉLÉGATION GLOBALE — boutons WhatsApp avec popup motif =====
+document.addEventListener('click', e=>{
+  const btn = e.target.closest('[data-wa-contact="1"]');
+  if(!btn) return;
+  e.preventDefault();
+  e.stopPropagation();
+  const key = btn.dataset.waKey;
+  const waUrl = (window._waUrls && key) ? window._waUrls[key] : null;
+  const nom = btn.dataset.waNom || '';
+  const id  = btn.dataset.waId  || '';
+  const tel = btn.dataset.waTel  || '';
+  const boutique = btn.dataset.waBoutique || '';
+  showContactModal(nom, id, tel, boutique, waUrl);
+});
+
 // ===== AUTO-REMPLIR ADDITION OG DEPUIS OD =====
 window.updateBadgeTypeVerre = function(){
   const odAdd = parseFloat(document.getElementById('v-od-add')?.value||'0')||0;
