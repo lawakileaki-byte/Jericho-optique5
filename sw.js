@@ -1,5 +1,5 @@
 // ===== SERVICE WORKER — Jéricho Optique PWA =====
-const CACHE_NAME = 'jericho-optique-v1';
+const CACHE_NAME = 'jericho-optique-v2';
 const BASE_URL = '/Jericho-optique5/';
 
 // Fichiers à mettre en cache pour le mode hors-connexion
@@ -18,7 +18,7 @@ const BYPASS_PATTERNS = [
 
 // ===== INSTALLATION =====
 self.addEventListener('install', event => {
-  console.log('[SW] Installation...');
+  console.log('[SW] Installation v2...');
   event.waitUntil(
     caches.open(CACHE_NAME).then(cache => {
       return cache.addAll(STATIC_ASSETS).catch(err => {
@@ -32,7 +32,7 @@ self.addEventListener('install', event => {
 
 // ===== ACTIVATION =====
 self.addEventListener('activate', event => {
-  console.log('[SW] Activation...');
+  console.log('[SW] Activation v2 - purge ancien cache...');
   event.waitUntil(
     caches.keys().then(keys => {
       return Promise.all(
