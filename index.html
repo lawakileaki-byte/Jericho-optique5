@@ -174,6 +174,7 @@ const COL_MAP = {
   'prixVenteLentilles2e': 'prixventelentilles2e', 'prixVenteMonture2e': 'prixventemonture2e',
   'prixVenteTotalSansRemise': 'prixventetotalsansremise',
   'montantBonNonEncaisse': 'montantbonnonencaisse',
+  'modePaiement': 'modepaiement',
   'dateRdv': 'daterdv',
   'apporteurAffaire': 'apporteuraffaire', 'apporteurAffaireAutre': 'apporteuraffaireautre',
   // Prospects/Clients
@@ -379,6 +380,31 @@ function fmtFCFA(n){
   // Séparateurs de milliers avec espace insécable, pas de décimales
   return n.toLocaleString('fr-FR', {maximumFractionDigits:0}) + ' FCFA';
 }
+// Modal de saisie texte (remplace prompt() bloqué sur GitHub Pages)
+let _promptCallback = null;
+function showPrompt(label, defaultVal, onOk) {
+  _promptCallback = onOk;
+  const old = document.getElementById('jericho-prompt-modal');
+  if(old) old.remove();
+  const overlay = document.createElement('div');
+  overlay.id = 'jericho-prompt-modal';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center;';
+  overlay.innerHTML = `<div style="background:#fff;border-radius:12px;padding:28px 32px;max-width:380px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,0.2);">
+    <div style="font-size:14px;font-weight:600;color:#26282B;margin-bottom:12px;">${label}</div>
+    <input id="jericho-prompt-input" type="text" value="${defaultVal||''}" style="width:100%;padding:10px 12px;border:1.5px solid #ddd;border-radius:8px;font-size:14px;font-family:inherit;outline:none;box-sizing:border-box;" />
+    <div style="display:flex;gap:12px;justify-content:flex-end;margin-top:16px;">
+      <button onclick="document.getElementById('jericho-prompt-modal').remove();_promptCallback=null;" style="padding:9px 20px;border-radius:8px;border:1.5px solid #ddd;background:#fff;font-size:14px;cursor:pointer;">Annuler</button>
+      <button onclick="const v=document.getElementById('jericho-prompt-input').value;const cb=_promptCallback;document.getElementById('jericho-prompt-modal').remove();_promptCallback=null;if(cb&&v&&v.trim())cb(v.trim());" style="padding:9px 20px;border-radius:8px;border:none;background:#26282B;color:#fff;font-size:14px;font-weight:600;cursor:pointer;">OK</button>
+    </div></div>`;
+  document.body.appendChild(overlay);
+  setTimeout(()=>{ const inp=document.getElementById('jericho-prompt-input'); if(inp){inp.focus();inp.select();} },50);
+  // Valider avec Entrée
+  overlay.querySelector('input').addEventListener('keydown', e=>{
+    if(e.key==='Enter'){ const v=e.target.value; const cb=_promptCallback; overlay.remove(); _promptCallback=null; if(cb&&v&&v.trim())cb(v.trim()); }
+    if(e.key==='Escape'){ overlay.remove(); _promptCallback=null; }
+  });
+}
+
 // Modal de confirmation - callback global pour éviter les problèmes d'événements
 let _confirmCallback = null;
 function showConfirm(message, onOk) {
@@ -4482,19 +4508,19 @@ function attachGlobalEvents(){
 
       // Modes de paiement
       if(t.id==='btn-add-paiement'){
-        const lib = prompt('Libellé du nouveau mode de paiement :','');
-        if(!lib||!lib.trim()) return;
-        const modes = getPaymentModes(); modes.push(lib.trim());
-        await savePaymentModes(modes); render(); showToast('Mode ajouté.'); return;
+        showPrompt('Libellé du nouveau mode de paiement :', '', async(lib)=>{
+          const modes = getPaymentModes(); modes.push(lib);
+          await savePaymentModes(modes); render(); showToast('Mode ajouté.');
+        }); return;
       }
       if(t.dataset.editPayment !== undefined){
         const idx = parseInt(t.dataset.editPayment);
         const modes = getPaymentModes();
         const ancien = modes[idx]||'';
-        const nv = prompt('Nouveau libellé :', ancien);
-        if(!nv||!nv.trim()) return;
-        modes[idx] = nv.trim();
-        await savePaymentModes(modes); render(); showToast('Mode mis à jour.'); return;
+        showPrompt('Nouveau libellé :', ancien, async(nv)=>{
+          modes[idx] = nv;
+          await savePaymentModes(modes); render(); showToast('Mode mis à jour.');
+        }); return;
       }
       if(t.dataset.delPayment !== undefined){
         const idx = parseInt(t.dataset.delPayment);
