@@ -266,23 +266,31 @@ function fmtFCFA(n){
   // Séparateurs de milliers avec espace insécable, pas de décimales
   return n.toLocaleString('fr-FR', {maximumFractionDigits:0}) + ' FCFA';
 }
-// Modal de confirmation intégrée (remplace confirm() natif qui peut boucler)
+// Modal de confirmation intégrée
 function showConfirm(message, onOk) {
-  // Créer une modal de confirmation
   const overlay = document.createElement('div');
   overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center;';
-  overlay.innerHTML = `
-    <div style="background:#fff;border-radius:12px;padding:28px 32px;max-width:360px;width:90%;text-align:center;box-shadow:0 8px 32px rgba(0,0,0,0.2);">
-      <div style="font-size:15px;color:#26282B;margin-bottom:20px;font-weight:500;">${message}</div>
-      <div style="display:flex;gap:12px;justify-content:center;">
-        <button id="confirm-cancel" style="padding:10px 24px;border-radius:8px;border:1.5px solid #ddd;background:#fff;font-size:14px;cursor:pointer;">Annuler</button>
-        <button id="confirm-ok" style="padding:10px 24px;border-radius:8px;border:none;background:#A6402E;color:#fff;font-size:14px;font-weight:600;cursor:pointer;">Supprimer</button>
-      </div>
-    </div>`;
+  const box = document.createElement('div');
+  box.style.cssText = 'background:#fff;border-radius:12px;padding:28px 32px;max-width:360px;width:90%;text-align:center;box-shadow:0 8px 32px rgba(0,0,0,0.2);';
+  const msg = document.createElement('div');
+  msg.style.cssText = 'font-size:15px;color:#26282B;margin-bottom:20px;font-weight:500;';
+  msg.textContent = message;
+  const btns = document.createElement('div');
+  btns.style.cssText = 'display:flex;gap:12px;justify-content:center;';
+  const btnCancel = document.createElement('button');
+  btnCancel.textContent = 'Annuler';
+  btnCancel.style.cssText = 'padding:10px 24px;border-radius:8px;border:1.5px solid #ddd;background:#fff;font-size:14px;cursor:pointer;';
+  const btnOk = document.createElement('button');
+  btnOk.textContent = 'Supprimer';
+  btnOk.style.cssText = 'padding:10px 24px;border-radius:8px;border:none;background:#A6402E;color:#fff;font-size:14px;font-weight:600;cursor:pointer;';
+  btns.appendChild(btnCancel);
+  btns.appendChild(btnOk);
+  box.appendChild(msg);
+  box.appendChild(btns);
+  overlay.appendChild(box);
   document.body.appendChild(overlay);
-  document.getElementById('confirm-cancel').onclick = () => document.body.removeChild(overlay);
-  document.getElementById('confirm-ok').onclick = () => { document.body.removeChild(overlay); onOk(); };
-  // Fermer si clic sur l'overlay
+  btnCancel.addEventListener('click', () => document.body.removeChild(overlay));
+  btnOk.addEventListener('click', () => { document.body.removeChild(overlay); onOk(); });
   overlay.addEventListener('click', (e) => { if(e.target === overlay) document.body.removeChild(overlay); });
 }
 
@@ -923,7 +931,9 @@ function statutBadge(statut, kind){
    --------------------------------------------------------- */
 function renderProspects(){
   const f = state.filters.prospects;
-  let rows = DB.prospects.filter(p=>{
+  const PS_PROSPECTS = 5;
+  if(!state.pages) state.pages = {clients:1,prospects:1,ventes:1,tickets:1};
+  const rowsAll = DB.prospects.filter(p=>{
     if(!isAdmin() && p.commercial !== state.commercial) return false;
     if(f.statut && p.statut!==f.statut) return false;
     if(f.boutique && p.boutique!==f.boutique) return false;
@@ -934,6 +944,10 @@ function renderProspects(){
     }
     return true;
   }).sort((a,b)=>(b.dateMiseEnRelation||'').localeCompare(a.dateMiseEnRelation||''));
+  const totalP = rowsAll.length;
+  const pageP = Math.min(state.pages.prospects||1, Math.ceil(totalP/PS_PROSPECTS)||1);
+  state.pages.prospects = pageP;
+  const rows = rowsAll.slice((pageP-1)*PS_PROSPECTS, pageP*PS_PROSPECTS);
 
   const titreProspects = isAdmin() ? 'Tous les prospects' : `Mes prospects : ${escapeHtml(state.commercial)}`;
 
@@ -954,7 +968,7 @@ function renderProspects(){
       ${BOUTIQUES.map(b=>`<option ${f.boutique===b?'selected':''}>${b}</option>`).join('')}
     </select>
     <div class="spacer"></div>
-    <button class="btn-sm btn-ghost" id="btn-export-prospects">Exporter en CSV</button>
+    ${isAdmin() ? '<button class="btn-sm btn-ghost" id="btn-export-prospects">Exporter en CSV</button>' : ''}
   </div>
 
   <div class="panel" style="padding:0;">
@@ -982,7 +996,7 @@ function renderProspects(){
       </tbody>
     </table>
   </div>
-  ${renderPagination('prospects', totalProspects, pageP)}
+  ${renderPagination('prospects', totalP, pageP, PS_PROSPECTS)}
   `;
 }
 
@@ -991,7 +1005,7 @@ function renderProspects(){
    --------------------------------------------------------- */
 function renderClients(){
   const f = state.filters.clients;
-  const PAGE_SIZE = 10;
+  const PAGE_SIZE = 5;
   let clients = DB.clients.filter(c=>{
     if(f.boutique && c.boutique!==f.boutique) return false;
     if(f.q){
@@ -1127,7 +1141,8 @@ function renderVentes(){
   }
   else if(f.periode==='tout') debutPeriode = '';
 
-  let rows = DB.ventes.filter(v=>{
+  if(!state.pages) state.pages={clients:1,prospects:1,ventes:1,tickets:1};
+  let rowsAll = DB.ventes.filter(v=>{
     if(!isAdmin() && v.gestionnaire !== state.commercial) return false; // CA = gestionnaire
     if(debutPeriode && (v.dateMiseEnRelation||'').slice(0,10) < debutPeriode) return false;
     if(f.boutique && v.businessUnit!==f.boutique) return false;
@@ -1139,8 +1154,13 @@ function renderVentes(){
     }
     return true;
   }).sort((a,b)=>(b.dateMiseEnRelation||'').localeCompare(a.dateMiseEnRelation||''));
+  const totalVentes = rowsAll.length;
+  const PS_VENTES = 5;
+  const pageV = Math.min(state.pages.ventes||1, Math.ceil(totalVentes/PS_VENTES)||1);
+  state.pages.ventes = pageV;
+  const rows = rowsAll.slice((pageV-1)*PS_VENTES, pageV*PS_VENTES);
 
-  const caTotal = rows.reduce((a,v)=>a+venteTotal(v),0);
+  const caTotal = rowsAll.reduce((a,v)=>a+venteTotal(v),0);
   const resteTotal = rows.reduce((a,v)=>a+venteReste(v),0);
   const periodeLabel = {mois:'Ce mois', semaine:'Cette semaine', annee:'Cette année', tout:'Tout l\'historique'};
   const titre = isAdmin() ? 'Toutes les ventes' : `Mes ventes : ${escapeHtml(state.commercial)}`;
@@ -1177,7 +1197,7 @@ function renderVentes(){
       ${TYPES_ARTICLE.map(t=>`<option ${f.typeArticle===t?'selected':''}>${t}</option>`).join('')}
     </select>
     <div class="spacer"></div>
-    <button class="btn-sm btn-ghost" id="btn-export-ventes">Exporter en CSV</button>
+    ${isAdmin() ? '<button class="btn-sm btn-ghost" id="btn-export-ventes">Exporter en CSV</button>' : ''}
   </div>
 
   <div class="panel" style="padding:0;">
@@ -1208,6 +1228,7 @@ function renderVentes(){
       </tbody>
     </table>
   </div>
+  ${renderPagination('ventes', totalVentes, pageV, PS_VENTES)}
   `;
 }
 
@@ -2019,7 +2040,7 @@ function renderJournee(){
   // 3. RDV passés non soldés (à relancer)
   const rdvDepasses = mesVentes.filter(v=>
     v.dateRdv && v.dateRdv < today && venteReste(v)>0
-  ).sort((a,b)=>(b.dateRdv||'').localeCompare(a.dateRdv||'')).slice(0,5);
+  ).sort((a,b)=>(b.dateRdv||'').localeCompare(a.dateRdv||'')).slice(0,3);
 
   // 4. Prospects à relancer
   const prospRdvPris = mesProspects.filter(p=>{
@@ -2308,7 +2329,7 @@ function renderJournee(){
 
   ${isAdmin() && ticketsLabo.length ? section(
     `🔬 Commandes labo à passer (${ticketsLabo.length})`, '#A6402E', '🔬',
-    ticketsLabo.slice(0,5).map(t=>`
+    ticketsLabo.slice(0,3).map(t=>`
     <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--line);flex-wrap:wrap;gap:8px;">
       <div>
         <b style="font-size:13px;">${escapeHtml(t.clientNom||'')}</b>
@@ -2398,9 +2419,11 @@ function renderTickets(){
   if(!state.filters.tickets) state.filters.tickets = {q:'',statut:'',type:'',assigne:''};
   const moi = state.commercial;
   if(!DB.tickets || !Array.isArray(DB.tickets)) DB.tickets = [];
+  if(!state.pages) state.pages={clients:1,prospects:1,ventes:1,tickets:1};
+  const PS_TK = 5;
 
   // Admin voit tout, commercial voit ses tickets + ceux de sa boutique
-  let rows = DB.tickets.filter(t=>{
+  let rowsAll = DB.tickets.filter(t=>{
     // Tickets de paie : visible uniquement par l'assigné et la directrice
     if(t.type==='💵 Bulletin de paie' && !isAdmin() && t.assigne!==moi) return false;
     if(!isAdmin() && t.type!=='💵 Bulletin de paie' && t.assigne!==moi && t.boutique!==state.boutique) return false;
@@ -2416,6 +2439,10 @@ function renderTickets(){
     if(a.priorite!==b.priorite) return (prio[a.priorite]||1)-(prio[b.priorite]||1);
     return (b.dateCreation||'').localeCompare(a.dateCreation||'');
   });
+  const totalTk = rowsAll.length;
+  const pageTk = Math.min(state.pages.tickets||1, Math.ceil(totalTk/PS_TK)||1);
+  state.pages.tickets = pageTk;
+  const rows = rowsAll.slice((pageTk-1)*PS_TK, pageTk*PS_TK);
 
   const mesTickets = rows.filter(t=>t.assigne===moi && t.statut!=='Terminé');
   const ticketsLabo = rows.filter(t=>t.type==='🔬 Commande labo' && t.statut!=='Terminé');
@@ -2433,7 +2460,7 @@ function renderTickets(){
   ${isAdmin() && ticketsLabo.length ? `
   <div class="panel" style="border-left:4px solid #A6402E;">
     <h3 style="color:#A6402E;margin-bottom:10px;">🔬 Commandes labo en attente (${ticketsLabo.length})</h3>
-    ${ticketsLabo.slice(0,5).map(t=>`
+    ${ticketsLabo.slice(0,3).map(t=>`
     <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--line);flex-wrap:wrap;gap:8px;">
       <div>
         <b>${escapeHtml(t.titre)}</b>
@@ -2494,7 +2521,8 @@ function renderTickets(){
         : `<tr class="empty-row"><td colspan="8">Aucun ticket. Créez-en un avec "+ Nouveau ticket".</td></tr>`}
       </tbody>
     </table>
-  </div>`;
+  </div>
+  ${renderPagination('tickets', totalTk, pageTk, PS_TK)}`;
 }
 
 function ticketForm(data){
@@ -2521,6 +2549,7 @@ function ticketForm(data){
       <div class="field"><label>Priorité</label><select id="tk-priorite">${PRIORITES_TICKET.map(p=>`<option ${d.priorite===p?'selected':''}>${p}</option>`).join('')}</select></div>
       <div class="field full"><label>Titre <span style="color:#A6402E;">*</span></label><input required id="tk-titre" value="${escapeAttr(d.titre)}" placeholder="Ex: Commander verres progressifs pour TRAORE"></div>
       <div class="field full"><label>Description / Instructions</label><textarea id="tk-desc">${escapeHtml(d.description||'')}</textarea></div>
+      </div><!-- fin tk-client-section -->
       <!-- Champs spéciaux pour demande d'avance -->
       <div id="avance-fields" style="display:${d.type==="💰 Demande d'avance"?'contents':'none'}">
         <div class="form-section-title" style="color:#E8A93B;">Détails de la demande</div>
@@ -2539,6 +2568,8 @@ function ticketForm(data){
       <div class="field"><label>Date limite</label><input type="date" id="tk-datelimite" value="${escapeAttr(d.dateLimite||'')}"></div>
       <div class="field"><label>Boutique</label><select id="tk-boutique">${['Toutes',...BOUTIQUES].map(b=>`<option ${(d.boutique||state.boutique)===b?'selected':''}>${b}</option>`).join('')}</select></div>
 
+      <!-- Section client masquée pour bulletins paie et demandes avance -->
+      <div id="tk-client-section" style="display:${(d.type==='💵 Bulletin de paie'||d.type==="💰 Demande d'avance")?'none':'contents'}">
       <div class="form-section-title">Client concerné</div>
       <div class="field full" style="position:relative;">
         <label>🔍 Rechercher un client <span style="font-weight:400;color:#9a998f;font-size:11px;">— par nom ou numéro</span></label>
@@ -4673,7 +4704,10 @@ function attachModalEvents(){
   if(tkTypeEl){
     const toggleAvance = ()=>{
       const av = document.getElementById('avance-fields');
+      const cl = document.getElementById('tk-client-section');
+      const isPayeAvance = tkTypeEl.value === '💵 Bulletin de paie' || tkTypeEl.value === "💰 Demande d'avance";
       if(av) av.style.display = tkTypeEl.value === "💰 Demande d'avance" ? 'contents' : 'none';
+      if(cl) cl.style.display = isPayeAvance ? 'none' : 'contents';
     };
     tkTypeEl.addEventListener('change', toggleAvance);
   }
