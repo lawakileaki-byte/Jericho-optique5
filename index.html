@@ -1602,44 +1602,64 @@ function renderClients(){
    --------------------------------------------------------- */
 // Génère un widget de saisie optique avec boutons ±
 // allowNeg: true pour Sphère/Cylindre (valeurs négatives possibles)
+// Registre des callbacks extraOninput par id de champ
+window._rxExtra = window._rxExtra || {};
+
+// Fonction globale appelée par les boutons +/− des champs prescription
+// Utilise des attributs data- pour éviter tout JS inline complexe
+window.rxStep = function(id, dir){
+  var inp = document.getElementById(id);
+  if(!inp) return;
+  var step = parseFloat(inp.dataset.rxStep)||0.25;
+  var minVal = inp.dataset.rxMin !== '' && inp.dataset.rxMin !== undefined ? parseFloat(inp.dataset.rxMin) : null;
+  var maxVal = inp.dataset.rxMax !== '' && inp.dataset.rxMax !== undefined ? parseFloat(inp.dataset.rxMax) : null;
+  var dec = parseInt(inp.dataset.rxDec)||0;
+  var allowNeg = inp.dataset.rxNeg === '1';
+  var v = parseFloat((inp.value||'0').replace(',','.'));
+  if(isNaN(v)) v = 0;
+  v = Math.round((v + dir * step) * 1000) / 1000;
+  if(minVal !== null && v < minVal) v = minVal;
+  if(maxVal !== null && v > maxVal) v = maxVal;
+  if(dec === 0){
+    inp.value = String(Math.round(v));
+  } else {
+    inp.value = v === 0 ? '0' : v.toFixed(dec);
+  }
+  inp.dispatchEvent(new Event('input'));
+  var extra = window._rxExtra[id];
+  if(extra) extra();
+};
+
 // step: incrément (0.25 par défaut)
 // minVal/maxVal: limites optionnelles
-// extraOninput: code JS supplémentaire à exécuter à l'oninput
+// extraOninput: code JS supplémentaire à exécuter à l'oninput (string ou null)
 function rxInput(id, val, allowNeg=true, step=0.25, minVal=null, maxVal=null, extraOninput=''){
   const safeVal = escapeAttr(String(val||''));
   const ph = allowNeg ? (step===1 ? 'ex: 90' : 'ex: -1.75') : (step===1 ? 'ex: 90' : 'ex: 2.00');
   const dec = step < 1 ? 2 : 0;
-  // Normalise la valeur d'un champ prescription en nombre (gère la virgule)
-  const onInput = `(function(inp){
-    let v=inp.value.replace(',','.');
-    if(v===''||v==='-'||v==='+') return;
-    let n=parseFloat(v);
-    if(isNaN(n)) return;
-    ${extraOninput ? extraOninput+';' : ''}
-  })(this)`;
-  // Bouton +/− : incrémente la valeur du champ
+  // Enregistre le callback extra dans le registre global (évite tout JS dans les attributs HTML)
+  if(extraOninput){
+    const fnStr = extraOninput;
+    window._rxExtra[id] = function(){ eval(fnStr); };
+  } else {
+    delete window._rxExtra[id];
+  }
+  const minAttr = minVal !== null ? String(minVal) : '';
+  const maxAttr = maxVal !== null ? String(maxVal) : '';
   const btnStyle = 'flex-shrink:0;width:36px;height:36px;border:none;border-radius:8px;background:var(--sand-light);color:var(--ink);font-size:19px;font-weight:300;cursor:pointer;display:flex;align-items:center;justify-content:center;touch-action:manipulation;user-select:none;-webkit-tap-highlight-color:transparent;';
-  const stepFn = (dir) => `(function(){
-    var inp=document.getElementById('${id}');
-    var v=parseFloat((inp.value||'0').replace(',','.'));
-    if(isNaN(v))v=0;
-    v=Math.round((v+${dir}*${step})*1000)/1000;
-    ${minVal!==null?`if(v<${minVal})v=${minVal};`:''}
-    ${maxVal!==null?`if(v>${maxVal})v=${maxVal};`:''}
-    inp.value=v===0&&!${allowNeg}?'0':v.toFixed(${dec}).replace(/\\.?0+$/,v%1===0&&${dec}===0?'':'');
-    if(v===0)inp.value='0';
-    inp.dispatchEvent(new Event('input'));
-    ${extraOninput}
-  })()`;
+  // oninput simple : normalise la saisie et appelle l'extra si présent
+  const onInputSimple = 'var v=this.value.replace(\',\',\'.\');if(v===\'\'||v===\'-\'||v===\'+\')return;var n=parseFloat(v);if(isNaN(n))return;var ex=window._rxExtra[this.id];if(ex)ex();';
   return `<div style="display:flex;align-items:center;gap:5px;">
-    <button type="button" onclick="${stepFn(-1)}" style="${btnStyle}">−</button>
+    <button type="button" onclick="rxStep('${id}',-1)" style="${btnStyle}">−</button>
     <input id="${id}" type="text" inputmode="decimal"
       value="${safeVal}" placeholder="${ph}"
+      data-rx-step="${step}" data-rx-min="${minAttr}" data-rx-max="${maxAttr}"
+      data-rx-dec="${dec}" data-rx-neg="${allowNeg?'1':'0'}"
       style="flex:1;min-width:0;text-align:center;font-size:16px;font-weight:600;padding:7px 4px;border:1.5px solid #ddd;border-radius:8px;transition:border .15s;"
       onfocus="this.style.borderColor='#E8A93B'"
       onblur="this.style.borderColor='#ddd'"
-      oninput="${onInput.replace(/"/g,'&quot;')}">
-    <button type="button" onclick="${stepFn(1)}" style="${btnStyle}">+</button>
+      oninput="${onInputSimple}">
+    <button type="button" onclick="rxStep('${id}',1)" style="${btnStyle}">+</button>
   </div>`;
 }
 
