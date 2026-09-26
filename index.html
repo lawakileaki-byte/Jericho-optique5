@@ -824,7 +824,7 @@ function renderTeam(){
         <div class="who">
           <div class="lbl">Connecté(e) en tant que</div>
           <div class="name">${escapeHtml(state.commercial)}</div>
-          <div class="role-badge ${isAdmin()?'is-admin':''}">${isAdmin()?'Directrice · Admin':'Commercial(e)'}</div>
+          <div class="role-badge ${isAdmin()?'is-admin':''}">${isAdmin()?'Directrice · Admin':state.role==='commercial_libre'?'Commercial libre':state.role==='stagiaire'?'Stagiaire':'Commercial(e)'}</div>
         </div>
         ${isAdmin()
           ? `<button data-tab="dashboard" class="${state.teamTab==='dashboard'?'active':''}">Tableau de bord</button>`
@@ -2017,7 +2017,7 @@ function userForm(data){
       <div class="field"><label>Identifiant (login)</label><input required id="u-id" value="${escapeAttr(d.id)}" ${isEdit?'readonly style="background:#f5f4f0;"':''} placeholder="ex: aminata" autocomplete="off"></div>
       <div class="field"><label>Nom affiché</label><input required id="u-nom" value="${escapeAttr(d.nom)}" placeholder="ex: Aminata"></div>
       <div class="field"><label>${isEdit?'Nouveau mot de passe (laisser vide = inchangé)':'Mot de passe initial'}</label><input type="password" id="u-pwd" ${isEdit?'':'required'} placeholder="${isEdit?'Laisser vide pour ne pas changer':''}" autocomplete="new-password" minlength="6"></div>
-      <div class="field"><label>Rôle</label><select id="u-role"><option value="commercial" ${d.role==='commercial'?'selected':''}>Commercial(e)</option><option value="admin" ${d.role==='admin'?'selected':''}>Admin / Directrice</option></select></div>
+      <div class="field"><label>Rôle</label><select id="u-role"><option value="commercial" ${d.role==='commercial'?'selected':''}>Commercial(e)</option><option value="commercial_libre" ${d.role==='commercial_libre'?'selected':''}>Commercial libre</option><option value="stagiaire" ${d.role==='stagiaire'?'selected':''}>Stagiaire</option><option value="admin" ${d.role==='admin'?'selected':''}>Admin / Directrice</option></select></div>
       <div class="field"><label>Boutique principale</label><select id="u-boutique"><option value="Toutes" ${d.boutique==='Toutes'?'selected':''}>Toutes</option>${BOUTIQUES.map(b=>`<option ${d.boutique===b?'selected':''}>${b}</option>`).join('')}</select></div>
       <div class="field"><label>Statut</label><select id="u-actif"><option value="oui" ${d.actif==='oui'?'selected':''}>Actif</option><option value="non" ${d.actif==='non'?'selected':''}>Inactif</option></select></div>
       <div class="field"><label>Salaire de base (FCFA)</label><input type="number" min="0" step="5000" id="u-salaire" value="${escapeAttr(d.salaireBase||'')}" placeholder="ex: 75000"></div>
