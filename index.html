@@ -118,7 +118,7 @@ console.log("JERICHO v3.0 SUPABASE - " + new Date().toISOString());
 const SUPABASE_URL = 'https://hvlenkxjuauozezonsim.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh2bGVua3hqdWF1b3plem9uc2ltIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTAyNjkyNDIsImV4cCI6MjEwNTg0NTI0Mn0.DSA2FKKjlAQqEynjq3fe9LLDXj-oMwHf_X22wjHLAI4';
 
-let DB = { utilisateurs: [], prospects: [], clients: [], sav: [], stock: [], ventes: [], tickets: [], apporteurs: [], paie: [], avances: [], config: [] };
+let DB = { utilisateurs: [], prospects: [], clients: [], sav: [], stock: [], ventes: [], tickets: [], apporteurs: [], paie: [], avances: [], config: [], contacts: [] };
 const DEFAULT_PAYMENT_MODES = ['Espèces','Orange Money','Moov Money','Telecel Money','Chèque'];
 function getPaymentModes(){
   const cfg = DB.config.find(c=>c.id==='modes_paiement');
@@ -287,7 +287,7 @@ async function savePaymentModes(modesArray) {
 }
 async function loadAll() {
   const prioritaires = ['utilisateurs', 'ventes', 'prospects', 'clients'];
-  const secondaires = ['sav', 'stock', 'tickets', 'apporteurs', 'paie', 'avances', 'config'];
+  const secondaires = ['sav', 'stock', 'tickets', 'apporteurs', 'paie', 'avances', 'config', 'contacts'];
   const resPrio = await Promise.allSettled(prioritaires.map(k => apiGet(k)));
   resPrio.forEach((r, i) => {
     const k = prioritaires[i];
@@ -415,6 +415,67 @@ function showPrompt(label, defaultVal, onOk) {
 
 // Modal de confirmation - callback global pour éviter les problèmes d'événements
 let _confirmCallback = null;
+// ===== SUIVI CONTACT WHATSAPP =====
+const MOTIFS_CONTACT = [
+  '🎂 Anniversaire de naissance',
+  '🏆 Anniversaire de fidélité',
+  '📅 Rappel RDV',
+  '💰 Relance paiement',
+  '🆕 Nouvelle offre / promotion',
+  '📦 Commande prête',
+  '🔧 Suivi SAV',
+  '💬 Contact libre',
+];
+
+// Ouvre la popup motif, enregistre le contact, puis ouvre WhatsApp
+function showContactModal(clientNom, clientId, telephone, boutique, waUrl) {
+  const old = document.getElementById('jericho-contact-modal');
+  if(old) old.remove();
+  const overlay = document.createElement('div');
+  overlay.id = 'jericho-contact-modal';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center;';
+  overlay.innerHTML = `<div style="background:#fff;border-radius:12px;padding:24px 28px;max-width:400px;width:92%;box-shadow:0 8px 32px rgba(0,0,0,0.2);">
+    <div style="font-size:15px;font-weight:700;color:#26282B;margin-bottom:4px;">📱 Contact WhatsApp</div>
+    <div style="font-size:13px;color:#888;margin-bottom:16px;">${escapeHtml(clientNom)}</div>
+    <div style="font-size:13px;font-weight:600;color:#555;margin-bottom:10px;">Motif du contact :</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:20px;">
+      ${MOTIFS_CONTACT.map((m,i)=>`<button onclick="window._doContact(${i})" style="padding:8px 10px;border-radius:8px;border:1.5px solid #e0ddd4;background:#fafaf8;font-size:12px;font-weight:500;cursor:pointer;text-align:left;transition:border-color .15s;" onmouseover="this.style.borderColor='#E8A93B'" onmouseout="this.style.borderColor='#e0ddd4'">${escapeHtml(m)}</button>`).join('')}
+    </div>
+    <div style="text-align:center;">
+      <button onclick="document.getElementById('jericho-contact-modal').remove();window._doContact=null;" style="padding:8px 20px;border-radius:8px;border:1.5px solid #ddd;background:#fff;font-size:13px;cursor:pointer;color:#888;">Annuler</button>
+    </div>
+  </div>`;
+  document.body.appendChild(overlay);
+
+  window._doContact = async function(motifIdx) {
+    const motif = MOTIFS_CONTACT[motifIdx];
+    overlay.remove();
+    window._doContact = null;
+    // Enregistrer le contact
+    const contact = {
+      id: 'ct_' + Date.now() + '_' + Math.random().toString(36).slice(2,6),
+      clientid: clientId || '',
+      clientnom: clientNom || '',
+      telephone: telephone || '',
+      date: todayISO(),
+      motif,
+      commercial: state.commercial || '',
+      boutique: boutique || state.boutique || '',
+    };
+    try {
+      await apiUpsert('contacts', contact);
+      if(!DB.contacts) DB.contacts = [];
+      DB.contacts.unshift(contact);
+      showToast('Contact enregistré : ' + motif);
+    } catch(e) {
+      console.error('Erreur enregistrement contact:', e);
+      // On ouvre WhatsApp quand même même si erreur
+    }
+    // Ouvrir WhatsApp
+    window.open(waUrl, '_blank', 'noopener');
+  };
+}
+
 function showConfirm(message, onOk) {
   _confirmCallback = onOk;
   // Supprimer toute ancienne modal
@@ -992,10 +1053,10 @@ function renderDashboard(){
           <div><b style="font-size:13px;">${escapeHtml(cl.nom)} ${escapeHtml(cl.prenom||'')}</b><span style="font-size:11px;color:#888;margin-left:8px;">Dernier achat : ${fmtDate(cl.derniereDate)} · ${cl.nbVentes} achat(s)</span></div>
           <div style="display:flex;gap:8px;align-items:center;">
             <span style="font-size:12px;color:#555;">${escapeHtml(cl.telephone)}</span>
-            <a href="https://wa.me/${num}?text=${msg}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:5px;background:#25D366;color:#fff;text-decoration:none;padding:5px 10px;border-radius:6px;font-size:11px;font-weight:600;">
+            <button onclick="showContactModal(${JSON.stringify((cl.nom||'')+' '+(cl.prenom||''))},${JSON.stringify(cl.id||'')},${JSON.stringify(cl.telephone||'')},${JSON.stringify(cl.boutique||'')},'https://wa.me/${num}?text=${msg}')" style="display:inline-flex;align-items:center;gap:5px;background:#25D366;color:#fff;border:none;padding:5px 10px;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="#fff"><path d="M12.04 2c-5.46 0-9.91 4.45-9.91 9.91 0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38c1.45.79 3.08 1.21 4.74 1.21 5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.816 9.816 0 0 0 12.04 2m.01 1.67c2.2 0 4.26.86 5.82 2.42a8.225 8.225 0 0 1 2.41 5.83c0 4.54-3.7 8.23-8.24 8.23-1.48 0-2.93-.39-4.19-1.15l-.3-.17-3.12.82.83-3.04-.2-.32a8.188 8.188 0 0 1-1.26-4.38c.01-4.54 3.7-8.24 8.25-8.24M8.53 7.33c-.16 0-.43.06-.66.31-.22.25-.87.86-.87 2.07 0 1.22.89 2.39 1 2.56.14.17 1.76 2.67 4.25 3.73.59.27 1.05.42 1.41.53.59.19 1.13.16 1.56.1.48-.07 1.46-.6 1.67-1.18.21-.58.21-1.07.14-1.18-.07-.11-.25-.17-.53-.31-.28-.14-1.66-.82-1.92-.91-.26-.09-.44-.14-.63.14-.19.28-.72.91-.88 1.09-.16.18-.32.2-.6.07-.28-.14-1.19-.44-2.26-1.4-.83-.75-1.4-1.67-1.56-1.95-.17-.28-.02-.44.12-.58.13-.13.28-.34.42-.51.14-.17.18-.29.28-.47.09-.19.05-.35-.02-.49-.07-.14-.63-1.52-.88-2.07-.24-.53-.48-.46-.66-.47-.16-.01-.35-.01-.53-.01Z"/></svg>
               WhatsApp
-            </a>
+            </button>
           </div>
         </div>`;
       }).join('')}
@@ -1043,6 +1104,12 @@ function renderDashboard(){
     ${kpi('Lentilles urgentes', clientsLentilles24.length, 'achat lentilles +24 mois', clientsLentilles24.length>0, null)}
     ${kpi('Lentilles à relancer', clientsLentilles.filter(c=>c.derniereDate>s24).length, 'achat lentilles 20-24 mois', false, null)}
     ${kpi('Taux de conversion', taux+'%', convertis+' convertis / '+totalProspects+' prospects', false, "state.teamTab='prospects';render();")}
+    ${(()=>{
+      const today = todayISO();
+      const contactsAujourd = (DB.contacts||[]).filter(c=>c.date===today && (!iAmAdmin ? c.commercial===nom : true));
+      const contactsMois = (DB.contacts||[]).filter(c=>(c.date||'').slice(0,7)===today.slice(0,7) && (!iAmAdmin ? c.commercial===nom : true));
+      return kpi("📱 Contacts aujourd'hui", contactsAujourd.length, contactsMois.length+' ce mois', false, null);
+    })()}
     ${iAmAdmin?kpi('SAV ouverts', savOuverts, 'tickets en cours', savOuverts>0, "state.teamTab='clients';render();"):''}
   </div>
 
@@ -1055,7 +1122,7 @@ function renderDashboard(){
         const msg=encodeURIComponent('Joyeux anniversaire '+(c.civilite||'')+' '+(c.nom||'')+' ! Jéricho Optique vous souhaite une excellente journée 🎉');
         return '<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid var(--line);">'
           +'<b style="font-size:12px;">'+escapeHtml(bonjourClient(c.nom,c.prenom,c.civilite))+'</b>'
-          +(tel?'<a href="https://wa.me/'+num+'?text='+msg+'" target="_blank" style="background:#25D366;color:#fff;padding:3px 8px;border-radius:6px;font-size:11px;text-decoration:none;font-weight:600;">WA 🎂</a>':'')
+          +(tel?'<button onclick="showContactModal('+JSON.stringify((c.nom||'')+' '+(c.prenom||''))+','+JSON.stringify(c.id||'')+','+JSON.stringify(tel)+','+JSON.stringify(c.boutique||'')+',\'https://wa.me/'+num+'?text='+msg+'\')" style="background:#25D366;color:#fff;padding:3px 8px;border-radius:6px;font-size:11px;font-weight:600;border:none;cursor:pointer;">WA 🎂</button>':'')
           +'</div>';
       }).join('')+(annivNaissanceD.length>3?'<p style="font-size:11px;color:#888;margin-top:6px;text-align:center;">+${annivNaissanceD.length-3} autres</p>':'')
       : '<p style="color:#9a998f;font-size:12px;font-style:italic;">Aucun anniversaire aujourd\'hui</p>'}
@@ -1068,7 +1135,7 @@ function renderDashboard(){
         const msg=encodeURIComponent('Bonjour '+(v.civilite||'')+' '+(v.nom||'')+', cela fait '+ans+' an'+(ans>1?'s':'')+' que vous êtes fidèle à Jéricho Optique 🏆 Merci !');
         return '<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid var(--line);">'
           +'<div><b style="font-size:12px;">'+escapeHtml(bonjourClient(v.nom,v.prenom,v.civilite))+'</b> <span style="font-size:11px;color:#E8A93B;">'+ans+' an'+(ans>1?'s':'')+'</span></div>'
-          +(tel?'<a href="https://wa.me/'+num+'?text='+msg+'" target="_blank" style="background:#25D366;color:#fff;padding:3px 8px;border-radius:6px;font-size:11px;text-decoration:none;font-weight:600;">WA 🏆</a>':'')
+          +(tel?'<button onclick="showContactModal('+JSON.stringify((v.nom||'')+' '+(v.prenom||''))+','+JSON.stringify(v.id||'')+','+JSON.stringify(tel)+','+JSON.stringify(v.boutique||v.businessUnit||'')+',\'https://wa.me/'+num+'?text='+msg+'\')" style="background:#25D366;color:#fff;padding:3px 8px;border-radius:6px;font-size:11px;font-weight:600;border:none;cursor:pointer;">WA 🏆</button>':'')
           +'</div>';
       }).join('')+(annivFideliteD.length>3?'<p style="font-size:11px;color:#888;margin-top:6px;text-align:center;">+${annivFideliteD.length-3} autres</p>':'')
       : '<p style="color:#9a998f;font-size:12px;font-style:italic;">Aucun anniversaire de fidélité aujourd\'hui</p>'}
@@ -1622,10 +1689,10 @@ function clientView(client){
     ${client.adresse?`<span style="font-size:13px;color:#555;">📍 ${escapeHtml(client.adresse)}</span>`:''}
     ${client.boutique?`<span style="font-size:13px;color:#555;">🏪 ${escapeHtml(client.boutique)}</span>`:''}
     ${(client.fonction||client.entreprise)?`<span style="font-size:13px;color:#555;">💼 ${[client.fonction,client.entreprise].filter(Boolean).map(escapeHtml).join(' · ')}</span>`:''}
-    ${telWA?`<a href="https://wa.me/${telWA.startsWith('226')?telWA:'226'+telWA}?text=${encodeURIComponent(bonjourClient(client.nom,client.prenom,client.civilite)+', nous vous contactons de Jéricho Optique.')}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:5px;background:#25D366;color:#fff;text-decoration:none;padding:5px 12px;border-radius:6px;font-size:12px;font-weight:600;">
+    ${telWA?`<button onclick="showContactModal(${JSON.stringify((client.nom||'')+' '+(client.prenom||''))},${JSON.stringify(client.id||'')},${JSON.stringify(telWA)},${JSON.stringify(client.boutique||'')},'https://wa.me/${telWA.startsWith('226')?telWA:'226'+telWA}?text=${encodeURIComponent(bonjourClient(client.nom,client.prenom,client.civilite)+', nous vous contactons de Jéricho Optique.')}')" style="display:inline-flex;align-items:center;gap:5px;background:#25D366;color:#fff;border:none;padding:5px 12px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;">
       <svg width="13" height="13" viewBox="0 0 24 24" fill="#fff"><path d="M12.04 2c-5.46 0-9.91 4.45-9.91 9.91 0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38c1.45.79 3.08 1.21 4.74 1.21 5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.816 9.816 0 0 0 12.04 2m.01 1.67c2.2 0 4.26.86 5.82 2.42a8.225 8.225 0 0 1 2.41 5.83c0 4.54-3.7 8.23-8.24 8.23-1.48 0-2.93-.39-4.19-1.15l-.3-.17-3.12.82.83-3.04-.2-.32a8.188 8.188 0 0 1-1.26-4.38c.01-4.54 3.7-8.24 8.25-8.24M8.53 7.33c-.16 0-.43.06-.66.31-.22.25-.87.86-.87 2.07 0 1.22.89 2.39 1 2.56.14.17 1.76 2.67 4.25 3.73.59.27 1.05.42 1.41.53.59.19 1.13.16 1.56.1.48-.07 1.46-.6 1.67-1.18.21-.58.21-1.07.14-1.18-.07-.11-.25-.17-.53-.31-.28-.14-1.66-.82-1.92-.91-.26-.09-.44-.14-.63.14-.19.28-.72.91-.88 1.09-.16.18-.32.2-.6.07-.28-.14-1.19-.44-2.26-1.4-.83-.75-1.4-1.67-1.56-1.95-.17-.28-.02-.44.12-.58.13-.13.28-.34.42-.51.14-.17.18-.29.28-.47.09-.19.05-.35-.02-.49-.07-.14-.63-1.52-.88-2.07-.24-.53-.48-.46-.66-.47-.16-.01-.35-.01-.53-.01Z"/></svg>
       WhatsApp
-    </a>`:''}
+    </button>`:''}
   </div>
 
   <!-- KPIs -->
@@ -1691,6 +1758,25 @@ function clientView(client){
   </table></div>`:''}
 
   ${client.notes?`<div style="margin-top:14px;background:var(--sand-light);border-radius:8px;padding:10px 14px;font-size:13px;"><b>Notes :</b> ${escapeHtml(client.notes)}</div>`:''}
+
+  ${(()=>{
+    // Historique contacts WA pour ce client
+    const telN = normTel(client.telephone);
+    const contactsClient = (DB.contacts||[]).filter(c=>{
+      if(telN && normTel(c.telephone)===telN) return true;
+      return (c.clientid && c.clientid===client.id) || (c.clientnom||'').toLowerCase().trim()===(client.nom||'').toLowerCase().trim();
+    }).sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+    if(!contactsClient.length) return '';
+    return `<h4 style="font-size:13px;font-weight:700;margin:14px 0 8px;">📱 Historique contacts (${contactsClient.length})</h4>
+    <div style="overflow-x:auto;"><table>
+      <thead><tr><th>Date</th><th>Motif</th><th>Commercial</th></tr></thead>
+      <tbody>${contactsClient.slice(0,10).map(c=>`<tr>
+        <td style="white-space:nowrap;">${fmtDate(c.date)}</td>
+        <td>${escapeHtml(c.motif||'')}</td>
+        <td style="font-size:11px;color:#888;">${escapeHtml(c.commercial||'')}</td>
+      </tr>`).join('')}</tbody>
+    </table></div>`;
+  })()}
 
   <div class="modal-actions" style="justify-content:flex-start;margin-top:16px;">
     <button type="button" class="btn-sm btn-ghost" id="modal-cancel">Fermer</button>
