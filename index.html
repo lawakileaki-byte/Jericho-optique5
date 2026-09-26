@@ -1361,11 +1361,34 @@ function renderProspects(){
 
   const titreProspects = isAdmin() ? 'Tous les prospects' : `Mes prospects : ${escapeHtml(state.commercial)}`;
 
+  const prospectsWebNonAssignesP = isAdmin() ? DB.prospects.filter(p=>(p.source||'')==='Site web' && (!p.commercial||p.commercial==='')) : [];
+
   return `
   <div class="main-head">
     <div><h2>Prospects</h2><p>${titreProspects} · <b>${totalP} prospect(s)</b></p></div>
     <button class="btn-sm" id="btn-new-prospect">+ Nouveau prospect</button>
   </div>
+
+  ${prospectsWebNonAssignesP.length>0 ? `
+  <div style="background:#FEF3C7;border:1px solid #F59E0B;border-radius:12px;padding:14px 18px;margin-bottom:16px;">
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+      <span style="font-size:20px;">🌐</span>
+      <div style="flex:1;">
+        <div style="font-size:13px;font-weight:700;color:#92400E;">${prospectsWebNonAssignesP.length} prospect${prospectsWebNonAssignesP.length>1?'s':''} du site web non assigné${prospectsWebNonAssignesP.length>1?'s':''}</div>
+        <div style="font-size:12px;color:#B45309;margin-top:3px;">Ces personnes ont rempli le formulaire en ligne et attendent d'être contactées.</div>
+      </div>
+    </div>
+    <div style="margin-top:12px;display:flex;flex-direction:column;gap:8px;">
+      ${prospectsWebNonAssignesP.map(p=>`
+      <div style="background:#fff;border:1px solid #F59E0B;border-radius:8px;padding:10px 14px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+        <div>
+          <span style="font-weight:600;font-size:13px;">${escapeHtml((p.prenom||'')+' '+(p.nom||''))}</span>
+          <span style="font-size:12px;color:#888;margin-left:8px;">${escapeHtml(p.telephone||'')} · ${escapeHtml(p.besoin||'')} · ${escapeHtml(p.boutique||'Boutique non précisée')}</span>
+        </div>
+        <button data-edit-prospect="${p.id}" style="background:#92400E;color:#fff;border:none;padding:6px 12px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;">Assigner →</button>
+      </div>`).join('')}
+    </div>
+  </div>` : ''}
 
   <div class="toolbar">
     <input type="text" id="f-prospect-q" placeholder="Rechercher nom, prénom, adresse ou contact..." value="${escapeHtml(f.q)}">
