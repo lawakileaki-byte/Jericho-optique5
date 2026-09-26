@@ -427,53 +427,85 @@ const MOTIFS_CONTACT = [
   '💬 Contact libre',
 ];
 
+// Stockage temporaire pour le contact en cours (évite les onclick inline avec apostrophes)
+let _pendingContact = null;
+
+// Génère un bouton WA avec data-attributes (pas d'onclick inline)
+function waContactBtn(clientNom, clientId, telephone, boutique, waUrl, label, style) {
+  // Stocker l'URL WA dans un index global pour y accéder depuis le handler
+  if(!window._waUrls) window._waUrls = {};
+  const key = 'wa_' + (telephone||'').replace(/\D/g,'') + '_' + Date.now() + '_' + Math.random().toString(36).slice(2,5);
+  window._waUrls[key] = waUrl;
+  return `<button
+    data-wa-contact="1"
+    data-wa-key="${key}"
+    data-wa-nom="${escapeAttr(clientNom||'')}"
+    data-wa-id="${escapeAttr(clientId||'')}"
+    data-wa-tel="${escapeAttr(telephone||'')}"
+    data-wa-boutique="${escapeAttr(boutique||'')}"
+    style="${style||'display:inline-flex;align-items:center;gap:5px;background:#25D366;color:#fff;border:none;padding:5px 12px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;'}"
+  >${label||'<svg width="13" height="13" viewBox="0 0 24 24" fill="#fff"><path d="M12.04 2c-5.46 0-9.91 4.45-9.91 9.91 0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38c1.45.79 3.08 1.21 4.74 1.21 5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.816 9.816 0 0 0 12.04 2m.01 1.67c2.2 0 4.26.86 5.82 2.42a8.225 8.225 0 0 1 2.41 5.83c0 4.54-3.7 8.23-8.24 8.23-1.48 0-2.93-.39-4.19-1.15l-.3-.17-3.12.82.83-3.04-.2-.32a8.188 8.188 0 0 1-1.26-4.38c.01-4.54 3.7-8.24 8.25-8.24M8.53 7.33c-.16 0-.43.06-.66.31-.22.25-.87.86-.87 2.07 0 1.22.89 2.39 1 2.56.14.17 1.76 2.67 4.25 3.73.59.27 1.05.42 1.41.53.59.19 1.13.16 1.56.1.48-.07 1.46-.6 1.67-1.18.21-.58.21-1.07.14-1.18-.07-.11-.25-.17-.53-.31-.28-.14-1.66-.82-1.92-.91-.26-.09-.44-.14-.63.14-.19.28-.72.91-.88 1.09-.16.18-.32.2-.6.07-.28-.14-1.19-.44-2.26-1.4-.83-.75-1.4-1.67-1.56-1.95-.17-.28-.02-.44.12-.58.13-.13.28-.34.42-.51.14-.17.18-.29.28-.47.09-.19.05-.35-.02-.49-.07-.14-.63-1.52-.88-2.07-.24-.53-.48-.46-.66-.47-.16-.01-.35-.01-.53-.01Z"/></svg> WhatsApp'}</button>`;
+}
+
 // Ouvre la popup motif, enregistre le contact, puis ouvre WhatsApp
 function showContactModal(clientNom, clientId, telephone, boutique, waUrl) {
+  _pendingContact = { clientNom, clientId, telephone, boutique, waUrl };
   const old = document.getElementById('jericho-contact-modal');
   if(old) old.remove();
   const overlay = document.createElement('div');
   overlay.id = 'jericho-contact-modal';
-  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center;';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:10000;display:flex;align-items:center;justify-content:center;';
+  const btns = MOTIFS_CONTACT.map((m,i)=>
+    `<button data-motif-idx="${i}" style="padding:9px 12px;border-radius:8px;border:1.5px solid #e0ddd4;background:#fafaf8;font-size:12px;font-weight:500;cursor:pointer;text-align:left;">${escapeHtml(m)}</button>`
+  ).join('');
   overlay.innerHTML = `<div style="background:#fff;border-radius:12px;padding:24px 28px;max-width:400px;width:92%;box-shadow:0 8px 32px rgba(0,0,0,0.2);">
     <div style="font-size:15px;font-weight:700;color:#26282B;margin-bottom:4px;">📱 Contact WhatsApp</div>
-    <div style="font-size:13px;color:#888;margin-bottom:16px;">${escapeHtml(clientNom)}</div>
+    <div style="font-size:13px;color:#888;margin-bottom:4px;">${escapeHtml(clientNom)}</div>
+    <div style="font-size:12px;color:#aaa;margin-bottom:16px;">Commercial : <b>${escapeHtml(state.commercial||'')}</b></div>
     <div style="font-size:13px;font-weight:600;color:#555;margin-bottom:10px;">Motif du contact :</div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:20px;">
-      ${MOTIFS_CONTACT.map((m,i)=>`<button onclick="window._doContact(${i})" style="padding:8px 10px;border-radius:8px;border:1.5px solid #e0ddd4;background:#fafaf8;font-size:12px;font-weight:500;cursor:pointer;text-align:left;transition:border-color .15s;" onmouseover="this.style.borderColor='#E8A93B'" onmouseout="this.style.borderColor='#e0ddd4'">${escapeHtml(m)}</button>`).join('')}
-    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:20px;">${btns}</div>
     <div style="text-align:center;">
-      <button onclick="document.getElementById('jericho-contact-modal').remove();window._doContact=null;" style="padding:8px 20px;border-radius:8px;border:1.5px solid #ddd;background:#fff;font-size:13px;cursor:pointer;color:#888;">Annuler</button>
+      <button id="wa-modal-cancel" style="padding:8px 20px;border-radius:8px;border:1.5px solid #ddd;background:#fff;font-size:13px;cursor:pointer;color:#888;">Annuler</button>
     </div>
   </div>`;
   document.body.appendChild(overlay);
 
-  window._doContact = async function(motifIdx) {
-    const motif = MOTIFS_CONTACT[motifIdx];
-    overlay.remove();
-    window._doContact = null;
-    // Enregistrer le contact
-    const contact = {
-      id: 'ct_' + Date.now() + '_' + Math.random().toString(36).slice(2,6),
-      clientid: clientId || '',
-      clientnom: clientNom || '',
-      telephone: telephone || '',
-      date: todayISO(),
-      motif,
-      commercial: state.commercial || '',
-      boutique: boutique || state.boutique || '',
-    };
-    try {
-      await apiUpsert('contacts', contact);
-      if(!DB.contacts) DB.contacts = [];
-      DB.contacts.unshift(contact);
-      showToast('Contact enregistré : ' + motif);
-    } catch(e) {
-      console.error('Erreur enregistrement contact:', e);
-      // On ouvre WhatsApp quand même même si erreur
+  overlay.addEventListener('click', async function(e) {
+    // Bouton motif
+    const motifBtn = e.target.closest('[data-motif-idx]');
+    if(motifBtn) {
+      const motifIdx = parseInt(motifBtn.dataset.motifIdx);
+      const motif = MOTIFS_CONTACT[motifIdx];
+      overlay.remove();
+      const c = _pendingContact; _pendingContact = null;
+      if(!c) return;
+      const contact = {
+        id: 'ct_' + Date.now() + '_' + Math.random().toString(36).slice(2,6),
+        clientid: c.clientId || '',
+        clientnom: c.clientNom || '',
+        telephone: c.telephone || '',
+        date: todayISO(),
+        motif,
+        commercial: state.commercial || '',
+        boutique: c.boutique || state.boutique || '',
+      };
+      try {
+        await apiUpsert('contacts', contact);
+        if(!DB.contacts) DB.contacts = [];
+        DB.contacts.unshift(contact);
+        showToast('✅ Contact enregistré — ' + motif);
+      } catch(err) {
+        console.error('Erreur contact:', err);
+      }
+      window.open(c.waUrl, '_blank', 'noopener');
+      return;
     }
-    // Ouvrir WhatsApp
-    window.open(waUrl, '_blank', 'noopener');
-  };
+    // Bouton annuler
+    if(e.target.id === 'wa-modal-cancel' || e.target === overlay) {
+      overlay.remove();
+      _pendingContact = null;
+    }
+  });
 }
 
 function showConfirm(message, onOk) {
@@ -1053,10 +1085,7 @@ function renderDashboard(){
           <div><b style="font-size:13px;">${escapeHtml(cl.nom)} ${escapeHtml(cl.prenom||'')}</b><span style="font-size:11px;color:#888;margin-left:8px;">Dernier achat : ${fmtDate(cl.derniereDate)} · ${cl.nbVentes} achat(s)</span></div>
           <div style="display:flex;gap:8px;align-items:center;">
             <span style="font-size:12px;color:#555;">${escapeHtml(cl.telephone)}</span>
-            <button onclick="showContactModal(${JSON.stringify((cl.nom||'')+' '+(cl.prenom||''))},${JSON.stringify(cl.id||'')},${JSON.stringify(cl.telephone||'')},${JSON.stringify(cl.boutique||'')},'https://wa.me/${num}?text=${msg}')" style="display:inline-flex;align-items:center;gap:5px;background:#25D366;color:#fff;border:none;padding:5px 10px;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="#fff"><path d="M12.04 2c-5.46 0-9.91 4.45-9.91 9.91 0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38c1.45.79 3.08 1.21 4.74 1.21 5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.816 9.816 0 0 0 12.04 2m.01 1.67c2.2 0 4.26.86 5.82 2.42a8.225 8.225 0 0 1 2.41 5.83c0 4.54-3.7 8.23-8.24 8.23-1.48 0-2.93-.39-4.19-1.15l-.3-.17-3.12.82.83-3.04-.2-.32a8.188 8.188 0 0 1-1.26-4.38c.01-4.54 3.7-8.24 8.25-8.24M8.53 7.33c-.16 0-.43.06-.66.31-.22.25-.87.86-.87 2.07 0 1.22.89 2.39 1 2.56.14.17 1.76 2.67 4.25 3.73.59.27 1.05.42 1.41.53.59.19 1.13.16 1.56.1.48-.07 1.46-.6 1.67-1.18.21-.58.21-1.07.14-1.18-.07-.11-.25-.17-.53-.31-.28-.14-1.66-.82-1.92-.91-.26-.09-.44-.14-.63.14-.19.28-.72.91-.88 1.09-.16.18-.32.2-.6.07-.28-.14-1.19-.44-2.26-1.4-.83-.75-1.4-1.67-1.56-1.95-.17-.28-.02-.44.12-.58.13-.13.28-.34.42-.51.14-.17.18-.29.28-.47.09-.19.05-.35-.02-.49-.07-.14-.63-1.52-.88-2.07-.24-.53-.48-.46-.66-.47-.16-.01-.35-.01-.53-.01Z"/></svg>
-              WhatsApp
-            </button>
+            ${waContactBtn((cl.nom||'')+' '+(cl.prenom||''),cl.id||'',cl.telephone||'',cl.boutique||'','https://wa.me/'+num+'?text='+msg,'<svg width="12" height="12" viewBox="0 0 24 24" fill="#fff"><path d="M12.04 2c-5.46 0-9.91 4.45-9.91 9.91 0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38c1.45.79 3.08 1.21 4.74 1.21 5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.816 9.816 0 0 0 12.04 2m.01 1.67c2.2 0 4.26.86 5.82 2.42a8.225 8.225 0 0 1 2.41 5.83c0 4.54-3.7 8.23-8.24 8.23-1.48 0-2.93-.39-4.19-1.15l-.3-.17-3.12.82.83-3.04-.2-.32a8.188 8.188 0 0 1-1.26-4.38c.01-4.54 3.7-8.24 8.25-8.24M8.53 7.33c-.16 0-.43.06-.66.31-.22.25-.87.86-.87 2.07 0 1.22.89 2.39 1 2.56.14.17 1.76 2.67 4.25 3.73.59.27 1.05.42 1.41.53.59.19 1.13.16 1.56.1.48-.07 1.46-.6 1.67-1.18.21-.58.21-1.07.14-1.18-.07-.11-.25-.17-.53-.31-.28-.14-1.66-.82-1.92-.91-.26-.09-.44-.14-.63.14-.19.28-.72.91-.88 1.09-.16.18-.32.2-.6.07-.28-.14-1.19-.44-2.26-1.4-.83-.75-1.4-1.67-1.56-1.95-.17-.28-.02-.44.12-.58.13-.13.28-.34.42-.51.14-.17.18-.29.28-.47.09-.19.05-.35-.02-.49-.07-.14-.63-1.52-.88-2.07-.24-.53-.48-.46-.66-.47-.16-.01-.35-.01-.53-.01Z"/></svg> WhatsApp','display:inline-flex;align-items:center;gap:5px;background:#25D366;color:#fff;border:none;padding:5px 10px;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;')}
           </div>
         </div>`;
       }).join('')}
@@ -1122,7 +1151,7 @@ function renderDashboard(){
         const msg=encodeURIComponent('Joyeux anniversaire '+(c.civilite||'')+' '+(c.nom||'')+' ! Jéricho Optique vous souhaite une excellente journée 🎉');
         return '<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid var(--line);">'
           +'<b style="font-size:12px;">'+escapeHtml(bonjourClient(c.nom,c.prenom,c.civilite))+'</b>'
-          +(tel?'<button onclick="showContactModal('+JSON.stringify((c.nom||'')+' '+(c.prenom||''))+','+JSON.stringify(c.id||'')+','+JSON.stringify(tel)+','+JSON.stringify(c.boutique||'')+',\'https://wa.me/'+num+'?text='+msg+'\')" style="background:#25D366;color:#fff;padding:3px 8px;border-radius:6px;font-size:11px;font-weight:600;border:none;cursor:pointer;">WA 🎂</button>':'')
+          +(tel?waContactBtn((c.nom||'')+' '+(c.prenom||''),c.id||'',tel,c.boutique||'','https://wa.me/'+num+'?text='+msg,'WA 🎂','background:#25D366;color:#fff;padding:3px 8px;border-radius:6px;font-size:11px;font-weight:600;border:none;cursor:pointer;'):'')
           +'</div>';
       }).join('')+(annivNaissanceD.length>3?'<p style="font-size:11px;color:#888;margin-top:6px;text-align:center;">+${annivNaissanceD.length-3} autres</p>':'')
       : '<p style="color:#9a998f;font-size:12px;font-style:italic;">Aucun anniversaire aujourd\'hui</p>'}
@@ -1135,7 +1164,7 @@ function renderDashboard(){
         const msg=encodeURIComponent('Bonjour '+(v.civilite||'')+' '+(v.nom||'')+', cela fait '+ans+' an'+(ans>1?'s':'')+' que vous êtes fidèle à Jéricho Optique 🏆 Merci !');
         return '<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid var(--line);">'
           +'<div><b style="font-size:12px;">'+escapeHtml(bonjourClient(v.nom,v.prenom,v.civilite))+'</b> <span style="font-size:11px;color:#E8A93B;">'+ans+' an'+(ans>1?'s':'')+'</span></div>'
-          +(tel?'<button onclick="showContactModal('+JSON.stringify((v.nom||'')+' '+(v.prenom||''))+','+JSON.stringify(v.id||'')+','+JSON.stringify(tel)+','+JSON.stringify(v.boutique||v.businessUnit||'')+',\'https://wa.me/'+num+'?text='+msg+'\')" style="background:#25D366;color:#fff;padding:3px 8px;border-radius:6px;font-size:11px;font-weight:600;border:none;cursor:pointer;">WA 🏆</button>':'')
+          +(tel?waContactBtn((v.nom||'')+' '+(v.prenom||''),v.id||'',tel,v.boutique||v.businessUnit||'','https://wa.me/'+num+'?text='+msg,'WA 🏆','background:#25D366;color:#fff;padding:3px 8px;border-radius:6px;font-size:11px;font-weight:600;border:none;cursor:pointer;'):'')
           +'</div>';
       }).join('')+(annivFideliteD.length>3?'<p style="font-size:11px;color:#888;margin-top:6px;text-align:center;">+${annivFideliteD.length-3} autres</p>':'')
       : '<p style="color:#9a998f;font-size:12px;font-style:italic;">Aucun anniversaire de fidélité aujourd\'hui</p>'}
@@ -1689,10 +1718,8 @@ function clientView(client){
     ${client.adresse?`<span style="font-size:13px;color:#555;">📍 ${escapeHtml(client.adresse)}</span>`:''}
     ${client.boutique?`<span style="font-size:13px;color:#555;">🏪 ${escapeHtml(client.boutique)}</span>`:''}
     ${(client.fonction||client.entreprise)?`<span style="font-size:13px;color:#555;">💼 ${[client.fonction,client.entreprise].filter(Boolean).map(escapeHtml).join(' · ')}</span>`:''}
-    ${telWA?`<button onclick="showContactModal(${JSON.stringify((client.nom||'')+' '+(client.prenom||''))},${JSON.stringify(client.id||'')},${JSON.stringify(telWA)},${JSON.stringify(client.boutique||'')},'https://wa.me/${telWA.startsWith('226')?telWA:'226'+telWA}?text=${encodeURIComponent(bonjourClient(client.nom,client.prenom,client.civilite)+', nous vous contactons de Jéricho Optique.')}')" style="display:inline-flex;align-items:center;gap:5px;background:#25D366;color:#fff;border:none;padding:5px 12px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;">
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="#fff"><path d="M12.04 2c-5.46 0-9.91 4.45-9.91 9.91 0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38c1.45.79 3.08 1.21 4.74 1.21 5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.816 9.816 0 0 0 12.04 2m.01 1.67c2.2 0 4.26.86 5.82 2.42a8.225 8.225 0 0 1 2.41 5.83c0 4.54-3.7 8.23-8.24 8.23-1.48 0-2.93-.39-4.19-1.15l-.3-.17-3.12.82.83-3.04-.2-.32a8.188 8.188 0 0 1-1.26-4.38c.01-4.54 3.7-8.24 8.25-8.24M8.53 7.33c-.16 0-.43.06-.66.31-.22.25-.87.86-.87 2.07 0 1.22.89 2.39 1 2.56.14.17 1.76 2.67 4.25 3.73.59.27 1.05.42 1.41.53.59.19 1.13.16 1.56.1.48-.07 1.46-.6 1.67-1.18.21-.58.21-1.07.14-1.18-.07-.11-.25-.17-.53-.31-.28-.14-1.66-.82-1.92-.91-.26-.09-.44-.14-.63.14-.19.28-.72.91-.88 1.09-.16.18-.32.2-.6.07-.28-.14-1.19-.44-2.26-1.4-.83-.75-1.4-1.67-1.56-1.95-.17-.28-.02-.44.12-.58.13-.13.28-.34.42-.51.14-.17.18-.29.28-.47.09-.19.05-.35-.02-.49-.07-.14-.63-1.52-.88-2.07-.24-.53-.48-.46-.66-.47-.16-.01-.35-.01-.53-.01Z"/></svg>
-      WhatsApp
-    </button>`:''}
+    ${telWA?waContactBtn((client.nom||'')+' '+(client.prenom||''),client.id||'',telWA,client.boutique||'','https://wa.me/'+(telWA.startsWith('226')?telWA:'226'+telWA)+'?text='+encodeURIComponent(bonjourClient(client.nom,client.prenom,client.civilite)+', nous vous contactons de Jéricho Optique.'),'<svg width="13" height="13" viewBox="0 0 24 24" fill="#fff"><path d="M12.04 2c-5.46 0-9.91 4.45-9.91 9.91 0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38c1.45.79 3.08 1.21 4.74 1.21 5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.816 9.816 0 0 0 12.04 2m.01 1.67c2.2 0 4.26.86 5.82 2.42a8.225 8.225 0 0 1 2.41 5.83c0 4.54-3.7 8.23-8.24 8.23-1.48 0-2.93-.39-4.19-1.15l-.3-.17-3.12.82.83-3.04-.2-.32a8.188 8.188 0 0 1-1.26-4.38c.01-4.54 3.7-8.24 8.25-8.24M8.53 7.33c-.16 0-.43.06-.66.31-.22.25-.87.86-.87 2.07 0 1.22.89 2.39 1 2.56.14.17 1.76 2.67 4.25 3.73.59.27 1.05.42 1.41.53.59.19 1.13.16 1.56.1.48-.07 1.46-.6 1.67-1.18.21-.58.21-1.07.14-1.18-.07-.11-.25-.17-.53-.31-.28-.14-1.66-.82-1.92-.91-.26-.09-.44-.14-.63.14-.19.28-.72.91-.88 1.09-.16.18-.32.2-.6.07-.28-.14-1.19-.44-2.26-1.4-.83-.75-1.4-1.67-1.56-1.95-.17-.28-.02-.44.12-.58.13-.13.28-.34.42-.51.14-.17.18-.29.28-.47.09-.19.05-.35-.02-.49-.07-.14-.63-1.52-.88-2.07-.24-.53-.48-.46-.66-.47-.16-.01-.35-.01-.53-.01Z"/></svg> WhatsApp'):''}
+
   </div>
 
   <!-- KPIs -->
