@@ -2997,11 +2997,7 @@ function renderAdminComptes(){
     <div style="padding:10px 18px;font-size:12px;color:#999;">« Autre » permet une saisie libre dans le formulaire de vente.</div>
   </div>
   </div><!-- fin #admin-section-laboratoires -->
-
-  <script>
-  // Activer l'onglet "comptes" par défaut au premier rendu
-  setTimeout(function(){ if(typeof setAdminTab==='function') setAdminTab('comptes'); }, 0);
-  </script>`;
+`;
 }
 
 function apporteurForm(data){
@@ -5344,6 +5340,11 @@ function imprimerRecu(v){
    EVENEMENTS
    ========================================================= */
 function attachGlobalEvents(){
+  // Activer l'onglet "comptes" par défaut quand on arrive sur la page admin
+  if(state.teamTab==='admin' && typeof setAdminTab==='function'){
+    setTimeout(()=>setAdminTab('comptes'), 0);
+  }
+
   document.querySelectorAll('[data-nav]').forEach(el=>{
     el.addEventListener('click', (e)=>{ e.preventDefault(); state.view = el.dataset.nav; render(); });
   });
