@@ -266,32 +266,19 @@ function fmtFCFA(n){
   // Séparateurs de milliers avec espace insécable, pas de décimales
   return n.toLocaleString('fr-FR', {maximumFractionDigits:0}) + ' FCFA';
 }
-// Modal de confirmation intégrée
+// Modal de confirmation - callback global pour éviter les problèmes d'événements
+let _confirmCallback = null;
 function showConfirm(message, onOk) {
+  _confirmCallback = onOk;
+  // Supprimer toute ancienne modal
+  const old = document.getElementById('jericho-confirm-modal');
+  if(old) old.remove();
   const overlay = document.createElement('div');
+  overlay.id = 'jericho-confirm-modal';
+  overlay.setAttribute('data-jericho-confirm', '1');
   overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center;';
-  const box = document.createElement('div');
-  box.style.cssText = 'background:#fff;border-radius:12px;padding:28px 32px;max-width:360px;width:90%;text-align:center;box-shadow:0 8px 32px rgba(0,0,0,0.2);';
-  const msg = document.createElement('div');
-  msg.style.cssText = 'font-size:15px;color:#26282B;margin-bottom:20px;font-weight:500;';
-  msg.textContent = message;
-  const btns = document.createElement('div');
-  btns.style.cssText = 'display:flex;gap:12px;justify-content:center;';
-  const btnCancel = document.createElement('button');
-  btnCancel.textContent = 'Annuler';
-  btnCancel.style.cssText = 'padding:10px 24px;border-radius:8px;border:1.5px solid #ddd;background:#fff;font-size:14px;cursor:pointer;';
-  const btnOk = document.createElement('button');
-  btnOk.textContent = 'Supprimer';
-  btnOk.style.cssText = 'padding:10px 24px;border-radius:8px;border:none;background:#A6402E;color:#fff;font-size:14px;font-weight:600;cursor:pointer;';
-  btns.appendChild(btnCancel);
-  btns.appendChild(btnOk);
-  box.appendChild(msg);
-  box.appendChild(btns);
-  overlay.appendChild(box);
+  overlay.innerHTML = '<div style="background:#fff;border-radius:12px;padding:28px 32px;max-width:360px;width:90%;text-align:center;box-shadow:0 8px 32px rgba(0,0,0,0.2);"><div style="font-size:15px;color:#26282B;margin-bottom:20px;font-weight:500;">' + message + '</div><div style="display:flex;gap:12px;justify-content:center;"><button onclick="document.getElementById(\'jericho-confirm-modal\').remove();_confirmCallback=null;" style="padding:10px 24px;border-radius:8px;border:1.5px solid #ddd;background:#fff;font-size:14px;cursor:pointer;">Annuler</button><button onclick="const cb=_confirmCallback;document.getElementById(\'jericho-confirm-modal\').remove();_confirmCallback=null;if(cb)cb();" style="padding:10px 24px;border-radius:8px;border:none;background:#A6402E;color:#fff;font-size:14px;font-weight:600;cursor:pointer;">Supprimer</button></div></div>';
   document.body.appendChild(overlay);
-  btnCancel.addEventListener('click', () => document.body.removeChild(overlay));
-  btnOk.addEventListener('click', () => { document.body.removeChild(overlay); onOk(); });
-  overlay.addEventListener('click', (e) => { if(e.target === overlay) document.body.removeChild(overlay); });
 }
 
 function showToast(msg){
@@ -850,7 +837,7 @@ function renderDashboard(){
     if(!clients.length) return '';
     return `<div class="panel" style="border-left:4px solid ${couleur};">
       <h3 style="color:${couleur};margin-bottom:10px;">${titre} (${clients.length})</h3>
-      ${clients.slice(0,8).map(cl=>{
+      ${clients.slice(0,3).map(cl=>{
         const effTel = String(cl.telephone || cl.telephone2 || '');
         const num = effTel.startsWith('226') ? effTel : '226'+effTel;
         const msg = encodeURIComponent(msgWA.replace('{nom}', bonjourClient(cl.nom,cl.prenom,cl.civilite)));
@@ -865,9 +852,30 @@ function renderDashboard(){
           </div>
         </div>`;
       }).join('')}
-      ${clients.length>8?`<p style="font-size:12px;color:#E8A93B;margin-top:8px;text-align:center;">+${clients.length-8} autres clients dans la liste complète</p>`:''}
+      ${clients.length>3?`<p style="font-size:12px;color:#E8A93B;margin-top:8px;text-align:center;">+${clients.length-3} autres clients dans la liste complète</p>`:''}
     </div>`;
   }
+
+  // Anniversaires pour le dashboard
+  const mmJjD = todayISO().slice(5);
+  const anneeActD = new Date().getFullYear();
+  const PALIERS_D = [1,2,3,5,10];
+  const annivNaissanceD = [...DB.clients,...DB.prospects].filter(c=>{
+    const dob = c.dateNaissance||c.datenaissance||'';
+    return dob && dob.slice(5)===mmJjD;
+  });
+  const annivFideliteD = [];
+  const _fidKeysD = new Set();
+  DB.ventes.forEach(v=>{
+    const d = v.dateMiseEnRelation||''; if(!d) return;
+    const ans = anneeActD - Number(d.slice(0,4));
+    if(!PALIERS_D.includes(ans)) return;
+    if(d.slice(5)!==mmJjD) return;
+    const key=(v.telephone||'')+v.nom;
+    if(_fidKeysD.has(key)) return;
+    _fidKeysD.add(key);
+    annivFideliteD.push({...v, anneesEcoulees:ans});
+  });
 
   return `
   <div class="main-head"><div><h2>Tableau de bord</h2><p>${iAmAdmin?'Vue globale toutes boutiques.':'Vos indicateurs personnels.'}</p></div></div>
@@ -891,7 +899,36 @@ function renderDashboard(){
     ${iAmAdmin?kpi('SAV ouverts', savOuverts, 'tickets en cours', savOuverts>0, "state.teamTab='clients';render();"):''}
   </div>
 
-  ${listeRelance(clients24,'🔴 Renouvellement urgent — lunettes de plus de 2 ans','#A6402E','Bonjour {nom}, cela fait plus de 2 ans que vous avez vos lunettes. Chez Jéricho Optique, nous vous recommandons un contrôle de vue. Souhaitez-vous prendre rendez-vous ?')}
+  <!-- BLOCS ANNIVERSAIRES -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;">
+    <div class="panel" style="border-left:4px solid #E8A93B;padding:12px;">
+      <h3 style="color:#E8A93B;margin-bottom:8px;">🎁 Anniversaires naissance ${annivNaissanceD.length > 0 ? '('+annivNaissanceD.length+')' : ''}</h3>
+      ${annivNaissanceD.length > 0 ? annivNaissanceD.slice(0,3).map(c=>{
+        const tel=c.telephone||'';const num=tel.startsWith('226')?tel:'226'+tel;
+        const msg=encodeURIComponent('Joyeux anniversaire '+(c.civilite||'')+' '+(c.nom||'')+' ! Jéricho Optique vous souhaite une excellente journée 🎉');
+        return '<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid var(--line);">'
+          +'<b style="font-size:12px;">'+escapeHtml(bonjourClient(c.nom,c.prenom,c.civilite))+'</b>'
+          +(tel?'<a href="https://wa.me/'+num+'?text='+msg+'" target="_blank" style="background:#25D366;color:#fff;padding:3px 8px;border-radius:6px;font-size:11px;text-decoration:none;font-weight:600;">WA 🎂</a>':'')
+          +'</div>';
+      }).join('')+(annivNaissanceD.length>3?'<p style="font-size:11px;color:#888;margin-top:6px;text-align:center;">+${annivNaissanceD.length-3} autres</p>':'')
+      : '<p style="color:#9a998f;font-size:12px;font-style:italic;">Aucun anniversaire aujourd\'hui</p>'}
+    </div>
+    <div class="panel" style="border-left:4px solid #E8A93B;padding:12px;">
+      <h3 style="color:#E8A93B;margin-bottom:8px;">🏆 Fidélité ${annivFideliteD.length > 0 ? '('+annivFideliteD.length+')' : ''}</h3>
+      ${annivFideliteD.length > 0 ? annivFideliteD.slice(0,3).map(v=>{
+        const tel=v.telephone||'';const num=tel.startsWith('226')?tel:'226'+tel;
+        const ans=v.anneesEcoulees;
+        const msg=encodeURIComponent('Bonjour '+(v.civilite||'')+' '+(v.nom||'')+', cela fait '+ans+' an'+(ans>1?'s':'')+' que vous êtes fidèle à Jéricho Optique 🏆 Merci !');
+        return '<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid var(--line);">'
+          +'<div><b style="font-size:12px;">'+escapeHtml(bonjourClient(v.nom,v.prenom,v.civilite))+'</b> <span style="font-size:11px;color:#E8A93B;">'+ans+' an'+(ans>1?'s':'')+'</span></div>'
+          +(tel?'<a href="https://wa.me/'+num+'?text='+msg+'" target="_blank" style="background:#25D366;color:#fff;padding:3px 8px;border-radius:6px;font-size:11px;text-decoration:none;font-weight:600;">WA 🏆</a>':'')
+          +'</div>';
+      }).join('')+(annivFideliteD.length>3?'<p style="font-size:11px;color:#888;margin-top:6px;text-align:center;">+${annivFideliteD.length-3} autres</p>':'')
+      : '<p style="color:#9a998f;font-size:12px;font-style:italic;">Aucun anniversaire de fidélité aujourd\'hui</p>'}
+    </div>
+  </div>
+
+    ${listeRelance(clients24,'🔴 Renouvellement urgent — lunettes de plus de 2 ans','#A6402E','Bonjour {nom}, cela fait plus de 2 ans que vous avez vos lunettes. Chez Jéricho Optique, nous vous recommandons un contrôle de vue. Souhaitez-vous prendre rendez-vous ?')}
   ${listeRelance(clients18,'🟡 À relancer — lunettes entre 18 et 24 mois','#E8A93B','Bonjour {nom}, vos lunettes auront bientôt 2 ans. Chez Jéricho Optique, nous vous invitons à anticiper votre renouvellement. Voulez-vous en discuter ?')}
   ${listeRelance(clientsLentilles24,'🔴 Lentilles urgentes (+24 mois)','#A6402E','Bonjour {nom}, vos lentilles de contact ont plus de 2 ans. Nous vous recommandons un renouvellement urgent. Contactez-nous à Jéricho Optique.')}
   ${listeRelance(clientsLentilles.filter(c=>c.derniereDate>s24),'🔵 Lentilles à relancer (20-24 mois)','#68AAD1','Bonjour {nom}, il est bientôt temps de renouveler vos lentilles de contact chez Jéricho Optique. Souhaitez-vous prendre rendez-vous ?')}
@@ -953,7 +990,7 @@ function renderProspects(){
 
   return `
   <div class="main-head">
-    <div><h2>Prospects</h2><p>${titreProspects}</p></div>
+    <div><h2>Prospects</h2><p>${titreProspects} · <b>${totalP} prospect(s)</b></p></div>
     <button class="btn-sm" id="btn-new-prospect">+ Nouveau prospect</button>
   </div>
 
@@ -2266,30 +2303,40 @@ function renderJournee(){
     'Aucun ticket SAV ouvert.'
   )}
 
-  <!-- ANNIVERSAIRES & FIDÉLITÉ -->
-  ${(anniversairesNaissance.length + anniversairesFidelite.length) > 0 ? `
-  <div class="panel" style="border-left:4px solid #E8A93B;margin-bottom:16px;">
-    <h3 style="margin-bottom:12px;">🎂 Aujourd'hui</h3>
-    ${anniversairesNaissance.map(c=>{
-      const tel = c.telephone||c.telephone2||'';
-      const num = tel.startsWith('226') ? tel : '226'+tel;
-      const msg = encodeURIComponent('Joyeux anniversaire '+(c.civilite||'')+' '+(c.nom||'')+' ! Toute l\'équipe Jéricho Optique vous souhaite une excellente journée 🎉');
-      return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--line);">'
-        +'<div>🎁 <b>'+escapeHtml(bonjourClient(c.nom,c.prenom,c.civilite))+'</b> <span style="font-size:11px;color:#888;">— Anniversaire</span></div>'
-        +(tel ? '<a href="https://wa.me/'+num+'?text='+msg+'" target="_blank" style="background:#25D366;color:#fff;padding:4px 10px;border-radius:6px;font-size:12px;text-decoration:none;font-weight:600;">WhatsApp 🎂</a>' : '')
-        +'</div>';
-    }).join('')}
-    ${anniversairesFidelite.map(v=>{
-      const tel = v.telephone||'';
-      const num = tel.startsWith('226') ? tel : '226'+tel;
-      const ans = v.anneesEcoulees;
-      const msg = encodeURIComponent('Bonjour '+(v.civilite||'')+' '+(v.nom||'')+', cela fait exactement '+ans+' an'+(ans>1?'s':'')+' que vous êtes client(e) chez Jéricho Optique ! Merci pour votre fidélité 🏆 Nous avons une offre spéciale pour vous.');
-      return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--line);">'
-        +'<div>🏆 <b>'+escapeHtml(bonjourClient(v.nom,v.prenom,v.civilite))+'</b> <span style="font-size:11px;color:#E8A93B;">'+ans+' an'+(ans>1?'s':'')+' de fidélité !</span></div>'
-        +(tel ? '<a href="https://wa.me/'+num+'?text='+msg+'" target="_blank" style="background:#25D366;color:#fff;padding:4px 10px;border-radius:6px;font-size:12px;text-decoration:none;font-weight:600;">WhatsApp 🏆</a>' : '')
-        +'</div>';
-    }).join('')}
-  </div>` : ''}
+  <!-- 🎁 ANNIVERSAIRES NAISSANCE -->
+  <div class="panel" style="border-left:4px solid #E8A93B;margin-bottom:12px;">
+    <h3 style="margin-bottom:8px;color:#E8A93B;">🎁 Anniversaires de naissance ${anniversairesNaissance.length>0?'('+anniversairesNaissance.length+')':''}</h3>
+    ${anniversairesNaissance.length > 0
+      ? anniversairesNaissance.slice(0,3).map(c=>{
+          const tel=c.telephone||c.telephone2||'';
+          const num=tel.startsWith('226')?tel:'226'+tel;
+          const msg=encodeURIComponent('Joyeux anniversaire '+(c.civilite||'')+' '+(c.nom||'')+' ! Toute l\'équipe Jéricho Optique vous souhaite une excellente journée 🎉');
+          return '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--line);">'
+            +'<div>🎁 <b>'+escapeHtml(bonjourClient(c.nom,c.prenom,c.civilite))+'</b></div>'
+            +(tel?'<a href="https://wa.me/'+num+'?text='+msg+'" target="_blank" style="background:#25D366;color:#fff;padding:4px 10px;border-radius:6px;font-size:12px;text-decoration:none;font-weight:600;">WhatsApp 🎂</a>':'')
+            +'</div>';
+        }).join('')+(anniversairesNaissance.length>3?'<p style="font-size:11px;color:#888;margin-top:6px;text-align:center;">+${anniversairesNaissance.length-3} autres</p>':'')
+      : '<p style="color:#9a998f;font-size:12px;font-style:italic;">Aucun anniversaire de naissance aujourd\'hui.</p>'
+    }
+  </div>
+
+  <!-- 🏆 ANNIVERSAIRES FIDÉLITÉ -->
+  <div class="panel" style="border-left:4px solid #E8A93B;margin-bottom:12px;">
+    <h3 style="margin-bottom:8px;color:#E8A93B;">🏆 Fidélité clients ${anniversairesFidelite.length>0?'('+anniversairesFidelite.length+')':''}</h3>
+    ${anniversairesFidelite.length > 0
+      ? anniversairesFidelite.slice(0,3).map(v=>{
+          const tel=v.telephone||'';
+          const num=tel.startsWith('226')?tel:'226'+tel;
+          const ans=v.anneesEcoulees;
+          const msg=encodeURIComponent('Bonjour '+(v.civilite||'')+' '+(v.nom||'')+', cela fait exactement '+ans+' an'+(ans>1?'s':'')+' que vous êtes client(e) chez Jéricho Optique ! Merci pour votre fidélité 🏆');
+          return '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--line);">'
+            +'<div>🏆 <b>'+escapeHtml(bonjourClient(v.nom,v.prenom,v.civilite))+'</b> <span style="font-size:11px;color:#E8A93B;">'+ans+' an'+(ans>1?'s':'')+'</span></div>'
+            +(tel?'<a href="https://wa.me/'+num+'?text='+msg+'" target="_blank" style="background:#25D366;color:#fff;padding:4px 10px;border-radius:6px;font-size:12px;text-decoration:none;font-weight:600;">WhatsApp 🏆</a>':'')
+            +'</div>';
+        }).join('')+(anniversairesFidelite.length>3?'<p style="font-size:11px;color:#888;margin-top:6px;text-align:center;">+${anniversairesFidelite.length-3} autres</p>':'')
+      : '<p style="color:#9a998f;font-size:12px;font-style:italic;">Aucun anniversaire de fidélité aujourd\'hui.</p>'
+    }
+  </div>
 
   <!-- BULLETIN DE PAIE EN ATTENTE -->
   ${mesTicketsPaie.length ? `
@@ -2347,7 +2394,7 @@ function renderJournee(){
 
   ${boutique24.length ? section(
     `Renouvellement urgent (${boutique24.length})`, '#A6402E', '🔴',
-    boutique24.slice(0,6).map(cl=>{
+    boutique24.slice(0,3).map(cl=>{
       const num = (cl.telephone||'').startsWith('226')?cl.telephone:'226'+(cl.telephone||'');
       const msg = encodeURIComponent(`${bonjourClient(cl.nom,cl.prenom,cl.civilite)}, cela fait plus de 2 ans que vous avez vos lunettes. Chez Jéricho Optique, nous vous recommandons un contrôle de vue. Souhaitez-vous prendre rendez-vous ?`);
       return `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--line);flex-wrap:wrap;gap:8px;">
@@ -2359,13 +2406,13 @@ function renderJournee(){
         </div>
       </div>`;
     }).join('')+
-    (boutique24.length>6?`<p style="font-size:12px;color:#E8A93B;margin-top:8px;text-align:center;">+${boutique24.length-6} autres dans le Tableau de bord</p>`:''),
+    (boutique24.length>3?`<p style="font-size:12px;color:#E8A93B;margin-top:8px;text-align:center;">+${boutique24.length-3} autres dans le Tableau de bord</p>`:''),
     'Aucun client en renouvellement urgent.'
   ) : ''}
 
   ${boutique18.length ? section(
     `À relancer bientôt — 18 à 24 mois (${boutique18.length})`, '#E8A93B', '🟡',
-    boutique18.slice(0,4).map(cl=>{
+    boutique18.slice(0,3).map(cl=>{
       const msg = encodeURIComponent(`${bonjourClient(cl.nom,cl.prenom,cl.civilite)}, vos lunettes auront bientôt 2 ans. Chez Jéricho Optique, nous vous invitons à anticiper votre renouvellement. Voulez-vous en discuter ?`);
       return `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--line);flex-wrap:wrap;gap:8px;">
         <div><b style="font-size:13px;">${escapeHtml(cl.nom)} ${escapeHtml(cl.prenom||'')}</b>
@@ -2376,13 +2423,13 @@ function renderJournee(){
         </div>
       </div>`;
     }).join('')+
-    (boutique18.length>4?`<p style="font-size:12px;color:#E8A93B;margin-top:8px;text-align:center;">+${boutique18.length-4} autres dans le Tableau de bord</p>`:''),
+    (boutique18.length>3?`<p style="font-size:12px;color:#E8A93B;margin-top:8px;text-align:center;">+${boutique18.length-3} autres dans le Tableau de bord</p>`:''),
     'Aucun client à relancer.'
   ) : ''}
 
   ${boutiqueLentilles24.length ? section(
     `Lentilles urgentes +24 mois (${boutiqueLentilles24.length})`, '#A6402E', '🔴',
-    boutiqueLentilles24.slice(0,4).map(cl=>{
+    boutiqueLentilles24.slice(0,3).map(cl=>{
       const effTel = String(cl.telephone || cl.telephone2 || '');
       const num = effTel.startsWith('226') ? effTel : '226'+effTel;
       const msg = encodeURIComponent(`${bonjourClient(cl.nom,cl.prenom,cl.civilite)}, vos lentilles de contact ont plus de 2 ans. Nous vous recommandons un renouvellement urgent. Contactez-nous à Jéricho Optique.`);
@@ -2394,7 +2441,7 @@ function renderJournee(){
   ) : ''}
   ${boutiqueLentilles.filter(c=>c.derniereDate>s24b).length ? section(
     `Lentilles à relancer 20-24 mois (${boutiqueLentilles.filter(c=>c.derniereDate>s24b).length})`, '#68AAD1', '🔵',
-    boutiqueLentilles.filter(c=>c.derniereDate>s24b).slice(0,4).map(cl=>{
+    boutiqueLentilles.filter(c=>c.derniereDate>s24b).slice(0,3).map(cl=>{
       const msg = encodeURIComponent(`${bonjourClient(cl.nom,cl.prenom,cl.civilite)}, il est bientôt temps de renouveler vos lentilles de contact chez Jéricho Optique. Souhaitez-vous prendre rendez-vous ?`);
       return `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--line);flex-wrap:wrap;gap:8px;">
         <div><b style="font-size:13px;">${escapeHtml(cl.nom)} ${escapeHtml(cl.prenom||'')}</b>
@@ -2453,7 +2500,7 @@ function renderTickets(){
 
   return `
   <div class="main-head">
-    <div><h2>🎫 Tickets</h2><p>${isAdmin()?'Toutes les tâches en cours':'Mes tâches et celles de ma boutique'}</p></div>
+    <div><h2>🎫 Tickets</h2><p>${isAdmin()?'Toutes les tâches en cours':'Mes tâches et celles de ma boutique'} · <b>${totalTk} ticket(s)</b></p></div>
     <button class="btn-sm" id="btn-new-ticket">+ Nouveau ticket</button>
   </div>
 
@@ -2472,7 +2519,7 @@ function renderTickets(){
         <button class="icon-btn" data-edit-ticket="${t.id}">Traiter →</button>
       </div>
     </div>`).join('')}
-    ${ticketsLabo.length>5?`<p style="font-size:12px;color:#E8A93B;margin-top:8px;">+${ticketsLabo.length-5} autres dans la liste</p>`:''}
+    ${ticketsLabo.length>3?`<p style="font-size:12px;color:#E8A93B;margin-top:8px;">+${ticketsLabo.length-3} autres dans la liste</p>`:''}
   </div>` : ''}
 
   <div class="toolbar">
@@ -2498,7 +2545,7 @@ function renderTickets(){
         ${rows.length ? rows.map(t=>`
         <tr style="${t.statut==='Terminé'?'opacity:.5;':''}">
           <td>${badgeType(t.type)}</td>
-          <td><b>${escapeHtml(t.titre)}</b>${t.description?`<div style="font-size:11px;color:#888;">${escapeHtml(t.description.slice(0,50))}${t.description.length>50?'…':''}</div>`:''}</td>
+          <td><b>${escapeHtml(t.titre)}</b>${t.description?`<div style="font-size:11px;color:#888;">${escapeHtml(t.description.slice(0,50))}${t.description.length>30?'…':''}</div>`:''}</td>
           <td style="font-size:12px;">
             <b>${escapeHtml(t.clientNom||'—')}</b>
             ${t.clientPrenom?`<span style="color:#888;"> ${escapeHtml(t.clientPrenom)}</span>`:''}
