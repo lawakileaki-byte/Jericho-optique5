@@ -392,9 +392,15 @@ function fmtDate(d){
   return dt.toLocaleDateString('fr-FR',{day:'2-digit',month:'short',year:'numeric'});
 }
 function fmtFCFA(n){
-  n = Number(n)||0;
-  // Séparateurs de milliers avec espace insécable, pas de décimales
-  return n.toLocaleString('fr-FR', {maximumFractionDigits:0}) + ' FCFA';
+  n = Math.round(Number(n)||0);
+  // Séparateur de milliers fiable (espace fine insécable  ) sur tous navigateurs
+  const str = String(n < 0 ? -n : n).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+  return (n < 0 ? '−' : '') + str + ' FCFA';
+}
+// Formatage sans unité (pour les champs libres)
+function fmtNum(n){
+  n = Math.round(Number(n)||0);
+  return String(n < 0 ? -n : n).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
 }
 // Modal de saisie texte (remplace prompt() bloqué sur GitHub Pages)
 let _promptCallback = null;
@@ -5481,12 +5487,12 @@ function attachVenteConditionalLogic(){
     // Afficher le reste avec séparateurs de milliers
     const elReste = document.getElementById('v-reste-display');
     if(elReste){
-      elReste.value = reste.toLocaleString('fr-FR', {maximumFractionDigits:0}) + ' FCFA';
+      elReste.value = fmtFCFA(reste);
       elReste.style.color = reste > 0 ? '#A6402E' : '#2d7a3a';
     }
     // Afficher le total avec séparateurs dans le label
     const elTotalLabel = document.getElementById('v-total-label');
-    if(elTotalLabel) elTotalLabel.textContent = total > 0 ? total.toLocaleString('fr-FR', {maximumFractionDigits:0}) + ' FCFA' : '';
+    if(elTotalLabel) elTotalLabel.textContent = total > 0 ? fmtFCFA(total) : '';
     // Masquer/afficher le bon non encaissé selon l'assurance + obligatoire
     const wrapBon = document.getElementById('wrap-bon');
     const inputBon = document.getElementById('v-bon');
