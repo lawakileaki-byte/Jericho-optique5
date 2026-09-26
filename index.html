@@ -692,6 +692,7 @@ function renderPublic(){
         <a href="#produits">Produits</a>
         <a href="#services">Services</a>
         <a href="#boutiques">Boutiques</a>
+        <a href="#rdv" style="font-weight:600;color:#E8A93B;">Prendre RDV</a>
         <a href="https://wa.me/22651871212?text=Bonjour%20J%C3%A9richo%20Optique%2C%20je%20souhaite%20avoir%20des%20informations." target="_blank" rel="noopener" class="nav-wa"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12.04 2c-5.46 0-9.91 4.45-9.91 9.91 0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38c1.45.79 3.08 1.21 4.74 1.21 5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.816 9.816 0 0 0 12.04 2m.01 1.67c2.2 0 4.26.86 5.82 2.42a8.225 8.225 0 0 1 2.41 5.83c0 4.54-3.7 8.23-8.24 8.23-1.48 0-2.93-.39-4.19-1.15l-.3-.17-3.12.82.83-3.04-.2-.32a8.188 8.188 0 0 1-1.26-4.38c.01-4.54 3.7-8.24 8.25-8.24M8.53 7.33c-.16 0-.43.06-.66.31-.22.25-.87.86-.87 2.07 0 1.22.89 2.39 1 2.56.14.17 1.76 2.67 4.25 3.73.59.27 1.05.42 1.41.53.59.19 1.13.16 1.56.1.48-.07 1.46-.6 1.67-1.18.21-.58.21-1.07.14-1.18-.07-.11-.25-.17-.53-.31-.28-.14-1.66-.82-1.92-.91-.26-.09-.44-.14-.63.14-.19.28-.72.91-.88 1.09-.16.18-.32.2-.6.07-.28-.14-1.19-.44-2.26-1.4-.83-.75-1.4-1.67-1.56-1.95-.17-.28-.02-.44.12-.58.13-.13.28-.34.42-.51.14-.17.18-.29.28-.47.09-.19.05-.35-.02-.49-.07-.14-.63-1.52-.88-2.07-.24-.53-.48-.46-.66-.47-.16-.01-.35-.01-.53-.01Z"/></svg> WhatsApp</a>
         <button data-nav="equipe">Espace équipe</button>
       </div>
@@ -898,6 +899,69 @@ function renderPublic(){
       </div>
     </section>
 
+    <!-- FORMULAIRE RDV PUBLIC -->
+    <section id="rdv" style="padding:64px 32px;background:#fff;">
+      <div style="max-width:640px;margin:0 auto;">
+        <div style="text-align:center;margin-bottom:36px;">
+          <div style="font-size:12px;font-weight:700;color:#E8A93B;letter-spacing:0.1em;text-transform:uppercase;margin-bottom:12px;">Prise de rendez-vous</div>
+          <h2 style="font-family:'Fraunces',serif;font-size:clamp(26px,3.5vw,38px);font-weight:600;color:#1a1a1a;line-height:1.15;margin:0 0 14px;">Venez nous rendre visite</h2>
+          <p style="font-size:16px;color:#666;line-height:1.65;max-width:44ch;margin:0 auto;">Laissez-nous vos coordonnées, un de nos opticiens vous contacte sous 24h pour confirmer votre rendez-vous.</p>
+        </div>
+        <div id="rdv-form-wrap" style="background:#f8f8f6;border-radius:18px;padding:32px 28px;border:1px solid rgba(0,0,0,0.07);">
+          <form id="rdv-public-form" autocomplete="off">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;">
+              <div>
+                <label style="display:block;font-size:12px;font-weight:700;color:#444;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.04em;">Prénom *</label>
+                <input id="rdv-prenom" type="text" placeholder="Aminata" required style="width:100%;padding:11px 14px;border:1px solid #ddd;border-radius:9px;font-size:14px;background:#fff;outline:none;transition:border .15s;" onfocus="this.style.borderColor='#E8A93B'" onblur="this.style.borderColor='#ddd'">
+              </div>
+              <div>
+                <label style="display:block;font-size:12px;font-weight:700;color:#444;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.04em;">Nom *</label>
+                <input id="rdv-nom" type="text" placeholder="Koné" required style="width:100%;padding:11px 14px;border:1px solid #ddd;border-radius:9px;font-size:14px;background:#fff;outline:none;transition:border .15s;" onfocus="this.style.borderColor='#E8A93B'" onblur="this.style.borderColor='#ddd'">
+              </div>
+            </div>
+            <div style="margin-bottom:14px;">
+              <label style="display:block;font-size:12px;font-weight:700;color:#444;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.04em;">Téléphone *</label>
+              <input id="rdv-tel" type="tel" placeholder="07 XX XX XX XX" required style="width:100%;padding:11px 14px;border:1px solid #ddd;border-radius:9px;font-size:14px;background:#fff;outline:none;transition:border .15s;" onfocus="this.style.borderColor='#E8A93B'" onblur="this.style.borderColor='#ddd'">
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;">
+              <div>
+                <label style="display:block;font-size:12px;font-weight:700;color:#444;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.04em;">Boutique souhaitée</label>
+                <select id="rdv-boutique" style="width:100%;padding:11px 14px;border:1px solid #ddd;border-radius:9px;font-size:14px;background:#fff;outline:none;transition:border .15s;" onfocus="this.style.borderColor='#E8A93B'" onblur="this.style.borderColor='#ddd'">
+                  <option value="">Peu importe</option>
+                  <option value="Patte d'Oie">Patte d'Oie</option>
+                  <option value="Tanghin">Tanghin</option>
+                </select>
+              </div>
+              <div>
+                <label style="display:block;font-size:12px;font-weight:700;color:#444;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.04em;">Motif *</label>
+                <select id="rdv-motif" required style="width:100%;padding:11px 14px;border:1px solid #ddd;border-radius:9px;font-size:14px;background:#fff;outline:none;transition:border .15s;" onfocus="this.style.borderColor='#E8A93B'" onblur="this.style.borderColor='#ddd'">
+                  <option value="">Choisir…</option>
+                  <option value="Examen de vue">Examen de vue</option>
+                  <option value="Nouvelles lunettes">Nouvelles lunettes</option>
+                  <option value="Lentilles de contact">Lentilles de contact</option>
+                  <option value="Lunettes solaires">Lunettes solaires</option>
+                  <option value="Réparation / SAV">Réparation / SAV</option>
+                  <option value="Renseignements">Renseignements</option>
+                </select>
+              </div>
+            </div>
+            <div id="rdv-msg-error" style="display:none;color:#A6402E;font-size:13px;margin-bottom:10px;"></div>
+            <button type="submit" id="rdv-submit-btn" style="width:100%;padding:14px;background:#26282B;color:#fff;border:none;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;transition:background .2s;">Demander un rendez-vous →</button>
+            <p style="font-size:12px;color:#999;text-align:center;margin-top:12px;">Nous vous contactons sous 24h pour confirmer.</p>
+          </form>
+        </div>
+        <div id="rdv-success" style="display:none;text-align:center;padding:40px 20px;">
+          <div style="font-size:48px;margin-bottom:16px;">✅</div>
+          <h3 style="font-family:'Fraunces',serif;font-size:24px;font-weight:600;color:#1a1a1a;margin:0 0 10px;">Demande reçue !</h3>
+          <p style="font-size:15px;color:#666;line-height:1.6;">Merci <span id="rdv-success-nom"></span>. Un de nos opticiens vous contacte sous 24h au <span id="rdv-success-tel" style="font-weight:600;"></span>.</p>
+          <a href="https://wa.me/22651871212?text=Bonjour%20J%C3%A9richo%20Optique%2C%20je%20viens%20de%20faire%20une%20demande%20de%20RDV%20en%20ligne." target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:8px;margin-top:24px;background:#25D366;color:#fff;text-decoration:none;padding:12px 24px;border-radius:50px;font-size:14px;font-weight:600;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="#fff"><path d="M12.04 2c-5.46 0-9.91 4.45-9.91 9.91 0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38c1.45.79 3.08 1.21 4.74 1.21 5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.816 9.816 0 0 0 12.04 2m.01 1.67c2.2 0 4.26.86 5.82 2.42a8.225 8.225 0 0 1 2.41 5.83c0 4.54-3.7 8.23-8.24 8.23-1.48 0-2.93-.39-4.19-1.15l-.3-.17-3.12.82.83-3.04-.2-.32a8.188 8.188 0 0 1-1.26-4.38c.01-4.54 3.7-8.24 8.25-8.24M8.53 7.33c-.16 0-.43.06-.66.31-.22.25-.87.86-.87 2.07 0 1.22.89 2.39 1 2.56.14.17 1.76 2.67 4.25 3.73.59.27 1.05.42 1.41.53.59.19 1.13.16 1.56.1.48-.07 1.46-.6 1.67-1.18.21-.58.21-1.07.14-1.18-.07-.11-.25-.17-.53-.31-.28-.14-1.66-.82-1.92-.91-.26-.09-.44-.14-.63.14-.19.28-.72.91-.88 1.09-.16.18-.32.2-.6.07-.28-.14-1.19-.44-2.26-1.4-.83-.75-1.4-1.67-1.56-1.95-.17-.28-.02-.44.12-.58.13-.13.28-.34.42-.51.14-.17.18-.29.28-.47.09-.19.05-.35-.02-.49-.07-.14-.63-1.52-.88-2.07-.24-.53-.48-.46-.66-.47-.16-.01-.35-.01-.53-.01Z"/></svg>
+            Nous contacter directement sur WhatsApp
+          </a>
+        </div>
+      </div>
+    </section>
+
     <!-- WHATSAPP CTA -->
     <section class="pub-wa-cta">
       <div class="inner reveal">
@@ -934,6 +998,49 @@ function renderPublic(){
     }
     // Tous les éléments reveal sont visibles immédiatement (pas d'animation au scroll)
     document.querySelectorAll('.reveal,.reveal-left,.reveal-right').forEach(el=>el.classList.add('visible'));
+
+    // Formulaire RDV public → Supabase
+    const rdvForm = document.getElementById('rdv-public-form');
+    if(rdvForm){
+      rdvForm.addEventListener('submit', async(e)=>{
+        e.preventDefault();
+        const btn = document.getElementById('rdv-submit-btn');
+        const errDiv = document.getElementById('rdv-msg-error');
+        const prenom = document.getElementById('rdv-prenom').value.trim();
+        const nom = document.getElementById('rdv-nom').value.trim();
+        const tel = document.getElementById('rdv-tel').value.trim();
+        const boutique = document.getElementById('rdv-boutique').value;
+        const motif = document.getElementById('rdv-motif').value;
+        errDiv.style.display = 'none';
+        if(!prenom||!nom||!tel||!motif){ errDiv.textContent='Merci de remplir tous les champs obligatoires.'; errDiv.style.display='block'; return; }
+        btn.textContent = 'Envoi en cours…'; btn.disabled = true;
+        try{
+          const today = new Date().toISOString().slice(0,10);
+          const payload = {
+            nom: nom, prenom: prenom, telephone: tel,
+            boutique: boutique||'', besoin: motif,
+            source: 'Site web', statut: 'Nouveau',
+            commercial: '', dateMiseEnRelation: today,
+            notes: 'Demande de RDV via le site web'
+          };
+          const res = await fetch(SUPABASE_URL+'/rest/v1/prospects', {
+            method:'POST',
+            headers:{'Content-Type':'application/json','apikey':SUPABASE_KEY,'Authorization':'Bearer '+SUPABASE_KEY,'Prefer':'return=minimal'},
+            body: JSON.stringify(payload)
+          });
+          if(!res.ok) throw new Error('Erreur réseau');
+          // Succès
+          document.getElementById('rdv-form-wrap').style.display='none';
+          document.getElementById('rdv-success').style.display='block';
+          document.getElementById('rdv-success-nom').textContent = prenom+' '+nom;
+          document.getElementById('rdv-success-tel').textContent = tel;
+        }catch(err){
+          errDiv.textContent = 'Une erreur est survenue. Veuillez réessayer ou nous contacter directement sur WhatsApp.';
+          errDiv.style.display='block';
+          btn.textContent='Demander un rendez-vous →'; btn.disabled=false;
+        }
+      });
+    }
   });
 }
 
@@ -1072,6 +1179,9 @@ function renderDashboard(){
   const recentProspects = [...myProspects].sort((a,b)=>(b.dateMiseEnRelation||'').localeCompare(a.dateMiseEnRelation||'')).slice(0,5);
   const recentSav = [...s].sort((a,b)=>(b.dateOuverture||'').localeCompare(a.dateOuverture||'')).slice(0,5);
 
+  // Prospects "Site web" non encore assignés (directrice uniquement)
+  const prospectsWebNonAssignes = iAmAdmin ? DB.prospects.filter(p=>p.source==='Site web' && (!p.commercial||p.commercial==='')) : [];
+
   function kpi(label, val, sub, warn, action){
     const warnClass = warn ? 'warn' : '';
     const cursor = action ? 'cursor:pointer;' : '';
@@ -1124,6 +1234,18 @@ function renderDashboard(){
 
   return `
   <div class="main-head"><div><h2>Tableau de bord</h2><p>${iAmAdmin?'Vue globale toutes boutiques.':'Vos indicateurs personnels.'}</p></div></div>
+
+  ${prospectsWebNonAssignes.length>0 ? `
+  <div style="background:#FEF3C7;border:1px solid #F59E0B;border-radius:12px;padding:14px 18px;margin-bottom:20px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;cursor:pointer;" onclick="state.teamTab='prospects';state.filters.prospects.q='Site web';render();">
+    <div style="display:flex;align-items:center;gap:12px;">
+      <span style="font-size:22px;">🌐</span>
+      <div>
+        <div style="font-size:13px;font-weight:700;color:#92400E;">${prospectsWebNonAssignes.length} nouveau${prospectsWebNonAssignes.length>1?'x':''} prospect${prospectsWebNonAssignes.length>1?'s':''} via le site web — à assigner</div>
+        <div style="font-size:12px;color:#B45309;margin-top:2px;">${prospectsWebNonAssignes.map(p=>`${escapeHtml(p.prenom||'')} ${escapeHtml(p.nom||'')} · ${escapeHtml(p.besoin||'')}`).slice(0,2).join(' · ')}</div>
+      </div>
+    </div>
+    <span style="font-size:12px;font-weight:600;color:#92400E;white-space:nowrap;">Voir →</span>
+  </div>` : ''}
 
   <div style="font-size:11px;font-weight:700;color:#E8A93B;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;">Activité commerciale</div>
   <div class="kpi-row">
