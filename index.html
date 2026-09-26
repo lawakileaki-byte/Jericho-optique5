@@ -272,10 +272,18 @@ async function saveUser(userRow) {
 }
 async function savePaymentModes(modesArray) {
   const row = { id: 'modes_paiement', valeur: JSON.stringify(modesArray) };
-  await apiUpsert('config', row);
-  // Mise à jour cache local
+  try {
+    await apiUpsert('config', row);
+  } catch(e) {
+    showToast('Erreur sauvegarde modes : ' + e.message);
+    console.error('savePaymentModes:', e);
+    throw e;
+  }
+  // Mise à jour cache local immédiate
   const idx = DB.config.findIndex(c=>c.id==='modes_paiement');
   if(idx>=0) DB.config[idx]=row; else DB.config.push(row);
+  // Resynchroniser depuis Supabase en arrière-plan
+  try { DB.config = await apiGet('config'); } catch(e) {}
 }
 async function loadAll() {
   const prioritaires = ['utilisateurs', 'ventes', 'prospects', 'clients'];
