@@ -104,6 +104,14 @@
 
   /* Formulaires champs */
   .field input,.field select,.field textarea{font-size:16px;padding:11px 12px} /* 16px = pas de zoom iOS */
+
+  /* Bouton déconnexion mobile : visible uniquement sur mobile */
+  #mobile-logout-panel{display:block}
+}
+
+/* Sur desktop, masquer le panneau de déconnexion mobile */
+@media (min-width:481px){
+  #mobile-logout-panel{display:none}
 }</style>
 </head>
 <body>
@@ -978,8 +986,8 @@ function renderTeam(){
         <button data-tab="primes" class="${state.teamTab==='primes'?'active':''}">💰 Primes</button>
         ${isAdmin() ? `<button data-tab="admin" class="${state.teamTab==='admin'?'active':''}">Comptes</button>` : ''}
         ${isAdmin() ? `<button data-tab="paie" class="${state.teamTab==='paie'?'active':''}">💵 Paie</button>` : ''}
+        <button data-tab="moncompte" class="${state.teamTab==='moncompte'?'active':''}">👤 Compte</button>
         <div class="out">
-          <button data-tab="moncompte" class="${state.teamTab==='moncompte'?'active':''}">Mon compte</button>
           <button id="btn-logout">⇄ Changer de compte</button>
         </div>
       </div>
@@ -2184,6 +2192,9 @@ function renderMonCompte(){
         <button type="submit" class="btn-sm">Enregistrer le nouveau mot de passe</button>
       </div>
     </form>
+  </div>
+  <div class="panel" style="max-width:420px;" id="mobile-logout-panel">
+    <button id="btn-logout-mobile" style="width:100%;padding:12px;border-radius:8px;border:1px solid var(--line);background:none;font-size:14px;font-weight:600;color:var(--red);cursor:pointer;">⇄ Changer de compte / Se déconnecter</button>
   </div>`;
 }
 
@@ -4502,6 +4513,8 @@ function attachGlobalEvents(){
 
   const logout = document.getElementById('btn-logout');
   if(logout) logout.addEventListener('click', ()=>{ setCommercial('','','',''); render(); });
+  const logoutMobile = document.getElementById('btn-logout-mobile');
+  if(logoutMobile) logoutMobile.addEventListener('click', ()=>{ setCommercial('','','',''); render(); });
 
   // Prospects
   // Délégation d'événements — un seul listener qui gère tous les boutons
