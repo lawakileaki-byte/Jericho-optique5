@@ -934,7 +934,7 @@ function renderPublic(){
             </div>
             <div style="margin-bottom:14px;">
               <label style="display:block;font-size:12px;font-weight:700;color:#444;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.04em;">Téléphone *</label>
-              <input id="rdv-tel" type="tel" placeholder="07 XX XX XX XX" required style="width:100%;padding:11px 14px;border:1px solid #ddd;border-radius:9px;font-size:14px;background:#fff;outline:none;transition:border .15s;" onfocus="this.style.borderColor='#E8A93B'" onblur="this.style.borderColor='#ddd'">
+              <input id="rdv-tel" type="tel" placeholder="07 XX XX XX XX" required inputmode="numeric" maxlength="14" style="width:100%;padding:11px 14px;border:1px solid #ddd;border-radius:9px;font-size:14px;background:#fff;outline:none;transition:border .15s;" onfocus="this.style.borderColor='#E8A93B'" onblur="this.style.borderColor='#ddd'" oninput="formatTel(this)">
             </div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;">
               <div>
@@ -1805,8 +1805,8 @@ function prospectForm(data){
   <form id="form-prospect">
     <div class="form-grid">
       <div class="form-section-title">Informations personnelles</div>
-      <div class="field"><label>📱  Téléphone WhatsApp <span style="color:#A6402E;">*</span></label><input required id="p-tel" value="${escapeAttr(String(d.telephone||''))}" inputmode="numeric" placeholder="ex: 70000000" oninput="this.value=this.value.replace(/[^0-9]/g,'')"></div>
-      <div class="field"><label>📞 Téléphone 2</label><input id="p-tel2" value="${escapeAttr(String(d.telephone2||''))}" inputmode="numeric" placeholder="ex: 65000000" oninput="this.value=this.value.replace(/[^0-9]/g,'')"></div>
+      <div class="field"><label>📱  Téléphone WhatsApp <span style="color:#A6402E;">*</span></label><input required id="p-tel" value="${escapeAttr(fmtTelAff(d.telephone))}" inputmode="numeric" placeholder="ex: 70 00 00 00" maxlength="14" oninput="formatTel(this)"></div>
+      <div class="field"><label>📞 Téléphone 2</label><input id="p-tel2" value="${escapeAttr(fmtTelAff(d.telephone2))}" inputmode="numeric" placeholder="ex: 65 00 00 00" maxlength="14" oninput="formatTel(this)"></div>
       <div class="field"><label>Civilité <span style="color:#A6402E;">*</span></label><select required id="p-civilite"><option value="">— choisir —</option>${CIVILITES.filter(c=>c).map(c=>`<option ${d.civilite===c?'selected':''}>${c}</option>`).join('')}</select></div>
       <div class="field"><label>Nom <span style="color:#A6402E;">*</span></label><input required id="p-nom" value="${escapeAttr(d.nom)}" placeholder="Nom de famille"></div>
       <div class="field"><label>Prénom</label><input id="p-prenom" value="${escapeAttr(d.prenom)}" placeholder="Prénom"></div>
@@ -1842,8 +1842,8 @@ function clientForm(data, isConversion=false){
   <form id="form-client">
     <div class="form-grid">
       <div class="form-section-title">Informations personnelles</div>
-      <div class="field"><label>📱  Téléphone WhatsApp <span style="color:#A6402E;">*</span></label><input required id="c-tel" value="${escapeAttr(String(d.telephone||''))}" inputmode="numeric" placeholder="ex: 70000000" oninput="this.value=this.value.replace(/[^0-9]/g,'')"></div>
-      <div class="field"><label>📞 Téléphone 2</label><input id="c-tel2" value="${escapeAttr(String(d.telephone2||''))}" inputmode="numeric" placeholder="ex: 65000000" oninput="this.value=this.value.replace(/[^0-9]/g,'')"></div>
+      <div class="field"><label>📱  Téléphone WhatsApp <span style="color:#A6402E;">*</span></label><input required id="c-tel" value="${escapeAttr(fmtTelAff(d.telephone))}" inputmode="numeric" placeholder="ex: 70 00 00 00" maxlength="14" oninput="formatTel(this)"></div>
+      <div class="field"><label>📞 Téléphone 2</label><input id="c-tel2" value="${escapeAttr(fmtTelAff(d.telephone2))}" inputmode="numeric" placeholder="ex: 65 00 00 00" maxlength="14" oninput="formatTel(this)"></div>
       <div class="field"><label>Civilité <span style="color:#A6402E;">*</span></label><select required id="c-civilite"><option value="">— choisir —</option>${CIVILITES.filter(c=>c).map(c=>`<option ${d.civilite===c?'selected':''}>${c}</option>`).join('')}</select></div>
       <div class="field"><label>Nom <span style="color:#A6402E;">*</span></label><input required id="c-nom" value="${escapeAttr(d.nom)}" placeholder="Nom de famille"></div>
       <div class="field"><label>Prénom</label><input id="c-prenom" value="${escapeAttr(d.prenom)}" placeholder="Prénom"></div>
@@ -2006,7 +2006,7 @@ function savForm(data){
   <form id="form-sav">
     <div class="form-grid">
       <div class="field full"><label>Nom du client</label><input required id="s-nom" value="${escapeAttr(d.clientNom)}"></div>
-      <div class="field"><label>Téléphone</label><input id="s-tel" value="${escapeAttr(d.telephone)}"></div>
+      <div class="field"><label>Téléphone</label><input id="s-tel" value="${escapeAttr(fmtTelAff(d.telephone))}" inputmode="numeric" maxlength="14" oninput="formatTel(this)"></div>
       <div class="field"><label>Boutique</label><select id="s-boutique">${BOUTIQUES.map(b=>`<option ${d.boutique===b?'selected':''}>${b}</option>`).join('')}</select></div>
       <div class="field"><label>Type de demande</label><select id="s-type">${TYPES_SAV.map(t=>`<option ${d.typeDemande===t?'selected':''}>${t}</option>`).join('')}</select></div>
       <div class="field"><label>Statut</label><select id="s-statut">${STATUTS_SAV.map(s=>`<option ${d.statut===s?'selected':''}>${s}</option>`).join('')}</select></div>
@@ -2065,8 +2065,8 @@ function venteForm(data){
     <div class="form-grid">
 
       <div class="form-section-title">Informations personnelles</div>
-      <div class="field"><label>📱  Téléphone WhatsApp <span style="font-weight:400;color:#9a998f;font-size:11px;">— saisir en premier</span></label><input required id="v-tel" value="${escapeAttr(d.telephone)}" placeholder="ex: 70000000" inputmode="numeric" oninput="this.value=this.value.replace(/[^0-9]/g,'')"></div>
-      <div class="field"><label>📞 Téléphone 2</label><input id="v-tel2" value="${escapeAttr(d.telephone2||'')}" placeholder="ex: 65000000" inputmode="numeric" oninput="this.value=this.value.replace(/[^0-9]/g,'')"></div>
+      <div class="field"><label>📱  Téléphone WhatsApp <span style="font-weight:400;color:#9a998f;font-size:11px;">— saisir en premier</span></label><input required id="v-tel" value="${escapeAttr(fmtTelAff(d.telephone))}" placeholder="ex: 70 00 00 00" inputmode="numeric" maxlength="14" oninput="formatTel(this)"></div>
+      <div class="field"><label>📞 Téléphone 2</label><input id="v-tel2" value="${escapeAttr(fmtTelAff(d.telephone2||''))}" placeholder="ex: 65 00 00 00" inputmode="numeric" maxlength="14" oninput="formatTel(this)"></div>
       <div class="field"><label>Civilité <span style="color:#A6402E;">*</span></label><select required id="v-civilite"><option value="">— choisir —</option>${CIVILITES.filter(c=>c).map(c=>`<option ${(d.civilite||'')===c?'selected':''}>${c}</option>`).join('')}</select></div>
       <div class="field"><label>Nom <span style="color:#A6402E;">*</span></label><input required id="v-nom" value="${escapeAttr(d.nom)}" placeholder="Nom de famille"></div>
       <div class="field"><label>Prénom</label><input id="v-prenom" value="${escapeAttr(d.prenom)}" placeholder="Prénom"></div>
@@ -2345,7 +2345,7 @@ function apporteurForm(data){
       <div class="field"><label>Prénom</label><input id="ap-prenom" value="${escapeAttr(d.prenom||'')}" placeholder="Prénom"></div>
       <div class="field"><label>Spécialité</label><select id="ap-specialite">${SPECIALITES.map(s=>`<option ${d.specialite===s?'selected':''}>${s}</option>`).join('')}</select></div>
       <div class="field"><label>Cabinet / Clinique</label><input id="ap-cabinet" value="${escapeAttr(d.cabinet||'')}" placeholder="Ex: Cabinet Dr Ouédraogo"></div>
-      <div class="field"><label>Téléphone</label><input id="ap-tel" value="${escapeAttr(d.telephone||'')}" inputmode="numeric" placeholder="ex: 70000000" oninput="this.value=this.value.replace(/[^0-9]/g,'')"></div>
+      <div class="field"><label>Téléphone</label><input id="ap-tel" value="${escapeAttr(fmtTelAff(d.telephone||''))}" inputmode="numeric" placeholder="ex: 70 00 00 00" maxlength="14" oninput="formatTel(this)"></div>
       <div class="field"><label>Statut</label><select id="ap-actif"><option value="true" ${d.actif!==false&&d.actif!=='false'?'selected':''}>Actif</option><option value="false" ${d.actif===false||d.actif==='false'?'selected':''}>Inactif</option></select></div>
     </div>
     <div class="modal-actions">
@@ -4946,12 +4946,12 @@ function attachGlobalEvents(){
   setTimeout(()=>{
     setupAutocomplete('s-nom', getClientSuggestions, (s)=>{
       const el = document.getElementById('s-nom'); if(el) el.value = `${s.nom} ${s.prenom}`.trim();
-      const tel = document.getElementById('s-tel'); if(tel) tel.value = s.telephone;
+      const tel = document.getElementById('s-tel'); if(tel) tel.value = fmtTelAff(s.telephone);
     });
     setupAutocomplete('v-nom', getClientSuggestions, (s)=>{
       const n = document.getElementById('v-nom'); if(n) n.value = s.nom;
       const pr = document.getElementById('v-prenom'); if(pr) pr.value = s.prenom;
-      const t = document.getElementById('v-tel'); if(t) t.value = s.telephone;
+      const t = document.getElementById('v-tel'); if(t) t.value = fmtTelAff(s.telephone);
       const ad = document.getElementById('v-adresse'); if(ad) ad.value = s.adresse;
       const bu = document.getElementById('v-bu'); if(bu && s.boutique) bu.value = s.boutique;
     });
@@ -5049,8 +5049,8 @@ function attachVenteConditionalLogic(){
   // Autocomplete sur le TELEPHONE en premier
   setTimeout(()=>{
     setupAutocomplete('v-tel', getClientSuggestions, (s)=>{
-      const tel = document.getElementById('v-tel'); if(tel) tel.value = s.telephone;
-      const tel2 = document.getElementById('v-tel2'); if(tel2 && s.telephone2) tel2.value = s.telephone2;
+      const tel = document.getElementById('v-tel'); if(tel) tel.value = fmtTelAff(s.telephone);
+      const tel2 = document.getElementById('v-tel2'); if(tel2 && s.telephone2) tel2.value = fmtTelAff(s.telephone2);
       const n = document.getElementById('v-nom'); if(n) n.value = s.nom;
       const pr = document.getElementById('v-prenom'); if(pr) pr.value = s.prenom;
       const ad = document.getElementById('v-adresse'); if(ad) ad.value = s.adresse;
@@ -5178,7 +5178,7 @@ function attachModalEvents(){
     const existing = DB.sav.find(t=>t.id===id);
     const obj = {
       id, clientNom: document.getElementById('s-nom').value.trim(),
-      telephone: document.getElementById('s-tel').value.trim(),
+      telephone: telPur(document.getElementById('s-tel').value),
       boutique: document.getElementById('s-boutique').value,
       typeDemande: document.getElementById('s-type').value,
       statut: document.getElementById('s-statut').value,
@@ -5573,6 +5573,22 @@ function exportCSV(rows, fields, filename){
 
 })();
 
+// ===== FORMATAGE TELEPHONE =====
+// Format : XX XX XX XX XX (espace après chaque 2 chiffres, max 10 chiffres)
+function formatTel(input) {
+  let digits = input.value.replace(/\D/g, '').slice(0, 10);
+  input.value = digits.replace(/(\d{2})(?=\d)/g, '$1 ');
+}
+// Retourne uniquement les chiffres (pour enregistrement en base)
+function telPur(val) {
+  return (val||'').replace(/\D/g, '');
+}
+// Affiche un numéro stocké (chiffres) avec espaces pour les formulaires
+function fmtTelAff(val) {
+  let digits = (val||'').replace(/\D/g, '').slice(0, 10);
+  return digits.replace(/(\d{2})(?=\d)/g, '$1 ');
+}
+
 // ===== FONCTION GLOBALE RDV PUBLIC =====
 // Appelée directement par onclick="soumettreRDV()" — pas de dépendance aux listeners
 async function soumettreRDV() {
@@ -5582,7 +5598,7 @@ async function soumettreRDV() {
   const civilite = civRadio ? civRadio.value : '';
   const prenom = (document.getElementById('rdv-prenom')||{}).value||'';
   const nom = (document.getElementById('rdv-nom')||{}).value||'';
-  const tel = (document.getElementById('rdv-tel')||{}).value||'';
+  const tel = telPur((document.getElementById('rdv-tel')||{}).value||'');
   const boutique = (document.getElementById('rdv-boutique')||{}).value||'';
   const motif = (document.getElementById('rdv-motif')||{}).value||'';
 
