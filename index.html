@@ -21,7 +21,7 @@
 /* ===== MOBILE PETIT ECRAN : iPhone 16 / 390px ===== */
 @media (max-width:480px){
   /* Sidebar : barre onglets en bas façon app mobile */
-  .team-shell{flex-direction:column;height:100vh;overflow:hidden}
+  .team-shell{flex-direction:column;height:100vh;height:100dvh;min-height:-webkit-fill-available;overflow:hidden}
   .sidebar{
     order:2;width:100%;flex-direction:row;overflow-x:auto;
     padding:0;gap:0;
@@ -47,7 +47,7 @@
   .main{
     order:1;padding:14px 12px 74px;
     overflow-y:auto;overflow-x:hidden;
-    height:100vh;
+    flex:1;min-height:0;
     -webkit-overflow-scrolling:touch;
   }
 
@@ -132,6 +132,18 @@ function getPaymentModes(){
   const cfg = DB.config.find(c=>c.id==='modes_paiement');
   if(cfg && cfg.valeur){ try{ const arr=JSON.parse(cfg.valeur); if(Array.isArray(arr)&&arr.length) return arr; }catch(e){} }
   return [...DEFAULT_PAYMENT_MODES];
+}
+const DEFAULT_ASSURANCES = ["UAB Assurance","Ascoma","Raynal Assurance","CARFO","CNSS","Sunu Assurance","Pas d'assurance","SONABEL","ONEA","SONAR","MCI","Vitalis","Autre"];
+const DEFAULT_LABOS = ["ZEISS","SIVO","SYNCHRONI","ART'LENS","IDEAL","AFRICALENS","Autre"];
+function getAssurances(){
+  const cfg = DB.config.find(c=>c.id==='assurances');
+  if(cfg && cfg.valeur){ try{ const arr=JSON.parse(cfg.valeur); if(Array.isArray(arr)&&arr.length) return arr; }catch(e){} }
+  return [...DEFAULT_ASSURANCES];
+}
+function getLaboratoires(){
+  const cfg = DB.config.find(c=>c.id==='laboratoires');
+  if(cfg && cfg.valeur){ try{ const arr=JSON.parse(cfg.valeur); if(Array.isArray(arr)&&arr.length) return arr; }catch(e){} }
+  return [...DEFAULT_LABOS];
 }
 let loaded = false;
 let _clientIndexCache = null;
@@ -277,6 +289,18 @@ async function loadUsers() {
 async function saveUser(userRow) {
   await apiUpsert('utilisateurs', userRow);
   await loadUsers();
+}
+async function saveConfigArray(configId, arr) {
+  const row = { id: configId, valeur: JSON.stringify(arr) };
+  try {
+    await apiUpsert('config', row);
+  } catch(e) {
+    showToast('Erreur sauvegarde config : ' + e.message);
+    console.error('saveConfigArray:', e);
+    throw e;
+  }
+  const idx = DB.config.findIndex(c=>c.id===configId);
+  if(idx>=0) DB.config[idx]=row; else DB.config.push(row);
 }
 async function savePaymentModes(modesArray) {
   const row = { id: 'modes_paiement', valeur: JSON.stringify(modesArray) };
@@ -640,9 +664,6 @@ const STATUTS_TICKET = ['À faire','En cours','En attente','Terminé'];
 const PRIORITES_TICKET = ['Haute','Normale','Basse'];
 const STAFF = ["Paloma","Alima","Ali","Amandine","Amande","Rabi","Autre"];
 const STAFF_ALL = [...STAFF.filter(s=>s!=='Autre'), 'Directrice'];
-const ASSURANCES = ["UAB Assurance","Ascoma","Raynal Assurance","CARFO","CNSS","Sunu Assurance","Pas d'assurance","SONABEL","ONEA","SONAR","MCI","Vitalis","Autre"];
-
-const LABOS = ["ZEISS","SIVO","SYNCHRONI","ART'LENS","IDEAL","AFRICALENS","Autre"];
 
 /* ---- Logos partenaires (fournisseurs & assurances) ---- */
 const LOGO_ZEISS = "data:image/png;base64,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";
@@ -2058,7 +2079,11 @@ function clientView(client){
       <td>${v.remise&&Number(v.remise)>0?fmtFCFA(Number(v.remise)):'—'}</td>
       <td>${v.avance&&Number(v.avance)>0?fmtFCFA(Number(v.avance)):'—'}</td>
       <td>${venteReste(v)>0?`<span style="color:#A6402E;font-weight:600;">${fmtFCFA(venteReste(v))}</span>`:'<span style="color:#2d7a3a;">Soldé</span>'}</td>
-      <td style="font-size:11px;">${escapeHtml(v.modePaiement||'—')}</td>
+      <td style="font-size:11px;">${(()=>{
+  let vrs=[]; try{vrs=JSON.parse(v.versements||'[]');}catch(e){}
+  if(vrs.length>0) return vrs.map(r=>`${fmtNum(r.montant||0)} ${escapeHtml(r.mode||'')}`).join('<br>');
+  return escapeHtml(v.modePaiement||'—');
+})()}</td>
       <td style="white-space:nowrap;">${fmtDate(v.dateRdv)}</td>
       <td style="font-size:11px;">${escapeHtml(v.gestionnaire||v.commercial||'')}</td>
       <td><button class="icon-btn" data-print-vente="${v.id}">🖨️</button></td>
@@ -2153,12 +2178,12 @@ function venteForm(data){
     nom:'', prenom:'', civilite:'', adresse:'', telephone:'', telephone2:'',
     typeArticle: TYPES_ARTICLE[0],
     cout:'',
-    fonction:'', entreprise:'', assurance:ASSURANCES[0], assuranceAutre:'',
+    fonction:'', entreprise:'', assurance:getAssurances()[0], assuranceAutre:'',
     apporteurAffaire:STAFF[0], apporteurAffaireAutre:'',
     gestionnaire:STAFF[0], gestionnaireAutre:'',
     odSphere:'', odCylindre:'', odAxe:'', odAddition:'',
     ogSphere:'', ogCylindre:'', ogAxe:'', ogAddition:'',
-    laboratoire:LABOS[0], laboratoireAutre:'', caracteristiqueVerre:'',
+    laboratoire:getLaboratoires()[0], laboratoireAutre:'', caracteristiqueVerre:'',
     montantAchatSpray:'', montantVenteEtui:'', montantVenteEssuieVerre:'', prixVenteMontureAcc:'', remiseAcc:'',
     prixVenteMonture:'', prixVenteLentilles:'', prixVenteLentilles2e:'', prixVenteMonture2e:'', prixVenteTotalSansRemise:'', remise:'', avance:'', montantBonNonEncaisse:'',
     dateRdv:'', commentaire:'', commercial: state.commercial
@@ -2189,7 +2214,7 @@ function venteForm(data){
       <div id="sec-reparation" class="field full" style="display:none;"><label>Coût</label><input type="number" min="0" id="v-cout" value="${escapeAttr(d.cout)}"></div>
 
       <div id="sec-assurance" class="form-grid" style="display:none;grid-column:1/-1;">
-        <div class="field"><label>Assurance</label><select id="v-assurance">${ASSURANCES.map(a=>`<option ${d.assurance===a?'selected':''}>${a}</option>`).join('')}</select></div>
+        <div class="field"><label>Assurance</label><select id="v-assurance">${getAssurances().map(a=>`<option ${d.assurance===a?'selected':''}>${a}</option>`).join('')}</select></div>
         <div class="field full" id="wrap-assurance-autre" style="display:none;"><label>Précisez l'assurance</label><input id="v-assurance-autre" value="${escapeAttr(d.assuranceAutre)}"></div>
       </div>
 
@@ -2239,7 +2264,7 @@ function venteForm(data){
         </div>
         <div class="form-section-title">Verre</div>
         <div class="form-grid">
-          <div class="field"><label>Laboratoire</label><select id="v-labo">${LABOS.map(l=>`<option ${d.laboratoire===l?'selected':''}>${l}</option>`).join('')}</select></div>
+          <div class="field"><label>Laboratoire</label><select id="v-labo">${getLaboratoires().map(l=>`<option ${d.laboratoire===l?'selected':''}>${l}</option>`).join('')}</select></div>
           <div class="field" id="wrap-labo-autre" style="display:none;"><label>Précisez</label><input id="v-labo-autre" value="${escapeAttr(d.laboratoireAutre)}"></div>
           <div class="field full"><label>Caractéristique du verre</label><input id="v-carac-verre" value="${escapeAttr(d.caracteristiqueVerre)}"></div>
         </div>
@@ -2269,7 +2294,16 @@ function venteForm(data){
             <div id="v-total-label" style="font-size:12px;color:#E8A93B;font-weight:600;margin-top:3px;"></div>
           </div>
           <div class="field"><label>Remise (montant)</label><input type="number" min="0" step="500" id="v-remise" value="${escapeAttr(d.remise)}" oninput="calcVenteReste()"></div>
-          <div class="field"><label>Avance encaissée</label><input type="number" min="0" step="500" id="v-avance" value="${escapeAttr(d.avance)}" oninput="calcVenteReste()"></div>
+          <div class="full" style="margin-top:4px;">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+    <label style="font-size:12.5px;font-weight:600;color:#514f48;">Versements encaissés</label>
+    <button type="button" id="btn-add-versement" onclick="addVersementRow()" style="font-size:12px;padding:4px 10px;border-radius:6px;border:1px solid var(--line);background:var(--sand-light);cursor:pointer;font-weight:600;color:var(--ink);">+ Ajouter</button>
+  </div>
+  <div id="versements-list" style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px;"></div>
+  <div id="versements-total-line" style="font-size:12px;color:#888;text-align:right;display:none;"></div>
+  <input type="hidden" id="v-versements-json" value="${escapeAttr(d.versements||'[]')}">
+  <input type="hidden" id="v-avance" value="${escapeAttr(d.avance||'0')}">
+</div>
           <div class="field" id="wrap-bon"><label>Bon non encaissé <span style="color:#A6402E;">*</span> <span style="font-weight:400;color:#9a998f;font-size:11px;">(obligatoire si assurance)</span></label><input type="number" min="0" step="500" id="v-bon" value="${escapeAttr(d.montantBonNonEncaisse)}" oninput="calcVenteReste()"></div>
           <div class="field" style="background:#fdf0ee;border-radius:8px;padding:8px;" id="wrap-reste">
             <label style="color:#A6402E;font-weight:600;">Reste à payer</label>
@@ -2277,9 +2311,6 @@ function venteForm(data){
           </div>
         </div>
       </div>
-
-      <div class="form-section-title">Paiement</div>
-      <div class="field"><label>Mode de paiement</label><select id="v-mode-paiement">${getPaymentModes().map(m=>`<option value="${escapeAttr(m)}" ${(d.modePaiement||'')===m?'selected':''}>${escapeHtml(m)}</option>`).join('')}</select></div>
 
       <div class="form-section-title">Suivi</div>
       <div class="field"><label>Date de RDV <span style="color:#A6402E;">*</span></label><input required type="date" id="v-rdv" value="${escapeAttr(d.dateRdv)}"></div>
@@ -2857,6 +2888,52 @@ function renderAdminComptes(){
       </tbody>
     </table>
     <div style="padding:10px 18px;font-size:12px;color:#999;">Les modes sont utilisés dans tous les nouveaux formulaires de vente. Modifier un libellé ici n'affecte pas les ventes déjà enregistrées.</div>
+  </div>
+
+  <!-- SECTION ASSURANCES -->
+  <div class="main-head" style="margin-top:32px;">
+    <div><h2>Assureurs</h2><p>Liste des compagnies d'assurance proposées dans le formulaire de vente.</p></div>
+    <button class="btn-sm" id="btn-add-assurance">+ Ajouter</button>
+  </div>
+  <div class="panel" style="padding:0;">
+    <table>
+      <thead><tr><th>#</th><th>Libellé</th><th></th></tr></thead>
+      <tbody>
+        ${getAssurances().map((a,i)=>`
+          <tr>
+            <td style="color:#aaa;font-size:12px;">${i+1}</td>
+            <td><b>${escapeHtml(a)}</b></td>
+            <td><div class="row-actions">
+              <button class="icon-btn" data-edit-assurance="${i}">Renommer</button>
+              ${a!=="Pas d'assurance"?`<button class="icon-btn danger" data-del-assurance="${i}">Supprimer</button>`:''}
+            </div></td>
+          </tr>`).join('')}
+      </tbody>
+    </table>
+    <div style="padding:10px 18px;font-size:12px;color:#999;">« Pas d'assurance » ne peut pas être supprimé.</div>
+  </div>
+
+  <!-- SECTION LABORATOIRES -->
+  <div class="main-head" style="margin-top:32px;">
+    <div><h2>Laboratoires</h2><p>Labos optiques partenaires disponibles dans le formulaire de vente.</p></div>
+    <button class="btn-sm" id="btn-add-labo">+ Ajouter</button>
+  </div>
+  <div class="panel" style="padding:0;">
+    <table>
+      <thead><tr><th>#</th><th>Libellé</th><th></th></tr></thead>
+      <tbody>
+        ${getLaboratoires().map((l,i)=>`
+          <tr>
+            <td style="color:#aaa;font-size:12px;">${i+1}</td>
+            <td><b>${escapeHtml(l)}</b></td>
+            <td><div class="row-actions">
+              <button class="icon-btn" data-edit-labo="${i}">Renommer</button>
+              ${l!=='Autre'?`<button class="icon-btn danger" data-del-labo="${i}">Supprimer</button>`:''}
+            </div></td>
+          </tr>`).join('')}
+      </tbody>
+    </table>
+    <div style="padding:10px 18px;font-size:12px;color:#999;">« Autre » permet une saisie libre dans le formulaire de vente.</div>
   </div>`;
 }
 
@@ -5429,6 +5506,56 @@ function attachGlobalEvents(){
           await savePaymentModes(modes); render(); showToast('Mode supprimé.');
         }); return;
       }
+
+      // Assureurs
+      if(t.id==='btn-add-assurance'){
+        showPrompt('Libellé du nouvel assureur :', '', async(lib)=>{
+          const arr = getAssurances(); arr.push(lib);
+          await saveConfigArray('assurances', arr); render(); showToast('Assureur ajouté.');
+        }); return;
+      }
+      if(t.dataset.editAssurance !== undefined){
+        const idx = parseInt(t.dataset.editAssurance);
+        const arr = getAssurances();
+        showPrompt('Nouveau libellé :', arr[idx]||'', async(nv)=>{
+          arr[idx] = nv;
+          await saveConfigArray('assurances', arr); render(); showToast('Assureur mis à jour.');
+        }); return;
+      }
+      if(t.dataset.delAssurance !== undefined){
+        const idx = parseInt(t.dataset.delAssurance);
+        const arr = getAssurances();
+        if(arr[idx]==="Pas d'assurance"){ showToast('Impossible de supprimer « Pas d\'assurance ».'); return; }
+        showConfirm(`Supprimer "${arr[idx]}" ?`, async()=>{
+          arr.splice(idx,1);
+          await saveConfigArray('assurances', arr); render(); showToast('Assureur supprimé.');
+        }); return;
+      }
+
+      // Laboratoires
+      if(t.id==='btn-add-labo'){
+        showPrompt('Libellé du nouveau laboratoire :', '', async(lib)=>{
+          const arr = getLaboratoires(); arr.push(lib);
+          await saveConfigArray('laboratoires', arr); render(); showToast('Laboratoire ajouté.');
+        }); return;
+      }
+      if(t.dataset.editLabo !== undefined){
+        const idx = parseInt(t.dataset.editLabo);
+        const arr = getLaboratoires();
+        showPrompt('Nouveau libellé :', arr[idx]||'', async(nv)=>{
+          arr[idx] = nv;
+          await saveConfigArray('laboratoires', arr); render(); showToast('Laboratoire mis à jour.');
+        }); return;
+      }
+      if(t.dataset.delLabo !== undefined){
+        const idx = parseInt(t.dataset.delLabo);
+        const arr = getLaboratoires();
+        if(arr[idx]==='Autre'){ showToast('Impossible de supprimer « Autre ».'); return; }
+        showConfirm(`Supprimer "${arr[idx]}" ?`, async()=>{
+          arr.splice(idx,1);
+          await saveConfigArray('laboratoires', arr); render(); showToast('Laboratoire supprimé.');
+        }); return;
+      }
       if(t.dataset.editUser){ const u=USERS_CACHE.find(x=>x.id===t.dataset.editUser); state.view='equipe'; state.modal={type:'user',data:u}; render(); return; }
       if(t.dataset.toggleUser){
         const u=USERS_CACHE.find(x=>x.id===t.dataset.toggleUser);
@@ -5565,6 +5692,85 @@ function attachVenteConditionalLogic(){
     if(wrapBon) wrapBon.style.display = hasBon ? '' : 'none';
     if(inputBon) inputBon.required = hasBon;
   };
+
+  // ---- Versements multiples ----
+  function renderVersements(){
+    const modes = getPaymentModes();
+    const list = document.getElementById('versements-list');
+    const jsonInput = document.getElementById('v-versements-json');
+    const avanceInput = document.getElementById('v-avance');
+    if(!list || !jsonInput) return;
+    let versements = [];
+    try{ versements = JSON.parse(jsonInput.value||'[]'); }catch(e){}
+    list.innerHTML = versements.map((v,i)=>`
+      <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:6px;align-items:center;" data-vidx="${i}">
+        <input type="number" min="0" step="500" placeholder="Montant" value="${Number(v.montant)||''}"
+          style="padding:8px 10px;border:1px solid #ddd;border-radius:7px;font-size:14px;font-weight:600;"
+          oninput="updateVersement(${i},'montant',this.value)">
+        <select style="padding:8px 10px;border:1px solid #ddd;border-radius:7px;font-size:13px;"
+          onchange="updateVersement(${i},'mode',this.value)">
+          ${modes.map(m=>`<option value="${escapeAttr(m)}" ${v.mode===m?'selected':''}>${escapeHtml(m)}</option>`).join('')}
+        </select>
+        <button type="button" onclick="removeVersement(${i})"
+          style="width:30px;height:30px;border:none;border-radius:6px;background:#fee2e2;color:#A6402E;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;">×</button>
+      </div>`).join('');
+    // Calculer le total des versements → mettre à jour le champ avance caché
+    const total = versements.reduce((s,v)=>s+Number(v.montant||0),0);
+    if(avanceInput) avanceInput.value = total;
+    const tl = document.getElementById('versements-total-line');
+    if(tl){ tl.textContent = versements.length>0 ? `Total encaissé : ${fmtFCFA(total)}` : ''; tl.style.display = versements.length>0?'block':'none'; }
+    window.calcVenteReste();
+  }
+
+  window.addVersementRow = function(){
+    const jsonInput = document.getElementById('v-versements-json');
+    if(!jsonInput) return;
+    let versements = [];
+    try{ versements = JSON.parse(jsonInput.value||'[]'); }catch(e){}
+    versements.push({ montant:'', mode: getPaymentModes()[0] || 'Espèces' });
+    jsonInput.value = JSON.stringify(versements);
+    renderVersements();
+  };
+
+  window.updateVersement = function(i, field, val){
+    const jsonInput = document.getElementById('v-versements-json');
+    if(!jsonInput) return;
+    let versements = [];
+    try{ versements = JSON.parse(jsonInput.value||'[]'); }catch(e){}
+    if(versements[i]) versements[i][field] = field==='montant' ? Number(val)||0 : val;
+    jsonInput.value = JSON.stringify(versements);
+    const avanceInput = document.getElementById('v-avance');
+    const total = versements.reduce((s,v)=>s+Number(v.montant||0),0);
+    if(avanceInput) avanceInput.value = total;
+    const tl = document.getElementById('versements-total-line');
+    if(tl){ tl.textContent = `Total encaissé : ${fmtFCFA(total)}`; tl.style.display='block'; }
+    window.calcVenteReste();
+  };
+
+  window.removeVersement = function(i){
+    const jsonInput = document.getElementById('v-versements-json');
+    if(!jsonInput) return;
+    let versements = [];
+    try{ versements = JSON.parse(jsonInput.value||'[]'); }catch(e){}
+    versements.splice(i,1);
+    jsonInput.value = JSON.stringify(versements);
+    renderVersements();
+  };
+
+  // Initialiser les versements existants (pour l'édition d'une vente)
+  (function initVersements(){
+    const jsonInput = document.getElementById('v-versements-json');
+    const avanceInput = document.getElementById('v-avance');
+    if(!jsonInput) return;
+    let versements = [];
+    try{ versements = JSON.parse(jsonInput.value||'[]'); }catch(e){}
+    // Rétrocompatibilité : si pas de versements mais une avance ancienne, créer un versement
+    if(versements.length === 0 && avanceInput && Number(avanceInput.value) > 0){
+      versements = [{ montant: Number(avanceInput.value), mode: 'Espèces' }];
+      jsonInput.value = JSON.stringify(versements);
+    }
+    renderVersements();
+  })();
 
   // Masquer/afficher bon selon assurance au changement
   const assuranceSelect = document.getElementById('v-assurance');
@@ -5776,7 +5982,8 @@ function attachModalEvents(){
       prixVenteLentilles2e: val('v-prix-lentilles-2e'), prixVenteMonture2e: val('v-prix-monture-2e'),
       prixVenteTotalSansRemise: val('v-prix-total'), remise: val('v-remise'),
       avance: val('v-avance'), montantBonNonEncaisse: val('v-bon'),
-      modePaiement: val('v-mode-paiement'),
+      versements: (()=>{ const vj=document.getElementById('v-versements-json')?.value||'[]'; return vj; })(),
+      modePaiement: (()=>{ const vj=document.getElementById('v-versements-json')?.value||'[]'; let pv=[]; try{pv=JSON.parse(vj);}catch(e){} return pv.length>0 ? pv.map(v=>v.mode).filter((m,i,a)=>a.indexOf(m)===i).join(' + ') : 'Espèces'; })(),
       dateRdv: val('v-rdv'), commentaire: val('v-commentaire').trim(),
       saisePar: (existing && existing.saisePar) || state.commercial,
       commercial: (existing && existing.commercial) || state.commercial,
