@@ -3037,17 +3037,31 @@ document.addEventListener('click', e=>{
 
 // ===== DÉLÉGATION GLOBALE — boutons WhatsApp avec popup motif =====
 document.addEventListener('click', e=>{
+  // Boutons générés par waContactBtn() avec data-wa-contact
   const btn = e.target.closest('[data-wa-contact="1"]');
-  if(!btn) return;
-  e.preventDefault();
-  e.stopPropagation();
-  const key = btn.dataset.waKey;
-  const waUrl = (window._waUrls && key) ? window._waUrls[key] : null;
-  const nom = btn.dataset.waNom || '';
-  const id  = btn.dataset.waId  || '';
-  const tel = btn.dataset.waTel  || '';
-  const boutique = btn.dataset.waBoutique || '';
-  showContactModal(nom, id, tel, boutique, waUrl);
+  if(btn){
+    e.preventDefault();
+    e.stopPropagation();
+    const key = btn.dataset.waKey;
+    const waUrl = (window._waUrls && key) ? window._waUrls[key] : null;
+    showContactModal(btn.dataset.waNom||'', btn.dataset.waId||'', btn.dataset.waTel||'', btn.dataset.waBoutique||'', waUrl);
+    return;
+  }
+  // Liens <a href="https://wa.me/..."> dans l'espace équipe (pas la page publique)
+  const link = e.target.closest('a[href*="wa.me"]');
+  if(link && state.userId){
+    // Ne pas intercepter les liens de la page publique (hors espace équipe)
+    const inApp = link.closest('#app, .modal, [class*="panel"], [class*="main"]');
+    if(inApp){
+      e.preventDefault();
+      e.stopPropagation();
+      const waUrl = link.href;
+      // Extraire le numéro depuis l'URL wa.me/226XXXXXXXX
+      const match = waUrl.match(/wa\.me\/(\d+)/);
+      const tel = match ? match[1] : '';
+      showContactModal('', '', tel, state.boutique||'', waUrl);
+    }
+  }
 });
 
 // ===== AUTO-REMPLIR ADDITION OG DEPUIS OD =====
