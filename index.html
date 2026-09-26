@@ -2781,13 +2781,15 @@ function ticketForm(data){
       </div>
       <div class="field"><label>Statut</label><select id="tk-statut">${STATUTS_TICKET.map(s=>`<option ${d.statut===s?'selected':''}>${s}</option>`).join('')}</select></div>
       <div class="field"><label>Assigné à <span style="color:#A6402E;">*</span></label>
-        ${canChangeAssigne
-          ? `<select required id="tk-assigne">${STAFF_ALL.map(s=>`<option ${d.assigne===s?'selected':''}>${s}</option>`).join('')}</select>`
-          : `<input value="${escapeAttr(d.assigne)}" readonly style="background:#f5f4f0;color:#888;cursor:not-allowed;"><input type="hidden" id="tk-assigne" value="${escapeAttr(d.assigne)}">`
+        ${d.type==="💰 Demande d'avance"
+          ? `<input value="Directrice" readonly style="background:#f5f4f0;color:#888;cursor:not-allowed;"><input type="hidden" id="tk-assigne" value="Directrice">`
+          : canChangeAssigne
+            ? `<select required id="tk-assigne">${STAFF_ALL.map(s=>`<option ${d.assigne===s?'selected':''}>${s}</option>`).join('')}</select>`
+            : `<input value="${escapeAttr(d.assigne)}" readonly style="background:#f5f4f0;color:#888;cursor:not-allowed;"><input type="hidden" id="tk-assigne" value="${escapeAttr(d.assigne)}">`
         }
       </div>
       <div class="field"><label>Date limite</label><input type="date" id="tk-datelimite" value="${escapeAttr(d.dateLimite||'')}"></div>
-      <div class="field"><label>Boutique</label><select id="tk-boutique">${['Toutes',...BOUTIQUES].map(b=>`<option ${(d.boutique||state.boutique)===b?'selected':''}>${b}</option>`).join('')}</select></div>
+      <div class="field" id="tk-boutique-wrap" style="display:${d.type==="💰 Demande d'avance"?'none':''}"><label>Boutique</label><select id="tk-boutique">${['Toutes',...BOUTIQUES].map(b=>`<option ${(d.boutique||state.boutique)===b?'selected':''}>${b}</option>`).join('')}</select></div>
 
       <!-- Section client masquée pour bulletins paie et demandes avance -->
       <div id="tk-client-section" style="display:${(d.type==='💵 Bulletin de paie'||d.type==="💰 Demande d'avance")?'none':'contents'}">
@@ -4948,9 +4950,23 @@ function attachModalEvents(){
     const toggleAvance = ()=>{
       const av = document.getElementById('avance-fields');
       const cl = document.getElementById('tk-client-section');
-      const isPayeAvance = tkTypeEl.value === '💵 Bulletin de paie' || tkTypeEl.value === "💰 Demande d'avance";
-      if(av) av.style.display = tkTypeEl.value === "💰 Demande d'avance" ? 'contents' : 'none';
+      const boutiqueWrap = document.getElementById('tk-boutique-wrap');
+      const isAvance = tkTypeEl.value === "💰 Demande d'avance";
+      const isPayeAvance = tkTypeEl.value === '💵 Bulletin de paie' || isAvance;
+      if(av) av.style.display = isAvance ? 'contents' : 'none';
       if(cl) cl.style.display = isPayeAvance ? 'none' : 'contents';
+      if(boutiqueWrap) boutiqueWrap.style.display = isAvance ? 'none' : '';
+      // Assigné à : forcer Directrice pour demande d'avance
+      const assigneEl = document.getElementById('tk-assigne');
+      if(assigneEl && isAvance){
+        if(assigneEl.tagName === 'SELECT'){
+          // Remplacer le select par un champ readonly
+          const wrap = assigneEl.parentElement;
+          assigneEl.outerHTML = `<input value="Directrice" readonly style="background:#f5f4f0;color:#888;cursor:not-allowed;" id="tk-assigne-display"><input type="hidden" id="tk-assigne" value="Directrice">`;
+        } else {
+          assigneEl.value = 'Directrice';
+        }
+      }
     };
     tkTypeEl.addEventListener('change', toggleAvance);
   }
