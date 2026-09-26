@@ -2746,11 +2746,29 @@ function renderTickets(){
   ${renderPagination('tickets', totalTk, pageTk, PS_TK)}`;
 }
 
+// Types de tickets dont l'assigné est toujours Directrice (non modifiable sauf admin)
+const TICKETS_DIRECTRICE = ["💰 Demande d'avance", '💵 Bulletin de paie', '🔬 Commande labo'];
+
+function assigneField(type, currentAssigne){
+  // Toujours Directrice, non modifiable
+  if(type === "💰 Demande d'avance"){
+    return `<input id="tk-assigne-display" value="Directrice" readonly style="background:#f5f4f0;color:#888;cursor:not-allowed;"><input type="hidden" id="tk-assigne" value="Directrice">`;
+  }
+  // Directrice forcée, admin peut changer
+  if(TICKETS_DIRECTRICE.includes(type)){
+    if(isAdmin()){
+      return `<select required id="tk-assigne">${STAFF_ALL.map(s=>`<option ${(currentAssigne||'Directrice')===s?'selected':''}>${s}</option>`).join('')}</select>`;
+    }
+    return `<input id="tk-assigne-display" value="Directrice" readonly style="background:#f5f4f0;color:#888;cursor:not-allowed;"><input type="hidden" id="tk-assigne" value="Directrice">`;
+  }
+  // Tickets libres : tout le monde peut choisir l'assigné
+  return `<select required id="tk-assigne">${STAFF_ALL.map(s=>`<option ${(currentAssigne||state.commercial)===s?'selected':''}>${s}</option>`).join('')}</select>`;
+}
+
 function ticketForm(data){
-  const canChangeAssigne = isAdmin();
   const d = data || {
     id:'', type:TYPES_TICKET[0], titre:'', description:'',
-    assigne:'Directrice', priorite:'Normale', statut:'À faire',
+    assigne: state.commercial, priorite:'Normale', statut:'À faire',
     clientNom:'', clientCivilite:'', clientPrenom:'',
     clientTel:'', clientTel2:'',
     labo:'', dateLimite:'', venteId:'', boutique:state.boutique||''
@@ -2780,13 +2798,8 @@ function ticketForm(data){
         <div class="field"><label>Motif</label><input type="text" id="tk-avance-motif" value="${escapeAttr(d.avanceMotif||'')}" placeholder="Ex: Frais médicaux, urgence..."></div>
       </div>
       <div class="field"><label>Statut</label><select id="tk-statut">${STATUTS_TICKET.map(s=>`<option ${d.statut===s?'selected':''}>${s}</option>`).join('')}</select></div>
-      <div class="field"><label>Assigné à <span style="color:#A6402E;">*</span></label>
-        ${d.type==="💰 Demande d'avance"
-          ? `<input value="Directrice" readonly style="background:#f5f4f0;color:#888;cursor:not-allowed;"><input type="hidden" id="tk-assigne" value="Directrice">`
-          : canChangeAssigne
-            ? `<select required id="tk-assigne">${STAFF_ALL.map(s=>`<option ${d.assigne===s?'selected':''}>${s}</option>`).join('')}</select>`
-            : `<input id="tk-assigne-display" value="${escapeAttr(d.assigne)}" readonly style="background:#f5f4f0;color:#888;cursor:not-allowed;"><input type="hidden" id="tk-assigne" value="${escapeAttr(d.assigne)}">`
-        }
+      <div class="field" id="tk-assigne-wrap"><label>Assigné à <span style="color:#A6402E;">*</span></label>
+        ${assigneField(d.type, d.assigne)}
       </div>
       <div class="field"><label>Date limite</label><input type="date" id="tk-datelimite" value="${escapeAttr(d.dateLimite||'')}"></div>
       <div class="field" id="tk-boutique-wrap" style="display:${d.type==="💰 Demande d'avance"?'none':''}"><label>Boutique</label><select id="tk-boutique">${['Toutes',...BOUTIQUES].map(b=>`<option ${(d.boutique||state.boutique)===b?'selected':''}>${b}</option>`).join('')}</select></div>
@@ -4948,30 +4961,23 @@ function attachModalEvents(){
   const tkTypeEl = document.getElementById('tk-type');
   if(tkTypeEl){
     const toggleAvance = ()=>{
+      const type = tkTypeEl.value;
       const av = document.getElementById('avance-fields');
       const cl = document.getElementById('tk-client-section');
       const boutiqueWrap = document.getElementById('tk-boutique-wrap');
-      const isAvance = tkTypeEl.value === "💰 Demande d'avance";
-      const isPayeAvance = tkTypeEl.value === '💵 Bulletin de paie' || isAvance;
+      const isAvance = type === "💰 Demande d'avance";
+      const isPayeAvance = type === '💵 Bulletin de paie' || isAvance;
       if(av) av.style.display = isAvance ? 'contents' : 'none';
       if(cl) cl.style.display = isPayeAvance ? 'none' : 'contents';
       if(boutiqueWrap) boutiqueWrap.style.display = isAvance ? 'none' : '';
       // Supprimer/restaurer required sur tk-client selon visibilité
       const tkClientEl = document.getElementById('tk-client');
       if(tkClientEl) tkClientEl.required = !isPayeAvance;
-      // Assigné à : forcer Directrice pour demande d'avance
-      const assigneEl = document.getElementById('tk-assigne');
-      if(isAvance){
-        if(assigneEl && assigneEl.tagName === 'SELECT'){
-          // Admin : le select existe, le remplacer par readonly + hidden
-          assigneEl.outerHTML = `<input id="tk-assigne-display" value="Directrice" readonly style="background:#f5f4f0;color:#888;cursor:not-allowed;"><input type="hidden" id="tk-assigne" value="Directrice">`;
-        } else {
-          // Non-admin : mettre à jour la valeur dans le hidden input
-          if(assigneEl) assigneEl.value = 'Directrice';
-          // Et mettre à jour l'affichage
-          const displayEl = document.getElementById('tk-assigne-display');
-          if(displayEl) displayEl.value = 'Directrice';
-        }
+      // Reconstruire le champ assigné selon le nouveau type
+      const wrap = document.getElementById('tk-assigne-wrap');
+      if(wrap){
+        const currentVal = document.getElementById('tk-assigne')?.value || state.commercial;
+        wrap.innerHTML = `<label>Assigné à <span style="color:#A6402E;">*</span></label>${assigneField(type, currentVal)}`;
       }
     };
     tkTypeEl.addEventListener('change', toggleAvance);
@@ -4995,8 +5001,9 @@ function attachModalEvents(){
       description: document.getElementById('tk-desc').value.trim(),
       assigne: (()=>{
         const type = document.getElementById('tk-type').value;
-        if(type === "💰 Demande d'avance") return 'Directrice';
-        return document.getElementById('tk-assigne').value;
+        // Types forcés à Directrice pour les non-admins
+        if(TICKETS_DIRECTRICE.includes(type) && !isAdmin()) return 'Directrice';
+        return document.getElementById('tk-assigne')?.value || 'Directrice';
       })(),
       priorite: document.getElementById('tk-priorite').value,
       statut: document.getElementById('tk-statut').value,
