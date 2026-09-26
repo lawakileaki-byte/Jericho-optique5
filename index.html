@@ -959,7 +959,7 @@ function renderPublic(){
               </div>
             </div>
             <div id="rdv-msg-error" style="display:none;color:#A6402E;font-size:13px;margin-bottom:10px;"></div>
-            <button type="submit" id="rdv-submit-btn" style="width:100%;padding:14px;background:#26282B;color:#fff;border:none;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;transition:background .2s;">Demander un rendez-vous →</button>
+            <button type="button" id="rdv-submit-btn" onclick="soumettreRDV()" style="width:100%;padding:14px;background:#26282B;color:#fff;border:none;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;transition:background .2s;">Demander un rendez-vous →</button>
             <p style="font-size:12px;color:#999;text-align:center;margin-top:12px;">Nous vous contactons sous 24h pour confirmer.</p>
           </form>
         </div>
@@ -5572,16 +5572,90 @@ function exportCSV(rows, fields, filename){
   }, true); // true = capture phase — intercepte avant tout autre handler
 
 })();
+
+// ===== FONCTION GLOBALE RDV PUBLIC =====
+// Appelée directement par onclick="soumettreRDV()" — pas de dépendance aux listeners
+async function soumettreRDV() {
+  const btn = document.getElementById('rdv-submit-btn');
+  const errDiv = document.getElementById('rdv-msg-error');
+  const civRadio = document.querySelector('input[name="rdv-civilite"]:checked');
+  const civilite = civRadio ? civRadio.value : '';
+  const prenom = (document.getElementById('rdv-prenom')||{}).value||'';
+  const nom = (document.getElementById('rdv-nom')||{}).value||'';
+  const tel = (document.getElementById('rdv-tel')||{}).value||'';
+  const boutique = (document.getElementById('rdv-boutique')||{}).value||'';
+  const motif = (document.getElementById('rdv-motif')||{}).value||'';
+
+  if(errDiv) errDiv.style.display = 'none';
+  if(!civilite){ if(errDiv){errDiv.textContent='Merci de sélectionner votre civilité (M. ou Mme).';errDiv.style.display='block';} return; }
+  if(!prenom.trim()||!nom.trim()||!tel.trim()||!motif){ if(errDiv){errDiv.textContent='Merci de remplir tous les champs obligatoires.';errDiv.style.display='block';} return; }
+
+  if(btn){ btn.textContent = 'Envoi en cours…'; btn.disabled = true; }
+
+  try {
+    const today = new Date().toISOString().slice(0,10);
+    const newId = Date.now().toString(36) + Math.random().toString(36).slice(2,7);
+    const payload = {
+      id: newId,
+      civilite: civilite,
+      nom: nom.trim(),
+      prenom: prenom.trim(),
+      telephone: tel.trim(),
+      boutique: boutique||'',
+      besoin: motif,
+      source: 'Site web',
+      statut: 'Nouveau',
+      commercial: '',
+      datemiseenrelation: today,
+      notes: 'Demande de RDV via le site web'
+    };
+    const res = await fetch('https://hvlenkxjuauozezonsim.supabase.co/rest/v1/prospects', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh2bGVua3hqdWF1b3plem9uc2ltIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTAyNjkyNDIsImV4cCI6MjEwNTg0NTI0Mn0.DSA2FKKjlAQqEynjq3fe9LLDXj-oMwHf_X22wjHLAI4',
+        'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh2bGVua3hqdWF1b3plem9uc2ltIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTAyNjkyNDIsImV4cCI6MjEwNTg0NTI0Mn0.DSA2FKKjlAQqEynjq3fe9LLDXj-oMwHf_X22wjHLAI4',
+        'Prefer': 'return=minimal'
+      },
+      body: JSON.stringify(payload)
+    });
+    if(!res.ok){
+      let detail = '';
+      try{ const j = await res.json(); detail = j.message||j.error||JSON.stringify(j); }catch(e2){}
+      throw new Error('HTTP '+res.status+' — '+detail);
+    }
+    // Succès
+    const wrap = document.getElementById('rdv-form-wrap');
+    const success = document.getElementById('rdv-success');
+    const nomEl = document.getElementById('rdv-success-nom');
+    const telEl = document.getElementById('rdv-success-tel');
+    if(wrap) wrap.style.display='none';
+    if(success) success.style.display='block';
+    if(nomEl) nomEl.textContent = prenom.trim()+' '+nom.trim();
+    if(telEl) telEl.textContent = tel.trim();
+  } catch(err) {
+    if(errDiv){ errDiv.textContent = 'Erreur : '+err.message+'. Contactez-nous sur WhatsApp.'; errDiv.style.display='block'; }
+    if(btn){ btn.textContent='Demander un rendez-vous →'; btn.disabled=false; }
+  }
+}
 </script>
 
 <!-- ===== SERVICE WORKER REGISTRATION ===== -->
 <script>
 if ('serviceWorker' in navigator) {
+  // Désinstaller tout ancien Service Worker pour éviter les problèmes de cache
+  navigator.serviceWorker.getRegistrations().then(regs => {
+    for (const reg of regs) {
+      reg.unregister();
+      console.log('[PWA] Service Worker désinstallé (cache forcé)');
+    }
+  });
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('/Jericho-optique5/sw.js', { scope: '/Jericho-optique5/' })
       .then(reg => {
         console.log('[PWA] Service Worker enregistré ✅', reg.scope);
-        // Vérifier les mises à jour toutes les heures
+        // Forcer la mise à jour immédiate
+        reg.update();
         setInterval(() => reg.update(), 3600000);
       })
       .catch(err => {
