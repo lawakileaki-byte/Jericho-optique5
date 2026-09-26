@@ -1018,6 +1018,7 @@ function renderPublic(){
           const today = new Date().toISOString().slice(0,10);
           // Payload en minuscules = format attendu par Supabase (colonnes snake_case)
           const payload = {
+            id: uid(),
             nom: nom,
             prenom: prenom,
             telephone: tel,
