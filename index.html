@@ -1016,26 +1016,41 @@ function renderPublic(){
         btn.textContent = 'Envoi en cours…'; btn.disabled = true;
         try{
           const today = new Date().toISOString().slice(0,10);
+          // Payload en minuscules = format attendu par Supabase (colonnes snake_case)
           const payload = {
-            nom: nom, prenom: prenom, telephone: tel,
-            boutique: boutique||'', besoin: motif,
-            source: 'Site web', statut: 'Nouveau',
-            commercial: '', dateMiseEnRelation: today,
+            nom: nom,
+            prenom: prenom,
+            telephone: tel,
+            boutique: boutique||'',
+            besoin: motif,
+            source: 'Site web',
+            statut: 'Nouveau',
+            commercial: '',
+            datemiseenrelation: today,
             notes: 'Demande de RDV via le site web'
           };
           const res = await fetch(SUPABASE_URL+'/rest/v1/prospects', {
             method:'POST',
-            headers:{'Content-Type':'application/json','apikey':SUPABASE_KEY,'Authorization':'Bearer '+SUPABASE_KEY,'Prefer':'return=minimal'},
+            headers:{
+              'Content-Type':'application/json',
+              'apikey':SUPABASE_KEY,
+              'Authorization':'Bearer '+SUPABASE_KEY,
+              'Prefer':'return=minimal'
+            },
             body: JSON.stringify(payload)
           });
-          if(!res.ok) throw new Error('Erreur réseau');
+          if(!res.ok){
+            let detail = '';
+            try{ const j = await res.json(); detail = j.message||j.error||JSON.stringify(j); }catch(e){}
+            throw new Error('HTTP '+res.status+' — '+detail);
+          }
           // Succès
           document.getElementById('rdv-form-wrap').style.display='none';
           document.getElementById('rdv-success').style.display='block';
           document.getElementById('rdv-success-nom').textContent = prenom+' '+nom;
           document.getElementById('rdv-success-tel').textContent = tel;
         }catch(err){
-          errDiv.textContent = 'Une erreur est survenue. Veuillez réessayer ou nous contacter directement sur WhatsApp.';
+          errDiv.textContent = 'Erreur : '+err.message+'. Contactez-nous directement sur WhatsApp si le problème persiste.';
           errDiv.style.display='block';
           btn.textContent='Demander un rendez-vous →'; btn.disabled=false;
         }
