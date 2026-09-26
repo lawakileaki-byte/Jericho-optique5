@@ -1598,6 +1598,52 @@ function renderClients(){
 }
 
 /* ---------------------------------------------------------
+   CHAMP PRESCRIPTION MOBILE-FRIENDLY
+   --------------------------------------------------------- */
+// Génère un widget de saisie optique avec boutons ±
+// allowNeg: true pour Sphère/Cylindre (valeurs négatives possibles)
+// step: incrément (0.25 par défaut)
+// minVal/maxVal: limites optionnelles
+// extraOninput: code JS supplémentaire à exécuter à l'oninput
+function rxInput(id, val, allowNeg=true, step=0.25, minVal=null, maxVal=null, extraOninput=''){
+  const safeVal = escapeAttr(String(val||''));
+  const ph = allowNeg ? (step===1 ? 'ex: 90' : 'ex: -1.75') : (step===1 ? 'ex: 90' : 'ex: 2.00');
+  const dec = step < 1 ? 2 : 0;
+  // Normalise la valeur d'un champ prescription en nombre (gère la virgule)
+  const onInput = `(function(inp){
+    let v=inp.value.replace(',','.');
+    if(v===''||v==='-'||v==='+') return;
+    let n=parseFloat(v);
+    if(isNaN(n)) return;
+    ${extraOninput ? extraOninput+';' : ''}
+  })(this)`;
+  // Bouton +/− : incrémente la valeur du champ
+  const btnStyle = 'flex-shrink:0;width:36px;height:36px;border:none;border-radius:8px;background:var(--sand-light);color:var(--ink);font-size:19px;font-weight:300;cursor:pointer;display:flex;align-items:center;justify-content:center;touch-action:manipulation;user-select:none;-webkit-tap-highlight-color:transparent;';
+  const stepFn = (dir) => `(function(){
+    var inp=document.getElementById('${id}');
+    var v=parseFloat((inp.value||'0').replace(',','.'));
+    if(isNaN(v))v=0;
+    v=Math.round((v+${dir}*${step})*1000)/1000;
+    ${minVal!==null?`if(v<${minVal})v=${minVal};`:''}
+    ${maxVal!==null?`if(v>${maxVal})v=${maxVal};`:''}
+    inp.value=v===0&&!${allowNeg}?'0':v.toFixed(${dec}).replace(/\\.?0+$/,v%1===0&&${dec}===0?'':'');
+    if(v===0)inp.value='0';
+    inp.dispatchEvent(new Event('input'));
+    ${extraOninput}
+  })()`;
+  return `<div style="display:flex;align-items:center;gap:5px;">
+    <button type="button" onclick="${stepFn(-1)}" style="${btnStyle}">−</button>
+    <input id="${id}" type="text" inputmode="decimal"
+      value="${safeVal}" placeholder="${ph}"
+      style="flex:1;min-width:0;text-align:center;font-size:16px;font-weight:600;padding:7px 4px;border:1.5px solid #ddd;border-radius:8px;transition:border .15s;"
+      onfocus="this.style.borderColor='#E8A93B'"
+      onblur="this.style.borderColor='#ddd'"
+      oninput="${onInput.replace(/"/g,'&quot;')}">
+    <button type="button" onclick="${stepFn(1)}" style="${btnStyle}">+</button>
+  </div>`;
+}
+
+/* ---------------------------------------------------------
    VENTES  (dossier de vente complet — remplace BASE JERICHO)
    --------------------------------------------------------- */
 function venteTotal(v){
@@ -2154,17 +2200,17 @@ function venteForm(data){
       <div id="sec-prescription" style="display:none;grid-column:1/-1;">
         <div class="form-section-title">Prescription œil droit (OD)</div>
         <div class="form-grid">
-          <div class="field"><label>Sphère</label><input type="number" step="0.25" id="v-od-sphere" value="${escapeAttr(d.odSphere)}" placeholder="ex: -1.75" inputmode="decimal"></div>
-          <div class="field"><label>Cylindre</label><input type="number" step="0.25" id="v-od-cyl" value="${escapeAttr(d.odCylindre)}" placeholder="ex: -0.50" inputmode="decimal"></div>
-          <div class="field"><label>Axe (0-180)</label><input type="number" step="1" min="0" max="180" id="v-od-axe" value="${escapeAttr(d.odAxe)}" placeholder="ex: 90" inputmode="numeric"></div>
-          <div class="field"><label>Addition</label><input type="number" step="0.25" min="0" id="v-od-add" value="${escapeAttr(d.odAddition)}" placeholder="ex: 2.00" inputmode="decimal" oninput="autoOgAdd(this.value);updateBadgeTypeVerre()"></div>
+          <div class="field"><label>Sphère</label>${rxInput('v-od-sphere', d.odSphere, true)}</div>
+          <div class="field"><label>Cylindre</label>${rxInput('v-od-cyl', d.odCylindre, true)}</div>
+          <div class="field"><label>Axe (0-180)</label>${rxInput('v-od-axe', d.odAxe, false, 1, 0, 180)}</div>
+          <div class="field"><label>Addition</label>${rxInput('v-od-add', d.odAddition, false, 0.25, 0, 8, "autoOgAdd(this.value);updateBadgeTypeVerre()")}</div>
         </div>
         <div class="form-section-title">Prescription œil gauche (OG)</div>
         <div class="form-grid">
-          <div class="field"><label>Sphère</label><input type="number" step="0.25" id="v-og-sphere" value="${escapeAttr(d.ogSphere)}" placeholder="ex: -1.75" inputmode="decimal"></div>
-          <div class="field"><label>Cylindre</label><input type="number" step="0.25" id="v-og-cyl" value="${escapeAttr(d.ogCylindre)}" placeholder="ex: -0.50" inputmode="decimal"></div>
-          <div class="field"><label>Axe (0-180)</label><input type="number" step="1" min="0" max="180" id="v-og-axe" value="${escapeAttr(d.ogAxe)}" placeholder="ex: 90" inputmode="numeric"></div>
-          <div class="field"><label>Addition <span id="og-add-hint" style="font-size:10px;color:#68AAD1;font-weight:400;"></span></label><input type="number" step="0.25" min="0" id="v-og-add" value="${escapeAttr(d.ogAddition)}" placeholder="ex: 2.00" inputmode="decimal" oninput="document.getElementById('og-add-hint').textContent='';updateBadgeTypeVerre()"></div>
+          <div class="field"><label>Sphère</label>${rxInput('v-og-sphere', d.ogSphere, true)}</div>
+          <div class="field"><label>Cylindre</label>${rxInput('v-og-cyl', d.ogCylindre, true)}</div>
+          <div class="field"><label>Axe (0-180)</label>${rxInput('v-og-axe', d.ogAxe, false, 1, 0, 180)}</div>
+          <div class="field"><label>Addition <span id="og-add-hint" style="font-size:10px;color:#68AAD1;font-weight:400;"></span></label>${rxInput('v-og-add', d.ogAddition, false, 0.25, 0, 8, "document.getElementById('og-add-hint').textContent='';updateBadgeTypeVerre()")}</div>
           <div class="field full">
             <div id="badge-type-verre" style="display:inline-flex;align-items:center;gap:8px;padding:8px 14px;border-radius:8px;font-size:13px;font-weight:600;background:${(()=>{const od=parseFloat(d.odAddition)||0;const og=parseFloat(d.ogAddition)||0;return (od>0.1||og>0.1)?'#EAF3FE':'#F5F4F0';})()};color:${(()=>{const od=parseFloat(d.odAddition)||0;const og=parseFloat(d.ogAddition)||0;return (od>0.1||og>0.1)?'#185FA5':'#555';})()};">
               ${(()=>{const od=parseFloat(d.odAddition)||0;const og=parseFloat(d.ogAddition)||0;return (od>0.1||og>0.1)?'🔵 Progressif — prime lentilles palier PROGRESSIF':'⚪ Unifocal — prime lentilles palier UNIFOCAL';})()}
