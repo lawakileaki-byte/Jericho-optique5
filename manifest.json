@@ -1,0 +1,28 @@
+{
+  "name": "Jéricho Optique",
+  "short_name": "Jéricho",
+  "description": "Gestion de la lunetterie Jéricho Optique",
+  "start_url": "/Jericho-optique5/",
+  "scope": "/Jericho-optique5/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#1a1a2e",
+  "theme_color": "#E8A93B",
+  "lang": "fr",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'%3E%3Crect width='192' height='192' rx='32' fill='%231a1a2e'/%3E%3Ccircle cx='60' cy='96' r='38' fill='none' stroke='%23E8A93B' stroke-width='12'/%3E%3Ccircle cx='132' cy='96' r='38' fill='none' stroke='%23E8A93B' stroke-width='12'/%3E%3Cline x1='98' y1='96' x2='94' y2='96' stroke='%23E8A93B' stroke-width='12' stroke-linecap='round'/%3E%3Cline x1='22' y1='96' x2='22' y2='82' stroke='%23E8A93B' stroke-width='8' stroke-linecap='round'/%3E%3Cline x1='170' y1='96' x2='170' y2='82' stroke='%23E8A93B' stroke-width='8' stroke-linecap='round'/%3E%3Ctext x='96' y='160' text-anchor='middle' font-family='Arial' font-size='22' font-weight='bold' fill='%23E8A93B'%3EJÉRICHO%3C/text%3E%3C/svg%3E",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' rx='80' fill='%231a1a2e'/%3E%3Ccircle cx='160' cy='256' r='100' fill='none' stroke='%23E8A93B' stroke-width='30'/%3E%3Ccircle cx='352' cy='256' r='100' fill='none' stroke='%23E8A93B' stroke-width='30'/%3E%3Cline x1='260' y1='256' x2='252' y2='256' stroke='%23E8A93B' stroke-width='30' stroke-linecap='round'/%3E%3Cline x1='60' y1='256' x2='60' y2='210' stroke='%23E8A93B' stroke-width='20' stroke-linecap='round'/%3E%3Cline x1='452' y1='256' x2='452' y2='210' stroke='%23E8A93B' stroke-width='20' stroke-linecap='round'/%3E%3Ctext x='256' y='430' text-anchor='middle' font-family='Arial' font-size='60' font-weight='bold' fill='%23E8A93B'%3EJÉRICHO%3C/text%3E%3C/svg%3E",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["business", "productivity"],
+  "screenshots": []
+}
