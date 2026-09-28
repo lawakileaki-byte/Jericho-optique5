@@ -2474,7 +2474,7 @@ function venteForm(data){
   <input type="hidden" id="v-versements-json" value="${escapeAttr(d.versements||'[]')}">
   <input type="hidden" id="v-avance" value="${escapeAttr(d.avance||'0')}">
 </div>
-          <div class="field" id="wrap-bon"><label>Bon non encaissé <span style="color:#A6402E;">*</span> <span style="font-weight:400;color:#9a998f;font-size:11px;">(obligatoire si assurance)</span></label><input type="number" min="0" step="500" id="v-bon" value="${escapeAttr(d.montantBonNonEncaisse)}" oninput="calcVenteReste()"></div>
+          <div class="field" id="wrap-bon" style="display:none;"><label>Bon non encaissé <span style="font-weight:400;color:#9a998f;font-size:11px;">(si assurance)</span></label><input type="number" min="0" step="500" id="v-bon" value="${escapeAttr(d.montantBonNonEncaisse)}" oninput="calcVenteReste()"></div>
           <div class="field" style="background:#fdf0ee;border-radius:8px;padding:8px;" id="wrap-reste">
             <label style="color:#A6402E;font-weight:600;">Reste à payer</label>
             <input type="text" id="v-reste-display" readonly style="font-weight:700;font-size:18px;color:#A6402E;background:transparent;border:none;cursor:default;" value="0 FCFA">
@@ -3317,7 +3317,7 @@ function getClientSuggestions(query){
     const telRaw = String(p.telephone||'');
     const tel2Raw = String(p.telephone2||'');
     if(name.toLowerCase().includes(q) || tel.includes(q) || tel2.includes(q) || telRaw.replace(/\s/g,'').includes(q) || tel2Raw.replace(/\s/g,'').includes(q)){
-      const key = tel || name.toLowerCase();
+      const key = (tel || telRaw) + '|' + name.toLowerCase();
       if(seen.has(key)) return;
       seen.add(key);
       results.push({
