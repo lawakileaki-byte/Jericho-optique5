@@ -134,6 +134,8 @@ function getPaymentModes(){
   return [...DEFAULT_PAYMENT_MODES];
 }
 const DEFAULT_ASSURANCES = ["UAB Assurance","Ascoma","Raynal Assurance","CARFO","CNSS","Sunu Assurance","Pas d'assurance","SONABEL","ONEA","SONAR","MCI","Vitalis","Autre"];
+// Helper : retourne true si la valeur assurance signifie "pas d'assurance" (insensible à la casse)
+function isPasAssurance(a){ return !a || a.toLowerCase().replace(/['']/g,"'") === "pas d'assurance"; }
 const DEFAULT_LABOS = ["ZEISS","SIVO","SYNCHRONI","ART'LENS","IDEAL","AFRICALENS","Autre"];
 function getAssurances(){
   const cfg = DB.config.find(c=>c.id==='assurances');
@@ -1875,7 +1877,7 @@ function ventesCommercial(ventes, nom){
 function venteReste(v){
   // Bon non encaissé ne s'applique que s'il y a une assurance (pas "Pas d'assurance")
   const avance = Number(v.avance)||0;
-  const bon = (v.assurance && v.assurance !== "Pas d'assurance") ? (Number(v.montantBonNonEncaisse)||0) : 0;
+  const bon = !isPasAssurance(v.assurance) ? (Number(v.montantBonNonEncaisse)||0) : 0;
   return Math.max(venteTotal(v) - avance - bon, 0);
 }
 
@@ -3134,7 +3136,7 @@ function renderAdminComptes(){
             <td><b>${escapeHtml(a)}</b></td>
             <td><div class="row-actions">
               <button class="icon-btn" data-edit-assurance="${i}">Renommer</button>
-              ${a!=="Pas d'assurance"?`<button class="icon-btn danger" data-del-assurance="${i}">Supprimer</button>`:''}
+              ${!isPasAssurance(a)?`<button class="icon-btn danger" data-del-assurance="${i}">Supprimer</button>`:''}
             </div></td>
           </tr>`).join('')}
       </tbody>
@@ -4142,7 +4144,7 @@ function creerTicketLabo(vente){
     description: [
       vente.odSphere||vente.ogSphere ? `OD: Sph ${vente.odSphere||'—'} Cyl ${vente.odCylindre||'—'} Axe ${vente.odAxe||'—'}${vente.odAddition?' Add '+vente.odAddition:''} | OG: Sph ${vente.ogSphere||'—'} Cyl ${vente.ogCylindre||'—'} Axe ${vente.ogAxe||'—'}${vente.ogAddition?' Add '+vente.ogAddition:''}` : '',
       vente.caracteristiqueVerre ? `Verre : ${vente.caracteristiqueVerre}` : '',
-      vente.assurance && vente.assurance!=="Pas d'assurance" ? `Assurance : ${vente.assurance}` : '',
+      !isPasAssurance(vente.assurance) ? `Assurance : ${vente.assurance}` : '',
       vente.dateRdv ? `RDV client : ${fmtDate(vente.dateRdv)}` : '',
     ].filter(Boolean).join('\n'),
     assigne: 'Directrice',
@@ -5114,7 +5116,7 @@ function renderAnalyse(){
   const prospP = mesProspects.filter(p=>{const d=(p.dateMiseEnRelation||'').slice(0,10);return d>=debut&&d<=fin;});
   const convertisP = prospP.filter(p=>p.statut==='Converti en client').length;
   const txConv = prospP.length>0?Math.round(convertisP/prospP.length*100):0;
-  const bonTotal = ventesP.filter(v=>v.assurance&&v.assurance!=="Pas d'assurance").reduce((a,v)=>a+(Number(v.montantBonNonEncaisse)||0),0);
+  const bonTotal = ventesP.filter(v=>!isPasAssurance(v.assurance)).reduce((a,v)=>a+(Number(v.montantBonNonEncaisse)||0),0);
 
   // CA par type
   const parType = {};
@@ -5138,7 +5140,7 @@ function renderAnalyse(){
   }
 
   // Assurances
-  const avecAss = ventesP.filter(v=>v.assurance&&v.assurance!=="Pas d'assurance").length;
+  const avecAss = ventesP.filter(v=>!isPasAssurance(v.assurance)).length;
   const sansAss = ventesP.length - avecAss;
 
   // Graphe barres CA par jour
@@ -5385,7 +5387,7 @@ function imprimerRecu(v){
   const reste = venteReste(v);
   const avance = Number(v.avance)||0;
   const remise = Number(v.remise)||0;
-  const bon = (v.assurance && v.assurance !== "Pas d'assurance") ? (Number(v.montantBonNonEncaisse)||0) : 0;
+  const bon = !isPasAssurance(v.assurance) ? (Number(v.montantBonNonEncaisse)||0) : 0;
 
   const lignes = [];
   if(v.typeArticle==='Réparation et entretien'){
@@ -5466,7 +5468,7 @@ function imprimerRecu(v){
       <div class="client-field"><span>Nom complet</span><b>${escapeHtml(`${v.nom||''} ${v.prenom||''}`.trim())}</b></div>
       ${v.telephone ? `<div class="client-field"><span>Téléphone</span>${escapeHtml(String(v.telephone))}</div>` : ''}
       ${v.adresse ? `<div class="client-field"><span>Adresse</span>${escapeHtml(v.adresse)}</div>` : ''}
-      ${(v.assurance && v.assurance!=="Pas d'assurance") ? `<div class="client-field"><span>Assurance</span>${escapeHtml(v.assurance)}</div>` : ''}
+      ${!isPasAssurance(v.assurance) ? `<div class="client-field"><span>Assurance</span>${escapeHtml(v.assurance)}</div>` : ''}
     </div>
   </div>
 
@@ -5764,7 +5766,7 @@ function attachGlobalEvents(){
       if(t.dataset.delAssurance !== undefined){
         const idx = parseInt(t.dataset.delAssurance);
         const arr = getAssurances();
-        if(arr[idx]==="Pas d'assurance"){ showToast('Impossible de supprimer « Pas d\'assurance ».'); return; }
+        if(isPasAssurance(arr[idx])){ showToast('Impossible de supprimer « Pas d\'assurance ».'); return; }
         showConfirm(`Supprimer "${arr[idx]}" ?`, async()=>{
           arr.splice(idx,1);
           await saveConfigArray('assurances', arr); render(); showToast('Assureur supprimé.');
@@ -5913,7 +5915,7 @@ function attachVenteConditionalLogic(){
     const remise = Number(document.getElementById('v-remise')?.value)||0;
     const avance = Number(document.getElementById('v-avance')?.value)||0;
     const assurance = document.getElementById('v-assurance')?.value || '';
-    const hasBon = assurance && assurance !== "Pas d'assurance";
+    const hasBon = !isPasAssurance(assurance);
     const bon = hasBon ? (Number(document.getElementById('v-bon')?.value)||0) : 0;
     const reste = Math.max(total - remise - avance - bon, 0);
     // Afficher le reste avec séparateurs de milliers
