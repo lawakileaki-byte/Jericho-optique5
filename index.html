@@ -2238,6 +2238,14 @@ function clientView(client){
       <div><b>OG</b> — Sphère : ${dernPresc.ogSphere||'—'} · Cyl : ${dernPresc.ogCylindre||'—'} · Axe : ${dernPresc.ogAxe||'—'}${dernPresc.ogAddition?' · Add : '+dernPresc.ogAddition:''}</div>
     </div>
     ${dernPresc.laboratoire?`<div style="margin-top:5px;font-size:12px;color:#555;">Labo : <b>${escapeHtml(dernPresc.laboratoire)}</b>${dernPresc.caracteristiqueVerre?' · '+escapeHtml(dernPresc.caracteristiqueVerre):''}</div>`:''}
+    ${dernPresc.deuxiemePaire?`<div style="margin-top:8px;padding-top:8px;border-top:1px solid rgba(104,170,209,0.3);">
+      <div style="font-size:11px;font-weight:700;color:#2d7a3a;margin-bottom:4px;">🎁 2e paire offerte</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:12px;">
+        <div><b>OD</b> — Sphère : ${dernPresc.p2odSphere||'—'} · Cyl : ${dernPresc.p2odCylindre||'—'} · Axe : ${dernPresc.p2odAxe||'—'}${dernPresc.p2odAddition?' · Add : '+dernPresc.p2odAddition:''}</div>
+        <div><b>OG</b> — Sphère : ${dernPresc.p2ogSphere||'—'} · Cyl : ${dernPresc.p2ogCylindre||'—'} · Axe : ${dernPresc.p2ogAxe||'—'}${dernPresc.p2ogAddition?' · Add : '+dernPresc.p2ogAddition:''}</div>
+      </div>
+      ${dernPresc.p2monture?`<div style="margin-top:4px;font-size:12px;color:#555;">Monture : <b>${escapeHtml(dernPresc.p2monture)}</b></div>`:''}
+    </div>`:''}
   </div>`:''}
 
   <!-- Historique achats -->
@@ -2355,6 +2363,10 @@ function venteForm(data){
     gestionnaire:STAFF[0], gestionnaireAutre:'',
     odSphere:'', odCylindre:'', odAxe:'', odAddition:'',
     ogSphere:'', ogCylindre:'', ogAxe:'', ogAddition:'',
+    deuxiemePaire: false,
+    p2odSphere:'', p2odCylindre:'', p2odAxe:'', p2odAddition:'',
+    p2ogSphere:'', p2ogCylindre:'', p2ogAxe:'', p2ogAddition:'',
+    p2monture:'', p2caracteristiqueVerre:'',
     laboratoire:getLaboratoires()[0], laboratoireAutre:'', caracteristiqueVerre:'',
     montantAchatSpray:'', montantVenteEtui:'', montantVenteEssuieVerre:'', prixVenteMontureAcc:'', remiseAcc:'',
     prixVenteMonture:'', prixVenteLentilles:'', prixVenteLentilles2e:'', prixVenteMonture2e:'', prixVenteTotalSansRemise:'', remise:'', avance:'', montantBonNonEncaisse:'',
@@ -2439,6 +2451,39 @@ function venteForm(data){
           <div class="field"><label>Laboratoire</label><select id="v-labo">${getLaboratoires().map(l=>`<option ${d.laboratoire===l?'selected':''}>${l}</option>`).join('')}</select></div>
           <div class="field" id="wrap-labo-autre" style="display:none;"><label>Précisez</label><input id="v-labo-autre" value="${escapeAttr(d.laboratoireAutre)}"></div>
           <div class="field full"><label>Caractéristique du verre</label><input id="v-carac-verre" value="${escapeAttr(d.caracteristiqueVerre)}"></div>
+        </div>
+
+        <div style="margin-top:16px;padding:14px 16px;background:#f0faf4;border:1px solid #c3e6d0;border-radius:10px;grid-column:1/-1;">
+          <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-weight:700;font-size:14px;color:#1a6b40;">
+            <input type="checkbox" id="v-deuxieme-paire" ${d.deuxiemePaire?'checked':''} onchange="toggleDeuxiemePaire(this.checked)" style="width:17px;height:17px;accent-color:#1a6b40;cursor:pointer;">
+            🎁 2e paire offerte
+          </label>
+        </div>
+
+        <div id="sec-2e-paire" style="display:${d.deuxiemePaire?'block':'none'};margin-top:4px;padding:16px;background:#f7fbf9;border:1px solid #c3e6d0;border-radius:10px;grid-column:1/-1;">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+            <div style="font-weight:700;font-size:13px;color:#1a6b40;">Correction 2e paire</div>
+            <button type="button" onclick="copierPresc1Vers2()" style="font-size:12px;padding:4px 12px;border-radius:6px;border:1px solid #c3e6d0;background:#fff;color:#1a6b40;font-weight:600;cursor:pointer;">↙ Copier depuis 1ère paire</button>
+          </div>
+          <div class="form-section-title" style="font-size:11px;margin-bottom:8px;">OD — Œil droit</div>
+          <div class="form-grid">
+            <div class="field"><label>Sphère</label>${rxInput('v-p2-od-sphere', d.p2odSphere, true)}</div>
+            <div class="field"><label>Cylindre</label>${rxInput('v-p2-od-cyl', d.p2odCylindre, true)}</div>
+            <div class="field"><label>Axe (0-180)</label>${rxInput('v-p2-od-axe', d.p2odAxe, false, 1, 0, 180)}</div>
+            <div class="field"><label>Addition</label>${rxInput('v-p2-od-add', d.p2odAddition, false, 0.25, 0, 8)}</div>
+          </div>
+          <div class="form-section-title" style="font-size:11px;margin:12px 0 8px;">OG — Œil gauche</div>
+          <div class="form-grid">
+            <div class="field"><label>Sphère</label>${rxInput('v-p2-og-sphere', d.p2ogSphere, true)}</div>
+            <div class="field"><label>Cylindre</label>${rxInput('v-p2-og-cyl', d.p2ogCylindre, true)}</div>
+            <div class="field"><label>Axe (0-180)</label>${rxInput('v-p2-og-axe', d.p2ogAxe, false, 1, 0, 180)}</div>
+            <div class="field"><label>Addition</label>${rxInput('v-p2-og-add', d.p2ogAddition, false, 0.25, 0, 8)}</div>
+          </div>
+          <div class="form-section-title" style="font-size:11px;margin:12px 0 8px;">Monture 2e paire</div>
+          <div class="form-grid">
+            <div class="field"><label>Référence / description monture</label><input id="v-p2-monture" value="${escapeAttr(d.p2monture||'')}" placeholder="ex: Ray-Ban RB3025, coloris noir"></div>
+            <div class="field"><label>Caractéristique verre</label><input id="v-p2-carac-verre" value="${escapeAttr(d.p2caracteristiqueVerre||'')}" placeholder="ex: Anti-reflet, Transitions…"></div>
+          </div>
         </div>
       </div>
 
@@ -4144,6 +4189,7 @@ function creerTicketLabo(vente){
     description: [
       vente.odSphere||vente.ogSphere ? `OD: Sph ${vente.odSphere||'—'} Cyl ${vente.odCylindre||'—'} Axe ${vente.odAxe||'—'}${vente.odAddition?' Add '+vente.odAddition:''} | OG: Sph ${vente.ogSphere||'—'} Cyl ${vente.ogCylindre||'—'} Axe ${vente.ogAxe||'—'}${vente.ogAddition?' Add '+vente.ogAddition:''}` : '',
       vente.caracteristiqueVerre ? `Verre : ${vente.caracteristiqueVerre}` : '',
+      vente.deuxiemePaire ? `🎁 2e paire — OD: Sph ${vente.p2odSphere||'—'} Cyl ${vente.p2odCylindre||'—'} Axe ${vente.p2odAxe||'—'}${vente.p2odAddition?' Add '+vente.p2odAddition:''} | OG: Sph ${vente.p2ogSphere||'—'} Cyl ${vente.p2ogCylindre||'—'} Axe ${vente.p2ogAxe||'—'}${vente.p2ogAddition?' Add '+vente.p2ogAddition:''}${vente.p2monture?' — Monture: '+vente.p2monture:''}` : '',
       !isPasAssurance(vente.assurance) ? `Assurance : ${vente.assurance}` : '',
       vente.dateRdv ? `RDV client : ${fmtDate(vente.dateRdv)}` : '',
     ].filter(Boolean).join('\n'),
@@ -5910,6 +5956,35 @@ function attachVenteConditionalLogic(){
     window.calcVenteReste();
   };
 
+  window.toggleDeuxiemePaire = function(checked){
+    const sec = document.getElementById('sec-2e-paire');
+    if(!sec) return;
+    sec.style.display = checked ? 'block' : 'none';
+    // Si on coche pour la première fois et que les champs sont vides, on pré-remplit
+    if(checked){
+      const p2sphere = document.getElementById('v-p2-od-sphere');
+      if(p2sphere && !p2sphere.value) copierPresc1Vers2();
+    }
+  };
+
+  window.copierPresc1Vers2 = function(){
+    const map = [
+      ['v-od-sphere','v-p2-od-sphere'], ['v-od-cyl','v-p2-od-cyl'],
+      ['v-od-axe','v-p2-od-axe'],       ['v-od-add','v-p2-od-add'],
+      ['v-og-sphere','v-p2-og-sphere'], ['v-og-cyl','v-p2-og-cyl'],
+      ['v-og-axe','v-p2-og-axe'],       ['v-og-add','v-p2-og-add'],
+    ];
+    map.forEach(([src,dst])=>{
+      const s = document.getElementById(src);
+      const d = document.getElementById(dst);
+      if(s && d) d.value = s.value;
+    });
+    // Copier aussi la caractéristique du verre
+    const cv1 = document.getElementById('v-carac-verre');
+    const cv2 = document.getElementById('v-p2-carac-verre');
+    if(cv1 && cv2 && !cv2.value) cv2.value = cv1.value;
+  };
+
   window.calcVenteReste = function(){
     const total = Number(document.getElementById('v-prix-total')?.value)||0;
     const remise = Number(document.getElementById('v-remise')?.value)||0;
@@ -6219,6 +6294,10 @@ function attachModalEvents(){
       gestionnaire: val('v-gestionnaire'), gestionnaireAutre: val('v-gestionnaire-autre').trim(),
       odSphere: val('v-od-sphere').trim(), odCylindre: val('v-od-cyl').trim(), odAxe: val('v-od-axe').trim(), odAddition: val('v-od-add').trim(),
       ogSphere: val('v-og-sphere').trim(), ogCylindre: val('v-og-cyl').trim(), ogAxe: val('v-og-axe').trim(), ogAddition: val('v-og-add').trim(),
+      deuxiemePaire: document.getElementById('v-deuxieme-paire')?.checked || false,
+      p2odSphere: val('v-p2-od-sphere').trim(), p2odCylindre: val('v-p2-od-cyl').trim(), p2odAxe: val('v-p2-od-axe').trim(), p2odAddition: val('v-p2-od-add').trim(),
+      p2ogSphere: val('v-p2-og-sphere').trim(), p2ogCylindre: val('v-p2-og-cyl').trim(), p2ogAxe: val('v-p2-og-axe').trim(), p2ogAddition: val('v-p2-og-add').trim(),
+      p2monture: val('v-p2-monture').trim(), p2caracteristiqueVerre: val('v-p2-carac-verre').trim(),
       laboratoire: val('v-labo'), laboratoireAutre: val('v-labo-autre').trim(),
       caracteristiqueVerre: val('v-carac-verre').trim(),
       montantAchatSpray: val('v-spray'), montantVenteEtui: val('v-etui'), montantVenteEssuieVerre: val('v-essuie'),
