@@ -165,8 +165,13 @@ function an2Rows(){return(DB.ventes||[]).map(v=>({
   b:v.businessUnit||'?',ty:v.typeArticle||'Autre',as:!isPasAssurance(v.assurance),
   total:venteTotal(v),reste:venteReste(v),
   tel:String(v.telephone||'').replace(/\D/g,'').replace(/^226(?=\d{8}$)/,'')})).filter(d=>d.date)}
-function an2ObjUsers(m){let s=0;(USERS_CACHE||[]).forEach(u=>{try{s+=Number(JSON.parse(u.objectifsMensuels||'{}')[m])||0}catch(e){}});return s}
-function an2EnsureObj(){if(!AN2.obj)AN2.obj=an2ObjUsers(new Date().getMonth())||4000000}
+// Objectif du mois m (0-11) = somme des objectifs des gestionnaires sélectionnés (sinon valeur par défaut saisie)
+function an2ObjMonth(m){let s=0;(USERS_CACHE||[]).forEach(u=>{
+  if(!AN2.comm.has('Tous')&&!AN2.comm.has(u.nom))return;
+  let o={};try{o=JSON.parse(u.objectifsMensuels||'{}')}catch(e){}
+  s+=Number(o[m])||(Number(u.objectifAnnuel)||0)/12});
+  return s||AN2.obj||0}
+function an2EnsureObj(){}
 function an2Compute(){
   const f=an2Range(),all=an2Rows(),ok=d=>AN2.comm.has('Tous')||AN2.comm.has(d.g);
   const data=all.filter(d=>d.date>=f.from&&d.date<=f.to&&ok(d));
@@ -188,7 +193,7 @@ function an2Compute(){
   const nbAs=data.filter(d=>d.as).length;
   return{f,data,ca,nb:data.length,reste:data.reduce((s,d)=>s+d.reste,0),nouv,tels:tels.size,lastNew,nbAs,
     nbMois:Math.max(1,(+f.to.slice(0,4)-+f.from.slice(0,4))*12+(+f.to.slice(5,7)-+f.from.slice(5,7))+1),
-    daily,labels,serie,byG:by(d=>d.g).filter(([k])=>k!=='Inconnu'),byT:by(d=>d.ty),byB:by(d=>d.b),
+    daily,keys,labels,serie,byG:by(d=>d.g).filter(([k])=>k!=='Inconnu'),byT:by(d=>d.ty),byB:by(d=>d.b),
     caAs:sum(data.filter(d=>d.as)),year,months,nbPros:pr.length,lastPros:pr.map(p=>String(p.dateMiseEnRelation).slice(0,10)).sort().pop()||null}}
 function an2Chart(id,cfg){const cv=document.getElementById(id);if(!cv||typeof Chart==='undefined')return;
   if(AN2.charts[id])AN2.charts[id].destroy();AN2.charts[id]=new Chart(cv,cfg)}
@@ -199,11 +204,15 @@ function an2Bar(id,labels,vals,cols,h){an2Chart(id,{type:'bar',data:{labels,data
 function an2Donut(id,labels,vals,cols){an2Chart(id,{type:'doughnut',data:{labels,datasets:[{data:vals,backgroundColor:cols,borderWidth:2}]},
   options:{responsive:true,maintainAspectRatio:false,cutout:'60%',plugins:{legend:{position:'right',labels:{boxWidth:12,font:{size:11}}},tooltip:{callbacks:{label:c=>an2Tip(c.parsed)}}}}})}
 function an2Update(){
-  const R=an2Compute(),obj=AN2.obj,$=i=>document.getElementById(i),set=(i,t)=>{const e=$(i);if(e)e.textContent=t};
+  const R=an2Compute(),$=i=>document.getElementById(i),set=(i,t)=>{const e=$(i);if(e)e.textContent=t};
+  let objTotal=0;
+  if(['today','week','month'].includes(AN2.type))objTotal=an2ObjMonth(+R.f.to.slice(5,7)-1);
+  else{let y=+R.f.from.slice(0,4),m=+R.f.from.slice(5,7);const ey=+R.f.to.slice(0,4),em=+R.f.to.slice(5,7);
+    while(y<ey||(y===ey&&m<=em)){objTotal+=an2ObjMonth(m-1);if(++m>12){m=1;y++}}}
   set('an2-pl','Période : '+an2D(R.f.from)+' → '+an2D(R.f.to));
   set('an2-ca',fmtFCFA(R.ca));
-  set('an2-ca-s',!obj?'Objectif non défini':['today','week'].includes(AN2.type)?'Objectif mensuel : '+fmtFCFA(obj):
-    Math.round(R.ca/(obj*R.nbMois)*100)+'% de l\'objectif ('+fmtFCFA(obj*R.nbMois)+') — '+R.nbMois+' mois');
+  set('an2-ca-s',!objTotal?'Objectif non défini':['today','week'].includes(AN2.type)?'Objectif mensuel : '+fmtFCFA(objTotal):
+    Math.round(R.ca/objTotal*100)+'% de l\'objectif ('+fmtFCFA(objTotal)+') — '+R.nbMois+' mois');
   set('an2-nb',R.nb);set('an2-nb-s',R.nb?Math.round(R.nb/R.nbMois)+' ventes/mois en moy.':'');
   set('an2-pan',fmtFCFA(R.nb?R.ca/R.nb:0));set('an2-pan-s',R.data.filter(d=>d.total>0).length+' ventes avec prix renseigné');
   set('an2-res',fmtFCFA(R.reste));set('an2-res-s',Math.round(R.reste/Math.max(R.ca,1)*100)+'% du CA non encaissé');
@@ -211,15 +220,15 @@ function an2Update(){
   set('an2-lc','Dernier client : '+an2D(R.lastNew));set('an2-np','Prospects : '+R.nbPros+' (dernier : '+an2D(R.lastPros)+')');
   set('an2-as',R.nbAs);set('an2-as-s',R.nb?Math.round(R.nbAs/R.nb*100)+'% des ventes':'');
   set('an2-t1',R.daily?'Évolution du CA par jour':'Évolution du CA par mois');
-  an2Bar('an2-c1',R.labels,R.serie,R.serie.map(v=>!R.daily&&v>=obj?'#C8830A':'#F0A832'));
+  an2Bar('an2-c1',R.labels,R.serie,R.serie.map((v,i)=>{const o=R.daily?0:an2ObjMonth(+R.keys[i].slice(5,7)-1);return o>0&&v>=o?'#C8830A':'#F0A832'}));
   an2Bar('an2-c2',R.byG.map(x=>x[0]),R.byG.map(x=>x[1]),R.byG.map(x=>AN2_C[x[0]]||'#94A3B8'),true);
   const P=['#C8830A','#2563EB','#059669','#7C3AED','#DC2626'];
   an2Donut('an2-c3',R.byT.map(x=>x[0].replace('Monture / Verres correcteurs','Montures/Verres')),R.byT.map(x=>x[1]),P);
   an2Donut('an2-c4',R.byB.map(x=>x[0]),R.byB.map(x=>x[1]),['#1B2340','#C8830A','#2563EB']);
   an2Donut('an2-c5',['Avec assurance ('+R.nbAs+')','Sans assurance ('+(R.nb-R.nbAs)+')'],[R.caAs,R.ca-R.caAs],['#059669','#C8830A']);
   set('an2-oy','🎯 Suivi des objectifs '+R.year);
-  const tb=$('an2-ob');if(tb)tb.innerHTML=R.months.map(m=>{const p=obj?Math.round(m.real/obj*100):0,c=p>=100?'#1E7E5A':p>=80?'#B45309':'#DC2626',cur=m.ym===an2Today().slice(0,7);
-    return`<tr style="${m.future?'opacity:.4;':''}${cur?'background:#FFF9EF;font-weight:600;':''}"><td>${MOIS[m.i]}${cur?' <small style="background:#C8830A;color:#fff;padding:1px 7px;border-radius:9px">EN COURS</small>':''}</td><td>${fmtFCFA(obj)}</td><td>${m.future?'—':fmtFCFA(m.real)}</td><td style="color:${c};font-weight:700">${m.future?'—':p+'%'}</td><td><div class="an2-bg"><i style="width:${m.future?0:Math.min(p,100)}%;background:${c}"></i></div></td></tr>`}).join('')}
+  const tb=$('an2-ob');if(tb)tb.innerHTML=R.months.map(m=>{const o=an2ObjMonth(m.i),p=o?Math.round(m.real/o*100):0,c=p>=100?'#1E7E5A':p>=80?'#B45309':'#DC2626',cur=m.ym===an2Today().slice(0,7);
+    return`<tr style="${m.future?'opacity:.4;':''}${cur?'background:#FFF9EF;font-weight:600;':''}"><td>${MOIS[m.i]}${cur?' <small style="background:#C8830A;color:#fff;padding:1px 7px;border-radius:9px">EN COURS</small>':''}</td><td>${o?fmtFCFA(o):'—'}</td><td>${m.future?'—':fmtFCFA(m.real)}</td><td style="color:${c};font-weight:700">${m.future?'—':p+'%'}</td><td><div class="an2-bg"><i style="width:${m.future?0:Math.min(p,100)}%;background:${c}"></i></div></td></tr>`}).join('')}
 function renderAnalyseDirection(){an2EnsureObj();const t=an2Today();
   const names=[...new Set(an2Rows().map(d=>d.g))].filter(n=>n!=='Inconnu').sort();
   const chips=[['today',"Aujourd'hui"],['week','Cette semaine'],['month','Ce mois'],['year','Cette année'],['custom','Personnalisé']].map(([k,l])=>`<div class="an2-chip${AN2.type===k?' on':''}" data-p="${k}">${l}</div>`).join('');
@@ -232,7 +241,7 @@ function renderAnalyseDirection(){an2EnsureObj();const t=an2Today();
     <div class="an2-grp" id="an2-chips">${chips}</div>
     <div class="an2-grp" id="an2-custom" style="display:${AN2.type==='custom'?'flex':'none'}"><input class="an2-in" type="date" id="an2-from" value="${AN2.from||t.slice(0,4)+'-01-01'}"><span>→</span><input class="an2-in" type="date" id="an2-to" value="${AN2.to||t}"></div>
     <div class="an2-grp"><span class="an2-lbl">Gestionnaire</span><div class="an2-grp" id="an2-pills">${pills}</div></div>
-    <div class="an2-grp" style="margin-left:auto"><span class="an2-lbl">Objectif/mois</span><input class="an2-in" type="number" id="an2-obj" value="${AN2.obj}" step="500000" min="0" style="width:130px"></div>
+    <div class="an2-grp" style="margin-left:auto"><span class="an2-lbl" title="Utilisé seulement si aucun objectif n'est défini dans les comptes">Obj. par défaut/mois</span><input class="an2-in" type="number" id="an2-obj" value="${AN2.obj||''}" placeholder="si non défini" step="500000" min="0" style="width:130px"></div>
     <div style="width:100%;font-size:11px;color:#9AA8CC" id="an2-pl"></div>
   </div>
   <div class="an2-kpis">${kp('gold','CA réalisé','ca')}${kp('','Nb ventes','nb')}${kp('','Panier moyen','pan')}${kp('warn','Reste à encaisser','res')}
