@@ -5335,9 +5335,12 @@ function renderAnalyse(){
   // Assurances
   // CA par apporteur d'affaire
   const parApporteur = {};
-  const ventesApporteurs = isAdmin()
-    ? DB.ventes.filter(v=>{const d=(v.dateMiseEnRelation||'').slice(0,10);return d>=debut&&d<=fin&&aApporteur(v);})
-    : mesVentes.filter(v=>aApporteur(v));
+  // Ventes avec apporteur sur la période (toutes boutiques pour admin, gestionnaire pour commercial)
+  const ventesApporteurs = (isAdmin() ? DB.ventes : mesVentes)
+    .filter(v=>{
+      const d=(v.dateMiseEnRelation||'').slice(0,10);
+      return d>=debut && d<=fin && aApporteur(v);
+    });
   ventesApporteurs.forEach(v=>{
     const label = v.apporteurAffaire==='Autre'?(v.apporteurAffaireAutre||'Autre'):(v.apporteurAffaire||'?');
     if(!parApporteur[label]) parApporteur[label]={ca:0,nb:0};
@@ -5626,9 +5629,13 @@ function renderAnalyse(){
   </div>` : ''}
 
   <!-- APPORTEURS D'AFFAIRES -->
-  ${apporteursOrder.length ? `
   <div class="panel">
     <h3 style="margin-bottom:16px;">🤝 Apporteurs d'affaires <span style="font-size:13px;font-weight:400;color:#9AA0B2;margin-left:8px;">${ventesApporteurs.length} vente(s) · ${fmtFCFA(caApporteurTotal)} total</span></h3>
+    ${apporteursOrder.length === 0 ? `
+    <div style="text-align:center;padding:24px 0;color:#9AA0B2;font-size:14px;">
+      <div style="font-size:28px;margin-bottom:8px;">🤝</div>
+      Aucune vente via apporteur sur cette période
+    </div>` : `
     <div style="display:flex;flex-direction:column;gap:10px;">
       ${apporteursOrder.map(([nom,data])=>{
         const maxCa = apporteursOrder[0][1].ca||1;
@@ -5647,8 +5654,8 @@ function renderAnalyse(){
           </div>
         </div>`;
       }).join('')}
-    </div>
-  </div>` : ''}
+    </div>`}
+  </div>
 
   <!-- ASSURANCES -->
   <div class="panel">
