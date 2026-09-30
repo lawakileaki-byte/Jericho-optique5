@@ -118,6 +118,142 @@
 <div id="app"></div>
 <div class="toast" id="toast"></div>
 
+<!-- ===== ANALYSE DIRECTION v2 (onglet Analyse, admin) ===== -->
+<style id="an2-css">
+.an2{--navy:#1B2340;--gold:#C8830A;--bd:#E2E5EC;--fg:#1B2340;--fg2:#5A6278;--fg3:#9AA0B2;--good:#1E7E5A;--warn:#B45309;font-variant-numeric:tabular-nums}
+.an2-bar{background:var(--navy);color:#fff;border-radius:12px;padding:12px 16px;display:flex;flex-wrap:wrap;gap:14px;align-items:center;margin-bottom:14px}
+.an2-grp{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.an2-lbl{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#9AA8CC}
+.an2-chip,.an2-pill{padding:4px 11px;border-radius:20px;font-size:12px;font-weight:500;cursor:pointer;border:1.5px solid transparent;background:rgba(255,255,255,.08);color:rgba(255,255,255,.75);user-select:none}
+.an2-chip.on{background:var(--gold);border-color:var(--gold);color:#fff}
+.an2-pill.on{background:var(--pc);border-color:var(--pc);color:#fff}
+.an2-in{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.25);color:#fff;border-radius:6px;padding:5px 9px;font-size:13px;font-family:inherit;color-scheme:dark}
+.an2-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:16px}
+.an2-kpi,.an2-card{background:#fff;border:1px solid var(--bd);border-radius:10px;padding:14px 16px}
+.an2-kpi.gold{border-top:3px solid var(--gold)}.an2-kpi.warn{border-top:3px solid var(--warn)}.an2-kpi.good{border-top:3px solid var(--good)}
+.an2-k{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--fg3)}
+.an2-v{font-size:22px;font-weight:700;color:var(--fg);line-height:1.25}
+.an2-s{font-size:12px;color:var(--fg2)}
+.an2-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}.an2-wide{grid-column:1/-1}
+.an2-t{font-size:13px;font-weight:600;color:var(--fg);margin-bottom:12px}
+.an2-wrap{position:relative;height:210px}
+.an2-tb{width:100%;border-collapse:collapse;font-size:13px}
+.an2-tb th{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--fg3);text-align:right;padding:7px 8px;border-bottom:2px solid var(--bd)}
+.an2-tb th:first-child,.an2-tb td:first-child{text-align:left}
+.an2-tb td{text-align:right;padding:7px 8px;border-bottom:1px solid var(--bd)}
+.an2-bg{height:6px;background:var(--bd);border-radius:3px;overflow:hidden;min-width:70px}.an2-bg i{display:block;height:100%}
+@media(max-width:760px){.an2-grid{grid-template-columns:1fr}}
+</style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script>
+let AN2={type:'year',from:'',to:'',comm:new Set(['Tous']),obj:0,charts:{}};
+const AN2_M=['Jan','Fév','Mar','Avr','Mai','Jun','Jul','Aoû','Sep','Oct','Nov','Déc'];
+const AN2_C={Ali:'#2563EB',Alima:'#7C3AED',Amande:'#059669',Amandine:'#D97706',Paloma:'#0891B2',Rabi:'#BE185D',Autre:'#64748B',Inconnu:'#94A3B8'};
+const an2Today=()=>new Date().toISOString().slice(0,10);
+const an2Short=n=>{n=Math.round(Number(n)||0);const a=Math.abs(n);return a>=1e6?(n/1e6).toFixed(1).replace('.0','')+' M':a>=1e3?Math.round(n/1e3)+' K':String(n)};
+const an2D=d=>d?d.split('-').reverse().join('/'):'—';
+function an2Range(){const t=an2Today(),y=t.slice(0,4);
+  if(AN2.type==='today')return{from:t,to:t};
+  if(AN2.type==='week'){const d=new Date();d.setDate(d.getDate()-((d.getDay()||7)-1));return{from:d.toISOString().slice(0,10),to:t}}
+  if(AN2.type==='month')return{from:t.slice(0,7)+'-01',to:t};
+  if(AN2.type==='custom')return{from:AN2.from||y+'-01-01',to:AN2.to||t};
+  return{from:y+'-01-01',to:t}}
+// Ventes Supabase -> lignes simples. CA attribué au GESTIONNAIRE (pas au commercial de permanence).
+function an2Rows(){return(DB.ventes||[]).map(v=>({
+  date:String(v.dateMiseEnRelation||'').slice(0,10),
+  g:v.gestionnaire==='Autre'?(v.gestionnaireAutre||'Autre'):(v.gestionnaire||'Inconnu'),
+  b:v.businessUnit||'?',ty:v.typeArticle||'Autre',as:!isPasAssurance(v.assurance),
+  total:venteTotal(v),reste:venteReste(v),
+  tel:String(v.telephone||'').replace(/\D/g,'').replace(/^226(?=\d{8}$)/,'')})).filter(d=>d.date)}
+function an2ObjUsers(m){let s=0;(USERS_CACHE||[]).forEach(u=>{try{s+=Number(JSON.parse(u.objectifsMensuels||'{}')[m])||0}catch(e){}});return s}
+function an2EnsureObj(){if(!AN2.obj)AN2.obj=an2ObjUsers(new Date().getMonth())||4000000}
+function an2Compute(){
+  const f=an2Range(),all=an2Rows(),ok=d=>AN2.comm.has('Tous')||AN2.comm.has(d.g);
+  const data=all.filter(d=>d.date>=f.from&&d.date<=f.to&&ok(d));
+  const sum=a=>a.reduce((s,d)=>s+d.total,0),ca=sum(data);
+  const first={};all.forEach(d=>{if(d.tel&&(!first[d.tel]||d.date<first[d.tel]))first[d.tel]=d.date});
+  const tels=new Set(data.filter(d=>d.tel).map(d=>d.tel));
+  const nouv=[...tels].filter(t=>first[t]>=f.from&&first[t]<=f.to).length;
+  const lastNew=data.filter(d=>d.tel&&first[d.tel]===d.date).map(d=>d.date).sort().pop()||null;
+  const daily=['today','week','month'].includes(AN2.type),keys=[],labels=[];
+  if(daily){const c=new Date(f.from+'T00:00:00Z'),e=new Date(f.to+'T00:00:00Z');for(;c<=e;c.setUTCDate(c.getUTCDate()+1)){const k=c.toISOString().slice(0,10);keys.push(k);labels.push(k.slice(8)+'/'+k.slice(5,7))}}
+  else{let y=+f.from.slice(0,4),m=+f.from.slice(5,7);const ey=+f.to.slice(0,4),em=+f.to.slice(5,7);
+    while(y<ey||(y===ey&&m<=em)){keys.push(y+'-'+String(m).padStart(2,'0'));labels.push(AN2_M[m-1]+(ey!==+f.from.slice(0,4)?' '+String(y).slice(2):''));if(++m>12){m=1;y++}}}
+  const serie=keys.map(()=>0);data.forEach(d=>{const i=keys.indexOf(daily?d.date:d.date.slice(0,7));if(i>=0)serie[i]+=d.total});
+  const by=fn=>{const o={};data.forEach(d=>{const k=fn(d);o[k]=(o[k]||0)+d.total});return Object.entries(o).sort((a,b)=>b[1]-a[1])};
+  const year=f.from.slice(0,4),cur=an2Today().slice(0,7);
+  const months=Array.from({length:12},(_,i)=>{const ym=year+'-'+String(i+1).padStart(2,'0');
+    return{i,ym,real:sum(all.filter(d=>ok(d)&&d.date.slice(0,7)===ym)),future:ym>cur}});
+  const pr=(DB.prospects||[]).filter(p=>{const d=String(p.dateMiseEnRelation||'').slice(0,10);return d>=f.from&&d<=f.to&&(AN2.comm.has('Tous')||AN2.comm.has(p.commercial))});
+  const nbAs=data.filter(d=>d.as).length;
+  return{f,data,ca,nb:data.length,reste:data.reduce((s,d)=>s+d.reste,0),nouv,tels:tels.size,lastNew,nbAs,
+    nbMois:Math.max(1,(+f.to.slice(0,4)-+f.from.slice(0,4))*12+(+f.to.slice(5,7)-+f.from.slice(5,7))+1),
+    daily,labels,serie,byG:by(d=>d.g).filter(([k])=>k!=='Inconnu'),byT:by(d=>d.ty),byB:by(d=>d.b),
+    caAs:sum(data.filter(d=>d.as)),year,months,nbPros:pr.length,lastPros:pr.map(p=>String(p.dateMiseEnRelation).slice(0,10)).sort().pop()||null}}
+function an2Chart(id,cfg){const cv=document.getElementById(id);if(!cv||typeof Chart==='undefined')return;
+  if(AN2.charts[id])AN2.charts[id].destroy();AN2.charts[id]=new Chart(cv,cfg)}
+const an2Tip=c=>' '+Math.round(c).toLocaleString('fr')+' FCFA';
+function an2Bar(id,labels,vals,cols,h){an2Chart(id,{type:'bar',data:{labels,datasets:[{data:vals,backgroundColor:cols,borderRadius:4}]},
+  options:{indexAxis:h?'y':'x',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>an2Tip(h?c.parsed.x:c.parsed.y)}}},
+  scales:{[h?'x':'y']:{ticks:{callback:v=>an2Short(v)}},[h?'y':'x']:{grid:{display:false}}}}})}
+function an2Donut(id,labels,vals,cols){an2Chart(id,{type:'doughnut',data:{labels,datasets:[{data:vals,backgroundColor:cols,borderWidth:2}]},
+  options:{responsive:true,maintainAspectRatio:false,cutout:'60%',plugins:{legend:{position:'right',labels:{boxWidth:12,font:{size:11}}},tooltip:{callbacks:{label:c=>an2Tip(c.parsed)}}}}})}
+function an2Update(){
+  const R=an2Compute(),obj=AN2.obj,$=i=>document.getElementById(i),set=(i,t)=>{const e=$(i);if(e)e.textContent=t};
+  set('an2-pl','Période : '+an2D(R.f.from)+' → '+an2D(R.f.to));
+  set('an2-ca',fmtFCFA(R.ca));
+  set('an2-ca-s',!obj?'Objectif non défini':['today','week'].includes(AN2.type)?'Objectif mensuel : '+fmtFCFA(obj):
+    Math.round(R.ca/(obj*R.nbMois)*100)+'% de l\'objectif ('+fmtFCFA(obj*R.nbMois)+') — '+R.nbMois+' mois');
+  set('an2-nb',R.nb);set('an2-nb-s',R.nb?Math.round(R.nb/R.nbMois)+' ventes/mois en moy.':'');
+  set('an2-pan',fmtFCFA(R.nb?R.ca/R.nb:0));set('an2-pan-s',R.data.filter(d=>d.total>0).length+' ventes avec prix renseigné');
+  set('an2-res',fmtFCFA(R.reste));set('an2-res-s',Math.round(R.reste/Math.max(R.ca,1)*100)+'% du CA non encaissé');
+  set('an2-nou',R.nouv);set('an2-nou-s',R.tels+' clients uniques sur la période');
+  set('an2-lc','Dernier client : '+an2D(R.lastNew));set('an2-np','Prospects : '+R.nbPros+' (dernier : '+an2D(R.lastPros)+')');
+  set('an2-as',R.nbAs);set('an2-as-s',R.nb?Math.round(R.nbAs/R.nb*100)+'% des ventes':'');
+  set('an2-t1',R.daily?'Évolution du CA par jour':'Évolution du CA par mois');
+  an2Bar('an2-c1',R.labels,R.serie,R.serie.map(v=>!R.daily&&v>=obj?'#C8830A':'#F0A832'));
+  an2Bar('an2-c2',R.byG.map(x=>x[0]),R.byG.map(x=>x[1]),R.byG.map(x=>AN2_C[x[0]]||'#94A3B8'),true);
+  const P=['#C8830A','#2563EB','#059669','#7C3AED','#DC2626'];
+  an2Donut('an2-c3',R.byT.map(x=>x[0].replace('Monture / Verres correcteurs','Montures/Verres')),R.byT.map(x=>x[1]),P);
+  an2Donut('an2-c4',R.byB.map(x=>x[0]),R.byB.map(x=>x[1]),['#1B2340','#C8830A','#2563EB']);
+  an2Donut('an2-c5',['Avec assurance ('+R.nbAs+')','Sans assurance ('+(R.nb-R.nbAs)+')'],[R.caAs,R.ca-R.caAs],['#059669','#C8830A']);
+  set('an2-oy','🎯 Suivi des objectifs '+R.year);
+  const tb=$('an2-ob');if(tb)tb.innerHTML=R.months.map(m=>{const p=obj?Math.round(m.real/obj*100):0,c=p>=100?'#1E7E5A':p>=80?'#B45309':'#DC2626',cur=m.ym===an2Today().slice(0,7);
+    return`<tr style="${m.future?'opacity:.4;':''}${cur?'background:#FFF9EF;font-weight:600;':''}"><td>${MOIS[m.i]}${cur?' <small style="background:#C8830A;color:#fff;padding:1px 7px;border-radius:9px">EN COURS</small>':''}</td><td>${fmtFCFA(obj)}</td><td>${m.future?'—':fmtFCFA(m.real)}</td><td style="color:${c};font-weight:700">${m.future?'—':p+'%'}</td><td><div class="an2-bg"><i style="width:${m.future?0:Math.min(p,100)}%;background:${c}"></i></div></td></tr>`}).join('')}
+function renderAnalyseDirection(){an2EnsureObj();const t=an2Today();
+  const names=[...new Set(an2Rows().map(d=>d.g))].filter(n=>n!=='Inconnu').sort();
+  const chips=[['today',"Aujourd'hui"],['week','Cette semaine'],['month','Ce mois'],['year','Cette année'],['custom','Personnalisé']].map(([k,l])=>`<div class="an2-chip${AN2.type===k?' on':''}" data-p="${k}">${l}</div>`).join('');
+  const pills=['Tous',...names].map(n=>`<div class="an2-pill${AN2.comm.has(n)?' on':''}" data-c="${escapeAttr(n)}" style="--pc:${n==='Tous'?'#C8830A':(AN2_C[n]||'#64748B')}">${escapeHtml(n)}</div>`).join('');
+  const kp=(cls,k,id,extra)=>`<div class="an2-kpi ${cls}"><div class="an2-k">${k}</div><div class="an2-v" id="an2-${id}">—</div><div class="an2-s" id="an2-${id}-s">${extra||''}</div></div>`;
+  const cd=(w,t,id)=>`<div class="an2-card${w?' an2-wide':''}"><div class="an2-t">${t}</div><div class="an2-wrap"><canvas id="${id}"></canvas></div></div>`;
+  return`<div class="an2" id="an2-root">
+  <div class="main-head"><div><h2>Analyse</h2><p>Vue globale — CA attribué au gestionnaire</p></div></div>
+  <div class="an2-bar">
+    <div class="an2-grp" id="an2-chips">${chips}</div>
+    <div class="an2-grp" id="an2-custom" style="display:${AN2.type==='custom'?'flex':'none'}"><input class="an2-in" type="date" id="an2-from" value="${AN2.from||t.slice(0,4)+'-01-01'}"><span>→</span><input class="an2-in" type="date" id="an2-to" value="${AN2.to||t}"></div>
+    <div class="an2-grp"><span class="an2-lbl">Gestionnaire</span><div class="an2-grp" id="an2-pills">${pills}</div></div>
+    <div class="an2-grp" style="margin-left:auto"><span class="an2-lbl">Objectif/mois</span><input class="an2-in" type="number" id="an2-obj" value="${AN2.obj}" step="500000" min="0" style="width:130px"></div>
+    <div style="width:100%;font-size:11px;color:#9AA8CC" id="an2-pl"></div>
+  </div>
+  <div class="an2-kpis">${kp('gold','CA réalisé','ca')}${kp('','Nb ventes','nb')}${kp('','Panier moyen','pan')}${kp('warn','Reste à encaisser','res')}
+    <div class="an2-kpi good"><div class="an2-k">Nouveaux clients</div><div class="an2-v" id="an2-nou">—</div><div class="an2-s" id="an2-nou-s"></div><div class="an2-s" id="an2-lc"></div><div class="an2-s" id="an2-np"></div></div>${kp('','Ventes assurées','as')}</div>
+  <div class="an2-grid">
+    <div class="an2-card an2-wide"><div class="an2-t" id="an2-t1">Évolution du CA</div><div class="an2-wrap" style="height:220px"><canvas id="an2-c1"></canvas></div></div>
+    <div class="an2-card an2-wide"><div class="an2-t" id="an2-oy">🎯 Suivi des objectifs</div><div style="overflow-x:auto"><table class="an2-tb"><thead><tr><th>Mois</th><th>Objectif</th><th>Réalisé</th><th>Atteinte</th><th></th></tr></thead><tbody id="an2-ob"></tbody></table></div></div>
+    ${cd(0,'CA par gestionnaire','an2-c2')}${cd(0,"Répartition par type d'article",'an2-c3')}${cd(0,'CA par boutique','an2-c4')}${cd(0,'Assurance vs sans assurance','an2-c5')}
+  </div></div>`}
+function initAnalyseDirection(){const r=document.getElementById('an2-root');if(!r)return;
+  r.querySelector('#an2-chips').onclick=e=>{const c=e.target.closest('.an2-chip');if(!c)return;AN2.type=c.dataset.p;
+    r.querySelectorAll('.an2-chip').forEach(x=>x.classList.toggle('on',x===c));r.querySelector('#an2-custom').style.display=AN2.type==='custom'?'flex':'none';an2Update()};
+  r.querySelector('#an2-from').onchange=e=>{AN2.from=e.target.value;an2Update()};
+  r.querySelector('#an2-to').onchange=e=>{AN2.to=e.target.value;an2Update()};
+  r.querySelector('#an2-pills').onclick=e=>{const p=e.target.closest('.an2-pill');if(!p)return;const c=p.dataset.c;
+    if(c==='Tous')AN2.comm=new Set(['Tous']);else{AN2.comm.delete('Tous');AN2.comm.has(c)?AN2.comm.delete(c):AN2.comm.add(c);if(!AN2.comm.size)AN2.comm=new Set(['Tous'])}
+    r.querySelectorAll('.an2-pill').forEach(x=>x.classList.toggle('on',AN2.comm.has(x.dataset.c)));an2Update()};
+  r.querySelector('#an2-obj').oninput=e=>{AN2.obj=parseInt(e.target.value)||0;an2Update()};
+  an2Update()}
+</script>
+<!-- ===== FIN ANALYSE DIRECTION v2 ===== -->
 <script>
 console.log("JERICHO v3.0 SUPABASE - " + new Date().toISOString());
 /* =========================================================
@@ -691,6 +827,7 @@ function render(){
     app.innerHTML = `${renderTopbar()}${renderTeam()}`;
   }
   attachGlobalEvents();
+  if(state.view!=='accueil' && state.teamTab==='analyse' && isAdmin()){ try{ initAnalyseDirection(); }catch(e){ console.error('Analyse:',e); } }
   if(state.modal) renderModal();
 }
 
@@ -1364,7 +1501,7 @@ function renderTeamTab(){
   if(state.teamTab==='tickets') return renderTickets();
   if(state.teamTab==='admin') return isAdmin() ? renderAdminComptes() : renderProspects();
   if(state.teamTab==='moncompte') return renderMonCompte();
-  if(state.teamTab==='analyse') return renderAnalyse();
+  if(state.teamTab==='analyse') return isAdmin() ? renderAnalyseDirection() : renderAnalyse();
   if(state.teamTab==='primes') return renderPrimes();
   if(state.teamTab==='paie') return renderPaie();
   if(state.teamTab==='reunion') return isAdmin() ? renderReunion() : renderDashboard();
