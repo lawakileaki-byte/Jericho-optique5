@@ -158,12 +158,15 @@ function an2Range(){const t=an2Today(),y=t.slice(0,4);
   if(AN2.type==='month')return{from:t.slice(0,7)+'-01',to:t};
   if(AN2.type==='custom')return{from:AN2.from||y+'-01-01',to:AN2.to||t};
   return{from:y+'-01-01',to:t}}
-// Ventes Supabase -> lignes simples. CA attribué au GESTIONNAIRE (pas au commercial de permanence).
+// Ventes Supabase -> lignes simples.
+// Règle : si la vente a un apporteur d'affaire, total=0 et reste=0 pour le commercial/gestionnaire
+// → le CA apporteur est compté séparément dans le bloc apporteurs
 function an2Rows(){return(DB.ventes||[]).map(v=>({
   date:String(v.dateMiseEnRelation||'').slice(0,10),
   g:v.gestionnaire==='Autre'?(v.gestionnaireAutre||'Autre'):(v.gestionnaire||'Inconnu'),
   b:v.businessUnit||'?',ty:v.typeArticle||'Autre',as:!isPasAssurance(v.assurance),
-  total:venteTotal(v),reste:venteReste(v),
+  ap:aApporteur(v),
+  total:aApporteur(v)?0:venteTotal(v),reste:aApporteur(v)?0:venteReste(v),
   tel:String(v.telephone||'').replace(/\D/g,'').replace(/^226(?=\d{8}$)/,'')})).filter(d=>d.date)}
 // Objectif du mois m (0-11) = somme des objectifs des gestionnaires sélectionnés (sinon valeur par défaut saisie)
 function an2ObjMonth(m){let s=0;(USERS_CACHE||[]).forEach(u=>{
@@ -205,30 +208,50 @@ function an2Donut(id,labels,vals,cols){an2Chart(id,{type:'doughnut',data:{labels
   options:{responsive:true,maintainAspectRatio:false,cutout:'60%',plugins:{legend:{position:'right',labels:{boxWidth:12,font:{size:11}}},tooltip:{callbacks:{label:c=>an2Tip(c.parsed)}}}}})}
 function an2Update(){
   const R=an2Compute(),$=i=>document.getElementById(i),set=(i,t)=>{const e=$(i);if(e)e.textContent=t};
+  // CA apporteurs (hors commerciaux) sur la période et les gestionnaires filtrés
+  const ok2ap=v=>AN2.comm.has('Tous')||AN2.comm.has(v.gestionnaire==='Autre'?(v.gestionnaireAutre||'Autre'):(v.gestionnaire||'Inconnu'));
+  const caAp=(DB.ventes||[]).filter(v=>{const d=String(v.dateMiseEnRelation||'').slice(0,10);return d>=R.f.from&&d<=R.f.to&&aApporteur(v)&&ok2ap(v);}).reduce((s,v)=>s+venteTotal(v),0);
+  const nbAp=(DB.ventes||[]).filter(v=>{const d=String(v.dateMiseEnRelation||'').slice(0,10);return d>=R.f.from&&d<=R.f.to&&aApporteur(v)&&ok2ap(v);}).length;
+  const caTotal=R.ca+caAp; // CA total = commerciaux + apporteurs
+  const resteAp=(DB.ventes||[]).filter(v=>{const d=String(v.dateMiseEnRelation||'').slice(0,10);return d>=R.f.from&&d<=R.f.to&&aApporteur(v)&&ok2ap(v);}).reduce((s,v)=>s+venteReste(v),0);
+  const resteTotal=R.reste+resteAp;
   let objTotal=0;
   if(['today','week','month'].includes(AN2.type))objTotal=an2ObjMonth(+R.f.to.slice(5,7)-1);
   else{let y=+R.f.from.slice(0,4),m=+R.f.from.slice(5,7);const ey=+R.f.to.slice(0,4),em=+R.f.to.slice(5,7);
     while(y<ey||(y===ey&&m<=em)){objTotal+=an2ObjMonth(m-1);if(++m>12){m=1;y++}}}
   set('an2-pl','Période : '+an2D(R.f.from)+' → '+an2D(R.f.to));
-  set('an2-ca',fmtFCFA(R.ca));
-  set('an2-ca-s',!objTotal?'Objectif non défini':['today','week'].includes(AN2.type)?'Objectif mensuel : '+fmtFCFA(objTotal):
-    Math.round(R.ca/objTotal*100)+'% de l\'objectif ('+fmtFCFA(objTotal)+') — '+R.nbMois+' mois');
-  set('an2-nb',R.nb);set('an2-nb-s',R.nb?Math.round(R.nb/R.nbMois)+' ventes/mois en moy.':'');
-  set('an2-pan',fmtFCFA(R.nb?R.ca/R.nb:0));set('an2-pan-s',R.data.filter(d=>d.total>0).length+' ventes avec prix renseigné');
-  set('an2-res',fmtFCFA(R.reste));set('an2-res-s',Math.round(R.reste/Math.max(R.ca,1)*100)+'% du CA non encaissé');
+  set('an2-ca',fmtFCFA(caTotal));
+  const caSubComm=fmtFCFA(R.ca)+' comm. + '+fmtFCFA(caAp)+' apporteurs';
+  set('an2-ca-s',!objTotal?caSubComm:['today','week'].includes(AN2.type)?caSubComm:
+    Math.round(caTotal/objTotal*100)+'% obj. ('+fmtFCFA(objTotal)+') · '+caSubComm);
+  set('an2-nb',R.nb+nbAp);set('an2-nb-s',(R.nb+nbAp)?Math.round((R.nb+nbAp)/R.nbMois)+' ventes/mois en moy.':'');
+  set('an2-pan',fmtFCFA((R.nb+nbAp)?caTotal/(R.nb+nbAp):0));set('an2-pan-s',R.data.filter(d=>d.total>0).length+' ventes avec prix renseigné');
+  set('an2-res',fmtFCFA(resteTotal));set('an2-res-s',Math.round(resteTotal/Math.max(caTotal,1)*100)+'% du CA non encaissé');
   set('an2-nou',R.nouv);set('an2-nou-s',R.tels+' clients uniques sur la période');
   set('an2-lc','Dernier client : '+an2D(R.lastNew));set('an2-np','Prospects : '+R.nbPros+' (dernier : '+an2D(R.lastPros)+')');
   set('an2-as',R.nbAs);set('an2-as-s',R.nb?Math.round(R.nbAs/R.nb*100)+'% des ventes':'');
+  // Série graphique CA = commerciaux + apporteurs par clé (jour ou mois)
+  const ventesApAll=(DB.ventes||[]).filter(v=>{const d=String(v.dateMiseEnRelation||'').slice(0,10);return d>=R.f.from&&d<=R.f.to&&aApporteur(v)&&ok2ap(v);});
+  const serieTotal=R.serie.map((val,i)=>{const k=R.keys[i];const apk=ventesApAll.filter(v=>{const d=String(v.dateMiseEnRelation||'').slice(0,10);return R.daily?d===k:d.slice(0,7)===k;}).reduce((s,v)=>s+venteTotal(v),0);return val+apk;});
   set('an2-t1',R.daily?'Évolution du CA par jour':'Évolution du CA par mois');
-  an2Bar('an2-c1',R.labels,R.serie,R.serie.map((v,i)=>{const o=R.daily?0:an2ObjMonth(+R.keys[i].slice(5,7)-1);return o>0&&v>=o?'#C8830A':'#F0A832'}));
-  an2Bar('an2-c2',R.byG.map(x=>x[0]),R.byG.map(x=>x[1]),R.byG.map(x=>AN2_C[x[0]]||'#94A3B8'),true);
+  an2Bar('an2-c1',R.labels,serieTotal,serieTotal.map((v,i)=>{const o=R.daily?0:an2ObjMonth(+R.keys[i].slice(5,7)-1);return o>0&&v>=o?'#C8830A':'#F0A832'}));
+  // CA par gestionnaire : ajouter ligne "Apporteurs" séparément
+  const byGwithAp=[...R.byG];
+  if(caAp>0)byGwithAp.push(['🤝 Apporteurs',caAp]);
+  an2Bar('an2-c2',byGwithAp.map(x=>x[0]),byGwithAp.map(x=>x[1]),byGwithAp.map(x=>x[0].startsWith('🤝')?'#7C3AED':(AN2_C[x[0]]||'#94A3B8')),true);
   const P=['#C8830A','#2563EB','#059669','#7C3AED','#DC2626'];
   an2Donut('an2-c3',R.byT.map(x=>x[0].replace('Monture / Verres correcteurs','Montures/Verres')),R.byT.map(x=>x[1]),P);
   an2Donut('an2-c4',R.byB.map(x=>x[0]),R.byB.map(x=>x[1]),['#1B2340','#C8830A','#2563EB']);
   an2Donut('an2-c5',['Avec assurance ('+R.nbAs+')','Sans assurance ('+(R.nb-R.nbAs)+')'],[R.caAs,R.ca-R.caAs],['#059669','#C8830A']);
   set('an2-oy','🎯 Suivi des objectifs '+R.year);
-  const tb=$('an2-ob');if(tb)tb.innerHTML=R.months.map(m=>{const o=an2ObjMonth(m.i),p=o?Math.round(m.real/o*100):0,c=p>=100?'#1E7E5A':p>=80?'#B45309':'#DC2626',cur=m.ym===an2Today().slice(0,7);
-    return`<tr style="${m.future?'opacity:.4;':''}${cur?'background:#FFF9EF;font-weight:600;':''}"><td>${MOIS[m.i]}${cur?' <small style="background:#C8830A;color:#fff;padding:1px 7px;border-radius:9px">EN COURS</small>':''}</td><td>${o?fmtFCFA(o):'—'}</td><td>${m.future?'—':fmtFCFA(m.real)}</td><td style="color:${c};font-weight:700">${m.future?'—':p+'%'}</td><td><div class="an2-bg"><i style="width:${m.future?0:Math.min(p,100)}%;background:${c}"></i></div></td></tr>`}).join('')
+  // Objectifs : CA réel du mois = commerciaux + apporteurs
+  const allVentesAnnee=(DB.ventes||[]).filter(v=>ok2ap(v));
+  const tb=$('an2-ob');if(tb)tb.innerHTML=R.months.map(m=>{
+    const ym=R.year+'-'+String(m.i+1).padStart(2,'0');
+    const caApMois=allVentesAnnee.filter(v=>aApporteur(v)&&String(v.dateMiseEnRelation||'').slice(0,7)===ym).reduce((s,v)=>s+venteTotal(v),0);
+    const realTotal=m.real+caApMois;
+    const o=an2ObjMonth(m.i),p=o?Math.round(realTotal/o*100):0,c=p>=100?'#1E7E5A':p>=80?'#B45309':'#DC2626',cur=ym===an2Today().slice(0,7);
+    return`<tr style="${m.future?'opacity:.4;':''}${cur?'background:#FFF9EF;font-weight:600;':''}"><td>${MOIS[m.i]}${cur?' <small style="background:#C8830A;color:#fff;padding:1px 7px;border-radius:9px">EN COURS</small>':''}</td><td>${o?fmtFCFA(o):'—'}</td><td>${m.future?'—':fmtFCFA(realTotal)}</td><td style="color:${c};font-weight:700">${m.future?'—':p+'%'}</td><td><div class="an2-bg"><i style="width:${m.future?0:Math.min(p,100)}%;background:${c}"></i></div></td></tr>`}).join('')
   // Bloc apporteurs d'affaires
   const apDiv=$('an2-apporteurs');
   if(apDiv){
