@@ -228,7 +228,19 @@ function an2Update(){
   an2Donut('an2-c5',['Avec assurance ('+R.nbAs+')','Sans assurance ('+(R.nb-R.nbAs)+')'],[R.caAs,R.ca-R.caAs],['#059669','#C8830A']);
   set('an2-oy','🎯 Suivi des objectifs '+R.year);
   const tb=$('an2-ob');if(tb)tb.innerHTML=R.months.map(m=>{const o=an2ObjMonth(m.i),p=o?Math.round(m.real/o*100):0,c=p>=100?'#1E7E5A':p>=80?'#B45309':'#DC2626',cur=m.ym===an2Today().slice(0,7);
-    return`<tr style="${m.future?'opacity:.4;':''}${cur?'background:#FFF9EF;font-weight:600;':''}"><td>${MOIS[m.i]}${cur?' <small style="background:#C8830A;color:#fff;padding:1px 7px;border-radius:9px">EN COURS</small>':''}</td><td>${o?fmtFCFA(o):'—'}</td><td>${m.future?'—':fmtFCFA(m.real)}</td><td style="color:${c};font-weight:700">${m.future?'—':p+'%'}</td><td><div class="an2-bg"><i style="width:${m.future?0:Math.min(p,100)}%;background:${c}"></i></div></td></tr>`}).join('')}
+    return`<tr style="${m.future?'opacity:.4;':''}${cur?'background:#FFF9EF;font-weight:600;':''}"><td>${MOIS[m.i]}${cur?' <small style="background:#C8830A;color:#fff;padding:1px 7px;border-radius:9px">EN COURS</small>':''}</td><td>${o?fmtFCFA(o):'—'}</td><td>${m.future?'—':fmtFCFA(m.real)}</td><td style="color:${c};font-weight:700">${m.future?'—':p+'%'}</td><td><div class="an2-bg"><i style="width:${m.future?0:Math.min(p,100)}%;background:${c}"></i></div></td></tr>`}).join('')
+  // Bloc apporteurs d'affaires
+  const apDiv=$('an2-apporteurs');
+  if(apDiv){
+    const ok2=d=>AN2.comm.has('Tous')||AN2.comm.has(d.gestionnaire==='Autre'?(d.gestionnaireAutre||'Autre'):(d.gestionnaire||'Inconnu'));
+    const ventesAp=(DB.ventes||[]).filter(v=>{const d=String(v.dateMiseEnRelation||'').slice(0,10);return d>=R.f.from&&d<=R.f.to&&aApporteur(v)&&ok2(v);});
+    const parAp={};ventesAp.forEach(v=>{const lbl=v.apporteurAffaire==='Autre'?(v.apporteurAffaireAutre||'Autre'):(v.apporteurAffaire||'?');if(!parAp[lbl]){parAp[lbl]={ca:0,nb:0}}parAp[lbl].ca+=venteTotal(v);parAp[lbl].nb++});
+    const ord=Object.entries(parAp).sort((a,b)=>b[1].ca-a[1].ca);
+    const caTotal=ord.reduce((s,[,d])=>s+d.ca,0);
+    if(ord.length===0){apDiv.innerHTML=`<div style="text-align:center;padding:20px 0;color:#9AA0B2;font-size:13px;">Aucune vente via apporteur sur cette période</div>`}
+    else{apDiv.innerHTML=`<div style="font-size:12px;color:#9AA0B2;margin-bottom:10px;">${ventesAp.length} vente(s) · ${fmtFCFA(caTotal)} total</div><div style="display:flex;flex-direction:column;gap:10px;">${ord.map(([nom,d])=>{const maxC=ord[0][1].ca||1,pct=Math.round(d.ca/maxC*100);return`<div><div style="display:flex;justify-content:space-between;align-items:center;font-size:13px;margin-bottom:5px;"><div style="display:flex;align-items:center;gap:8px;"><span style="width:26px;height:26px;border-radius:50%;background:#1B2340;color:#C8830A;display:inline-flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;flex-shrink:0;">${escapeHtml(nom.slice(0,2).toUpperCase())}</span><span style="font-weight:600;">${escapeHtml(nom)}</span><span style="font-size:11px;color:#9AA0B2;">${d.nb} vente${d.nb>1?'s':''}</span></div><span style="font-weight:700;color:#C8830A;font-variant-numeric:tabular-nums;">${fmtFCFA(d.ca)}</span></div><div style="background:#E2E5EC;border-radius:4px;height:7px;overflow:hidden;"><div style="background:linear-gradient(90deg,#1B2340,#C8830A);height:100%;width:${pct}%;border-radius:4px;"></div></div></div>`}).join('')}</div>`}
+  }
+}
 function renderAnalyseDirection(){an2EnsureObj();const t=an2Today();
   const names=[...new Set(an2Rows().map(d=>d.g))].filter(n=>n!=='Inconnu').sort();
   const chips=[['today',"Aujourd'hui"],['week','Cette semaine'],['month','Ce mois'],['year','Cette année'],['custom','Personnalisé']].map(([k,l])=>`<div class="an2-chip${AN2.type===k?' on':''}" data-p="${k}">${l}</div>`).join('');
@@ -250,6 +262,7 @@ function renderAnalyseDirection(){an2EnsureObj();const t=an2Today();
     <div class="an2-card an2-wide"><div class="an2-t" id="an2-t1">Évolution du CA</div><div class="an2-wrap" style="height:220px"><canvas id="an2-c1"></canvas></div></div>
     <div class="an2-card an2-wide"><div class="an2-t" id="an2-oy">🎯 Suivi des objectifs</div><div style="overflow-x:auto"><table class="an2-tb"><thead><tr><th>Mois</th><th>Objectif</th><th>Réalisé</th><th>Atteinte</th><th></th></tr></thead><tbody id="an2-ob"></tbody></table></div></div>
     ${cd(0,'CA par gestionnaire','an2-c2')}${cd(0,"Répartition par type d'article",'an2-c3')}${cd(0,'CA par boutique','an2-c4')}${cd(0,'Assurance vs sans assurance','an2-c5')}
+    <div class="an2-card an2-wide" id="an2-apporteurs-card"><div class="an2-t">🤝 Apporteurs d'affaires</div><div id="an2-apporteurs" style="padding:4px 0 8px"></div></div>
   </div></div>`}
 function initAnalyseDirection(){const r=document.getElementById('an2-root');if(!r)return;
   r.querySelector('#an2-chips').onclick=e=>{const c=e.target.closest('.an2-chip');if(!c)return;AN2.type=c.dataset.p;
