@@ -2318,7 +2318,7 @@ function prospectForm(data){
   return `
   <h3>${data ? 'Modifier le prospect' : 'Nouveau prospect'}</h3>
   <p style="font-size:12.5px;color:#8a8980;margin:-8px 0 18px;">Base Jéricho — remplacement du formulaire Google Form.</p>
-  <form id="form-prospect">
+  <form id="form-prospect" novalidate>
     <div class="form-grid">
       <div class="form-section-title">Informations personnelles</div>
       <div class="field"><label>📱  Téléphone WhatsApp <span style="color:#A6402E;">*</span></label><input required id="p-tel" value="${escapeAttr(fmtTelAff(d.telephone))}" inputmode="numeric" placeholder="ex: 70 00 00 00" maxlength="14" oninput="formatTel(this)"></div>
@@ -2356,7 +2356,7 @@ function clientForm(data, isConversion=false){
     ✅ Vérifiez et complétez les informations avant de confirmer. Le prospect sera marqué "Converti en client".
   </div>` : ''}
   ${isConversion ? `<p style="font-size:12px;color:#2d7a3a;background:#f0fdf4;padding:8px 12px;border-radius:6px;margin-bottom:12px;">✅ Informations pré-remplies depuis le prospect. Vérifiez et complétez avant d'enregistrer.</p>` : ''}
-  <form id="form-client">
+  <form id="form-client" novalidate>
     <div class="form-grid">
       <div class="form-section-title">Informations personnelles</div>
       <div class="field"><label>📱  Téléphone WhatsApp <span style="color:#A6402E;">*</span></label><input required id="c-tel" value="${escapeAttr(fmtTelAff(d.telephone))}" inputmode="numeric" placeholder="ex: 70 00 00 00" maxlength="14" oninput="formatTel(this)"></div>
@@ -2532,7 +2532,7 @@ function savForm(data){
   const d = data || { id:'', clientNom:'', telephone:'', boutique:BOUTIQUES[0], typeDemande:TYPES_SAV[0], description:'', statut:'Ouvert', commercial: state.commercial };
   return `
   <h3>${data?'Modifier le ticket SAV':'Nouveau ticket SAV'}</h3>
-  <form id="form-sav">
+  <form id="form-sav" novalidate>
     <div class="form-grid">
       <div class="field full"><label>Nom du client</label><input required id="s-nom" value="${escapeAttr(d.clientNom)}"></div>
       <div class="field"><label>Téléphone</label><input id="s-tel" value="${escapeAttr(fmtTelAff(d.telephone))}" inputmode="numeric" maxlength="14" oninput="formatTel(this)"></div>
@@ -2553,7 +2553,7 @@ function stockForm(data){
   const d = data || { id:'', reference:'', designation:'', categorie:CATEGORIES_STOCK[0], boutique:BOUTIQUES[0], quantite:0, prixUnitaire:0, seuilAlerte:3 };
   return `
   <h3>${data?"Modifier l'article":'Nouvel article de stock'}</h3>
-  <form id="form-stock">
+  <form id="form-stock" novalidate>
     <div class="form-grid">
       <div class="field"><label>Référence</label><input id="st-ref" value="${escapeAttr(d.reference)}"></div>
       <div class="field"><label>Boutique</label><select id="st-boutique">${BOUTIQUES.map(b=>`<option ${d.boutique===b?'selected':''}>${b}</option>`).join('')}</select></div>
@@ -2594,7 +2594,7 @@ function venteForm(data){
   return `
   <h3>${data?'Modifier la vente':'Nouvelle vente'}</h3>
   <p style="font-size:12.5px;color:#8a8980;margin:-8px 0 18px;">Dossier de vente complet, en remplacement du formulaire Google « BASE JERICHO ». Les sections changent selon l'article vendu.</p>
-  <form id="form-vente">
+  <form id="form-vente" novalidate>
     <div class="form-grid">
 
       <div class="form-section-title">Informations personnelles</div>
@@ -3441,7 +3441,7 @@ function apporteurForm(data){
   const SPECIALITES = ['Ophtalmologue','Médecin généraliste','Optométriste','Pédiatre','Autre'];
   return `
   <h3>${data?'Modifier l\'apporteur':'Nouvel apporteur d\'affaire'}</h3>
-  <form id="form-apporteur">
+  <form id="form-apporteur" novalidate>
     <div class="form-grid">
       <div class="form-section-title">Informations personnelles</div>
       <div class="field"><label>Nom <span style="color:#A6402E;">*</span></label><input required id="ap-nom" value="${escapeAttr(d.nom||'')}" placeholder="Nom de famille"></div>
@@ -3505,7 +3505,7 @@ function userForm(data){
 
   return `
   <h3>${isEdit?'Modifier le compte':'Nouveau compte commercial'}</h3>
-  <form id="form-user">
+  <form id="form-user" novalidate>
     <div class="form-section-title">Informations du compte</div>
     <div class="form-grid">
       <div class="field"><label>Identifiant (login)</label><input required id="u-id" value="${escapeAttr(d.id)}" ${isEdit?'readonly style="background:#f5f4f0;"':''} placeholder="ex: aminata" autocomplete="off"></div>
@@ -4202,7 +4202,7 @@ function ticketForm(data){
 
   return `
   <h3>${data?'Modifier le ticket':'Nouveau ticket'}</h3>
-  <form id="form-ticket">
+  <form id="form-ticket" novalidate>
     <div class="form-grid">
       <div class="form-section-title">Informations du ticket</div>
       <div class="field"><label>Type</label><select id="tk-type">${TYPES_TICKET.map(t=>`<option ${d.type===t?'selected':''}>${t}</option>`).join('')}</select></div>
@@ -4926,7 +4926,7 @@ function avanceForm(data){
 
   return `
   <h3>${data?'Modifier l\'avance':'Nouvelle avance sur salaire'}</h3>
-  <form id="form-avance">
+  <form id="form-avance" novalidate>
     <div class="form-grid">
       <div class="form-section-title">Informations</div>
       <div class="field"><label>Commercial <span style="color:#A6402E;">*</span></label>
