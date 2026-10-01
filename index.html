@@ -1665,8 +1665,44 @@ function renderDashboard(){
     annivFideliteD.push({...v, anneesEcoulees:ans});
   });
 
+  // Prospects à relancer aujourd'hui
+  const relancesAujourdhui = (iAmAdmin ? DB.prospects : DB.prospects.filter(x=>x.commercial===myName))
+    .filter(p => (p.dateRelance||'').slice(0,10) === today && p.statut !== 'Converti en client' && p.statut !== 'Perdu');
+
   return `
   <div class="main-head"><div><h2>Tableau de bord</h2><p>${iAmAdmin?'Vue globale toutes boutiques.':'Vos indicateurs personnels.'}</p></div></div>
+
+  ${relancesAujourdhui.length>0 ? `
+  <div style="background:#EAF3FE;border:2px solid #68AAD1;border-radius:12px;padding:14px 18px;margin-bottom:20px;">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap;">
+      <span style="font-size:22px;">📅</span>
+      <div style="flex:1;">
+        <div style="font-size:14px;font-weight:700;color:#185FA5;">${relancesAujourdhui.length} prospect${relancesAujourdhui.length>1?'s':''} à relancer aujourd'hui</div>
+        <div style="font-size:12px;color:#3B6FA5;margin-top:2px;">Contacts programmés pour ce jour — pensez à les appeler !</div>
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:8px;">
+      ${relancesAujourdhui.map(p=>{
+        const effTel = String(p.telephone||p.telephone2||'');
+        const num = effTel.startsWith('226') ? effTel : '226'+effTel;
+        return `<div style="background:#fff;border:1px solid #B3D3EF;border-radius:8px;padding:10px 14px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+          <div>
+            <span style="font-weight:700;font-size:13px;">${escapeHtml((p.civilite||'')+' '+(p.nom||'')+' '+(p.prenom||'')).trim()}</span>
+            ${p.besoin ? `<span style="font-size:11px;color:#888;margin-left:8px;">— ${escapeHtml(p.besoin)}</span>` : ''}
+            <div style="font-size:11px;color:#5A6278;margin-top:2px;">${escapeHtml(p.boutique||'')} · ${statutBadge(p.statut,'prospect')}</div>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+            ${effTel ? `<span style="font-size:12px;font-weight:600;color:#1B2340;">${escapeHtml(fmtTelAff(effTel))}</span>` : ''}
+            ${effTel ? `<a href="https://wa.me/${num}" target="_blank" style="background:#25D366;color:#fff;border:none;padding:5px 10px;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;gap:4px;">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="#fff"><path d="M12.04 2c-5.46 0-9.91 4.45-9.91 9.91 0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38c1.45.79 3.08 1.21 4.74 1.21 5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.816 9.816 0 0 0 12.04 2m.01 1.67c2.2 0 4.26.86 5.82 2.42a8.225 8.225 0 0 1 2.41 5.83c0 4.54-3.7 8.23-8.24 8.23-1.48 0-2.93-.39-4.19-1.15l-.3-.17-3.12.82.83-3.04-.2-.32a8.188 8.188 0 0 1-1.26-4.38c.01-4.54 3.7-8.24 8.25-8.24M8.53 7.33c-.16 0-.43.06-.66.31-.22.25-.87.86-.87 2.07 0 1.22.89 2.39 1 2.56.14.17 1.76 2.67 4.25 3.73.59.27 1.05.42 1.41.53.59.19 1.13.16 1.56.1.48-.07 1.46-.6 1.67-1.18.21-.58.21-1.07.14-1.18-.07-.11-.25-.17-.53-.31-.28-.14-1.66-.82-1.92-.91-.26-.09-.44-.14-.63.14-.19.28-.72.91-.88 1.09-.16.18-.32.2-.6.07-.28-.14-1.19-.44-2.26-1.4-.83-.75-1.4-1.67-1.56-1.95-.17-.28-.02-.44.12-.58.13-.13.28-.34.42-.51.14-.17.18-.29.28-.47.09-.19.05-.35-.02-.49-.07-.14-.63-1.52-.88-2.07-.24-.53-.48-.46-.66-.47-.16-.01-.35-.01-.53-.01Z"/></svg>
+              WhatsApp
+            </a>` : ''}
+            <button data-edit-prospect="${p.id}" style="background:#185FA5;color:#fff;border:none;padding:5px 10px;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;">Modifier →</button>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>
+  </div>` : ''}
 
   ${prospectsWebNonAssignes.length>0 ? `
   <div style="background:#FEF3C7;border:1px solid #F59E0B;border-radius:12px;padding:14px 18px;margin-bottom:20px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;cursor:pointer;" onclick="state.teamTab='prospects';state.filters.prospects.q='Site web';render();">
@@ -2301,6 +2337,7 @@ function prospectForm(data){
       <div class="field"><label>Statut</label><select id="p-statut">${STATUTS_PROSPECT.map(s=>`<option ${d.statut===s?'selected':''}>${s}</option>`).join('')}</select></div>
       <div class="field full"><label>Commercial en charge</label><input id="p-commercial" value="${escapeAttr(d.commercial)}"></div>
       <div class="field"><label>Date de naissance <span style="font-size:11px;color:#888;">(optionnel)</span></label><input type="date" id="p-dob" value="${escapeAttr(d.dateNaissance||'')}"></div>
+      <div class="field"><label>📅 Date de relance <span style="font-weight:400;color:#9a998f;font-size:11px;">— rappel dans la journée</span></label><input type="date" id="p-relance" value="${escapeAttr(d.dateRelance||'')}"></div>
       <div class="field full"><label>Notes</label><textarea id="p-notes">${escapeHtml(d.notes)}</textarea></div>
     </div>
     <div class="modal-actions">
@@ -2552,7 +2589,7 @@ function venteForm(data){
     laboratoire:getLaboratoires()[0], laboratoireAutre:'', caracteristiqueVerre:'',
     montantAchatSpray:'', montantVenteEtui:'', montantVenteEssuieVerre:'', prixVenteMontureAcc:'', remiseAcc:'',
     prixVenteMonture:'', prixVenteLentilles:'', prixVenteLentilles2e:'', prixVenteMonture2e:'', prixVenteTotalSansRemise:'', remise:'', avance:'', montantBonNonEncaisse:'',
-    dateRdv:'', commentaire:'', commercial: state.commercial
+    dateRdv:todayISO(), commentaire:'', commercial: state.commercial
   };
   return `
   <h3>${data?'Modifier la vente':'Nouvelle vente'}</h3>
@@ -6520,6 +6557,7 @@ function attachModalEvents(){
       commercial: document.getElementById('p-commercial').value.trim(),
       notes: document.getElementById('p-notes').value,
       dateNaissance: document.getElementById('p-dob')?.value||''.trim(),
+      dateRelance: document.getElementById('p-relance')?.value||'',
       dateMiseEnRelation: document.getElementById('p-date').value || todayISO(),
       dateCreation: (state.modal.data && state.modal.data.dateCreation) || todayISO()
     };
