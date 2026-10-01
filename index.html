@@ -2614,14 +2614,14 @@ function venteForm(data){
           <div class="field"><label>Sphère</label>${rxInput('v-od-sphere', d.odSphere, true)}</div>
           <div class="field"><label>Cylindre</label>${rxInput('v-od-cyl', d.odCylindre, true)}</div>
           <div class="field"><label>Axe (0-180)</label>${rxInput('v-od-axe', d.odAxe, false, 1, 0, 180)}</div>
-          <div class="field"><label>Addition</label>${rxInput('v-od-add', d.odAddition, false, 0.25, 0, 8, "autoOgAdd(this.value);updateBadgeTypeVerre()")}</div>
+          <div class="field"><label>Addition</label>${rxInput('v-od-add', d.odAddition, false, 0.25, 0, 8, "autoOgAdd(this.value)")}</div>
         </div>
         <div class="form-section-title">Prescription œil gauche (OG)</div>
         <div class="form-grid">
           <div class="field"><label>Sphère</label>${rxInput('v-og-sphere', d.ogSphere, true)}</div>
           <div class="field"><label>Cylindre</label>${rxInput('v-og-cyl', d.ogCylindre, true)}</div>
           <div class="field"><label>Axe (0-180)</label>${rxInput('v-og-axe', d.ogAxe, false, 1, 0, 180)}</div>
-          <div class="field"><label>Addition <span id="og-add-hint" style="font-size:10px;color:#68AAD1;font-weight:400;"></span></label>${rxInput('v-og-add', d.ogAddition, false, 0.25, 0, 8, "document.getElementById('og-add-hint').textContent='';updateBadgeTypeVerre()")}</div>
+          <div class="field"><label>Addition <span id="og-add-hint" style="font-size:10px;color:#68AAD1;font-weight:400;"></span></label>${rxInput('v-og-add', d.ogAddition, false, 0.25, 0, 8, "autoOdAdd(this.value);updateBadgeTypeVerre()")}</div>
           <div class="field full">
             <div id="badge-type-verre" style="display:inline-flex;align-items:center;gap:8px;padding:8px 14px;border-radius:8px;font-size:13px;font-weight:600;background:${(()=>{const od=parseFloat(d.odAddition)||0;const og=parseFloat(d.ogAddition)||0;return (od>0.1||og>0.1)?'#EAF3FE':'#F5F4F0';})()};color:${(()=>{const od=parseFloat(d.odAddition)||0;const og=parseFloat(d.ogAddition)||0;return (od>0.1||og>0.1)?'#185FA5':'#555';})()};">
               ${(()=>{const od=parseFloat(d.odAddition)||0;const og=parseFloat(d.ogAddition)||0;return (od>0.1||og>0.1)?'🔵 Progressif — prime lentilles palier PROGRESSIF':'⚪ Unifocal — prime lentilles palier UNIFOCAL';})()}
@@ -4348,15 +4348,28 @@ window.updateBadgeTypeVerre = function(){
 };
 
 window.autoOgAdd = function(val){
+  // OD → OG : copie si OG est vide ou avait été auto-rempli depuis OD
   const ogAdd = document.getElementById('v-og-add');
   const hint = document.getElementById('og-add-hint');
   if(!ogAdd) return;
-  // Copier vers OG seulement si OG est vide ou identique à l'ancienne valeur OD
-  if(!ogAdd.value || ogAdd.dataset.autoFilled==='true'){
+  if(!ogAdd.value || ogAdd.dataset.autoFilled==='od'){
     ogAdd.value = val;
-    ogAdd.dataset.autoFilled = val ? 'true' : '';
+    ogAdd.dataset.autoFilled = val ? 'od' : '';
     if(hint) hint.textContent = val ? '↑ copié depuis OD' : '';
   }
+  updateBadgeTypeVerre();
+};
+window.autoOdAdd = function(val){
+  // OG → OD : copie si OD est vide ou avait été auto-rempli depuis OG
+  const odAdd = document.getElementById('v-od-add');
+  const hint = document.getElementById('og-add-hint');
+  if(!odAdd) return;
+  if(!odAdd.value || odAdd.dataset.autoFilled==='og'){
+    odAdd.value = val;
+    odAdd.dataset.autoFilled = val ? 'og' : '';
+    if(hint) hint.textContent = val ? '↑ copié depuis OG' : '';
+  }
+  updateBadgeTypeVerre();
 };
 
 
