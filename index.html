@@ -420,8 +420,11 @@ async function apiGet(table) {
 // Convertir camelCase → minuscules pour Supabase
 function toSupabase(row) {
   const out = {};
+  const DATE_KEYS = /date/i;
   for (const [k, v] of Object.entries(row)) {
-    out[k.toLowerCase()] = v;
+    // Les colonnes date Supabase n'acceptent pas '' (chaîne vide) → null
+    const isDate = DATE_KEYS.test(k);
+    out[k.toLowerCase()] = (isDate && v === '') ? null : v;
   }
   return out;
 }
@@ -478,7 +481,7 @@ async function saveConfigArray(configId, arr) {
   try {
     await apiUpsert('config', row);
   } catch(e) {
-    showToast('Erreur sauvegarde config : ' + e.message);
+    showToast('Erreur sauvegarde config : ' + e.message, true);
     console.error('saveConfigArray:', e);
     throw e;
   }
@@ -525,6 +528,15 @@ async function loadAll() {
 
 function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
 function todayISO(){ return new Date().toISOString().slice(0,10); }
+function setAnalysePeriode(p){
+  state.analysePeriode = p;
+  if(p === 'custom' && !state.analyseDebut){
+    const y = new Date().getFullYear();
+    state.analyseDebut = y + '-01-01';
+    state.analyseFin = todayISO();
+  }
+  render();
+}
 
 // ===== NORMALISATION TÉLÉPHONE =====
 // Identifiant unique d'un client = numéro normalisé (sans espaces, sans 0 initial, sans indicatif 226)
@@ -743,12 +755,14 @@ function showConfirm(message, onOk) {
   document.body.appendChild(overlay);
 }
 
-function showToast(msg){
+function showToast(msg, isError){
   const t = document.getElementById('toast');
   t.textContent = msg;
   t.classList.add('show');
+  t.style.background = isError ? '#A6402E' : '';
+  t.style.fontWeight = isError ? '600' : '';
   clearTimeout(window.__toastTimer);
-  window.__toastTimer = setTimeout(()=>t.classList.remove('show'), 2600);
+  window.__toastTimer = setTimeout(()=>{ t.classList.remove('show'); t.style.background=''; t.style.fontWeight=''; }, isError ? 6000 : 2600);
 }
 
 /* =========================================================
@@ -5612,7 +5626,7 @@ function renderAnalyse(){
       <span style="font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#9AA8CC;flex-shrink:0;">Période</span>
       <div style="display:flex;gap:6px;flex-wrap:wrap;">
         ${periodeChips.map(([p,label])=>`
-          <button onclick="state.analysePeriode='${p}';render();"
+          <button type="button" onclick="setAnalysePeriode('${p}');"
             style="padding:4px 14px;border-radius:20px;font-size:12px;font-weight:500;cursor:pointer;border:1.5px solid ${periode===p?'#C8830A':'rgba(255,255,255,.25)'};background:${periode===p?'#C8830A':'rgba(255,255,255,.07)'};color:${periode===p?'#fff':'rgba(255,255,255,.75)'};transition:all .15s;">${label}</button>
         `).join('')}
       </div>
@@ -6745,7 +6759,7 @@ function attachModalEvents(){
       avance: val('v-avance'), montantBonNonEncaisse: val('v-bon'),
       versements: (()=>{ const vj=document.getElementById('v-versements-json')?.value||'[]'; return vj; })(),
       modePaiement: (()=>{ const vj=document.getElementById('v-versements-json')?.value||'[]'; let pv=[]; try{pv=JSON.parse(vj);}catch(e){} return pv.length>0 ? pv.map(v=>v.mode).filter((m,i,a)=>a.indexOf(m)===i).join(' + ') : 'Espèces'; })(),
-      dateRdv: val('v-rdv'), commentaire: val('v-commentaire').trim(),
+      dateRdv: val('v-rdv') || null, commentaire: val('v-commentaire').trim(),
       saisePar: (existing && existing.saisePar) || state.commercial,
       commercial: (existing && existing.commercial) || state.commercial,
       dateCreation: (existing && existing.dateCreation) || todayISO()
@@ -6794,7 +6808,7 @@ function attachModalEvents(){
       state.modal=null; render();
       window._jCache=null;
       showToast(idx>=0 ? 'Vente mise à jour.' : 'Vente enregistrée. Ticket labo créé automatiquement.');
-    }catch(err){ showToast("Erreur: " + (err.message||'inconnue')); console.error('Vente err:', err); }
+    }catch(err){ showToast("⚠️ Erreur: " + (err.message||'inconnue'), true); console.error('Vente err:', err); }
   });
 
   // Formulaire création/modification d'utilisateur
