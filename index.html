@@ -6279,9 +6279,15 @@ function attachVenteConditionalLogic(){
     show('sec-reparation', t==='Réparation et entretien');
     show('sec-assurance', t==='Monture / Verres correcteurs' || t==='Lentilles');
     show('sec-staff', t!=='Réparation et entretien');
-    show('sec-prescription', t==='Monture / Verres correcteurs');
+    show('sec-prescription', t==='Monture / Verres correcteurs' || t==='Lentilles');
     show('sec-accessoires-cost', t==='Accessoires');
     show('sec-pricing-global', t==='Monture / Verres correcteurs' || t==='Lentilles');
+    // Pour lentilles : masquer les champs prix monture (non pertinents)
+    const isLentilles = t==='Lentilles';
+    ['v-prix-monture','v-prix-monture-2e'].forEach(id=>{
+      const el = document.getElementById(id);
+      if(el) el.closest('.field').style.display = isLentilles ? 'none' : '';
+    });
   };
   type.addEventListener('change', toggleSections);
   toggleSections();
@@ -6626,6 +6632,36 @@ function attachModalEvents(){
     const id = document.getElementById('v-id').value || uid();
     const existing = DB.ventes.find(v=>v.id===id);
     const val = (elId)=> (document.getElementById(elId)||{}).value || '';
+
+    // Validation prescription obligatoire pour Monture/Verres et Lentilles
+    const typeArt = val('v-article');
+    if(typeArt==='Monture / Verres correcteurs' || typeArt==='Lentilles'){
+      const rxFields = [
+        {id:'v-od-sphere', label:'OD Sphère'},
+        {id:'v-od-cyl',    label:'OD Cylindre'},
+        {id:'v-od-axe',    label:'OD Axe'},
+        {id:'v-od-add',    label:'OD Addition'},
+        {id:'v-og-sphere', label:'OG Sphère'},
+        {id:'v-og-cyl',    label:'OG Cylindre'},
+        {id:'v-og-axe',    label:'OG Axe'},
+        {id:'v-og-add',    label:'OG Addition'},
+      ];
+      const manquants = rxFields.filter(f=>!val(f.id).trim());
+      if(manquants.length>0){
+        // Mettre en rouge les champs manquants
+        rxFields.forEach(f=>{
+          const el = document.getElementById(f.id);
+          if(el) el.style.outline = !val(f.id).trim() ? '2px solid #DC2626' : '';
+        });
+        // Scroll vers la prescription
+        document.getElementById('sec-prescription')?.scrollIntoView({behavior:'smooth',block:'center'});
+        const msg = '⚠️ Prescription incomplète :\n' + manquants.map(f=>'• '+f.label).join('\n') + '\n\nCes champs sont obligatoires avant l\'enregistrement.';
+        alert(msg);
+        return;
+      }
+      // Tout ok : supprimer les contours rouges
+      rxFields.forEach(f=>{ const el=document.getElementById(f.id); if(el) el.style.outline=''; });
+    }
     const obj = {
       id,
       dateMiseEnRelation: val('v-date') || todayISO(),
