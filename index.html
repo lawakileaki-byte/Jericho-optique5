@@ -756,6 +756,30 @@ function showConfirm(message, onOk) {
   document.body.appendChild(overlay);
 }
 
+function showListeComplete(idx) {
+  const data = (window.__journeeListes||[])[idx];
+  if(!data) return;
+  const {titre, couleur, items} = data;
+  const old = document.getElementById('jericho-liste-modale');
+  if(old) old.remove();
+  const overlay = document.createElement('div');
+  overlay.id = 'jericho-liste-modale';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:9998;display:flex;align-items:flex-start;justify-content:center;padding:16px;overflow-y:auto;';
+  const bg = document.documentElement.dataset.theme==='dark' ? '#2a2c2f' : '#fff';
+  overlay.innerHTML = `
+    <div style="background:${bg};border-radius:14px;max-width:600px;width:100%;margin:auto;box-shadow:0 12px 40px rgba(0,0,0,0.25);overflow:hidden;">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:3px solid ${couleur};background:${bg};">
+        <h3 style="margin:0;color:${couleur};font-size:16px;">${titre}</h3>
+        <button onclick="document.getElementById('jericho-liste-modale').remove();" style="background:none;border:none;font-size:22px;cursor:pointer;color:#888;line-height:1;">×</button>
+      </div>
+      <div style="padding:8px 20px 20px;max-height:70vh;overflow-y:auto;">
+        ${items}
+      </div>
+    </div>`;
+  overlay.addEventListener('click', e => { if(e.target===overlay) overlay.remove(); });
+  document.body.appendChild(overlay);
+}
+
 function showToast(msg, isError){
   const t = document.getElementById('toast');
   t.textContent = msg;
@@ -3810,6 +3834,47 @@ function renderJournee(){
     </div>`;
   }
 
+  // Pré-calcul des listes complètes pour les modales "+X autres"
+  const lentillesRelance = boutiqueLentilles.filter(c=>c.derniereDate>s24b);
+  window.__journeeListes = [
+    // 0 — RDV demain
+    { titre:`📞 RDV demain à confirmer (${rdvDemain.length})`, couleur:'#E8A93B',
+      items: rdvDemain.map(v=>carteVente(v,'rappel-rdv')).join('') },
+    // 1 — Clients attendus
+    { titre:`🏪 Clients attendus aujourd'hui (${rdvAujourdHui.length})`, couleur:'#68AAD1',
+      items: rdvAujourdHui.map(v=>carteVente(v,'accueil')).join('') },
+    // 2 — Prospects
+    { titre:`🎯 Prospects à relancer (${prospRdvPris.length+prospContactes.length+prospNouveaux.length})`, couleur:'#9b59b6',
+      items: [...prospRdvPris.map(p=>carteProspect(p,'rdv')),...prospContactes.map(p=>carteProspect(p,'relance')),...prospNouveaux.map(p=>carteProspect(p,'relance'))].join('') },
+    // 3 — Soldes en attente
+    { titre:`💰 Soldes en attente (${rdvDepasses.length})`, couleur:'#A6402E',
+      items: rdvDepasses.map(v=>carteVente(v,'relance-paiement')).join('') },
+    // 4 — SAV
+    { titre:`🔧 Tickets SAV ouverts (${mesSAV.length})`, couleur:'#555',
+      items: mesSAV.map(s=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--line);flex-wrap:wrap;gap:8px;"><div><div style="font-weight:600;font-size:14px;">${escapeHtml(s.clientNom||'Client')}</div><div style="font-size:12px;color:#888;">${escapeHtml(s.typeDemande||'')} · ${escapeHtml(s.boutique||'')} · <span class="badge b-open">${escapeHtml(s.statut)}</span></div>${s.description?`<div style="font-size:12px;color:#666;margin-top:3px;font-style:italic;">${escapeHtml(s.description.slice(0,80))}${s.description.length>80?'…':''}</div>`:''}</div>${waBtn(s.telephone,`${bonjourClient(s.clientNom,'',s.civilite||'')}, nous vous contactons de Jéricho Optique concernant votre dossier SAV (${s.typeDemande||''}). Pouvez-vous nous donner des nouvelles ?`)}</div>`).join('') },
+    // 5 — Anniversaires naissance
+    { titre:`🎁 Anniversaires de naissance (${anniversairesNaissance.length})`, couleur:'#E8A93B',
+      items: anniversairesNaissance.map(c=>{const tel=c.telephone||c.telephone2||'';const num=tel.startsWith('226')?tel:'226'+tel;const msg=encodeURIComponent('Joyeux anniversaire '+(c.civilite||'')+' '+(c.nom||'')+' ! Toute l\'équipe Jéricho Optique vous souhaite une excellente journée 🎉');return '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--line);">'+'<div>🎁 <b>'+escapeHtml(bonjourClient(c.nom,c.prenom,c.civilite))+'</b></div>'+(tel?'<a href="https://wa.me/'+num+'?text='+msg+'" target="_blank" style="background:#25D366;color:#fff;padding:4px 10px;border-radius:6px;font-size:12px;text-decoration:none;font-weight:600;">WhatsApp 🎂</a>':'')+'</div>';}).join('') },
+    // 6 — Fidélité clients
+    { titre:`🏆 Fidélité clients (${anniversairesFidelite.length})`, couleur:'#E8A93B',
+      items: anniversairesFidelite.map(v=>{const tel=v.telephone||'';const num=tel.startsWith('226')?tel:'226'+tel;const ans=v.anneesEcoulees;const msg=encodeURIComponent('Bonjour '+(v.civilite||'')+' '+(v.nom||'')+', cela fait exactement '+ans+' an'+(ans>1?'s':'')+' que vous êtes client(e) chez Jéricho Optique ! Merci pour votre fidélité 🏆');return '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--line);">'+'<div>🏆 <b>'+escapeHtml(bonjourClient(v.nom,v.prenom,v.civilite))+'</b> <span style="font-size:11px;color:#E8A93B;">'+ans+' an'+(ans>1?'s':'')+'</span></div>'+(tel?'<a href="https://wa.me/'+num+'?text='+msg+'" target="_blank" style="background:#25D366;color:#fff;padding:4px 10px;border-radius:6px;font-size:12px;text-decoration:none;font-weight:600;">WhatsApp 🏆</a>':'')+'</div>';}).join('') },
+    // 7 — Renouvellement urgent
+    { titre:`🔴 Renouvellement urgent (${boutique24.length})`, couleur:'#A6402E',
+      items: boutique24.map(cl=>{const num=(cl.telephone||'').startsWith('226')?cl.telephone:'226'+(cl.telephone||'');const msg=encodeURIComponent(`${bonjourClient(cl.nom,cl.prenom,cl.civilite)}, cela fait plus de 2 ans que vous avez vos lunettes. Chez Jéricho Optique, nous vous recommandons un contrôle de vue. Souhaitez-vous prendre rendez-vous ?`);return `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--line);flex-wrap:wrap;gap:8px;"><div><b style="font-size:13px;">${escapeHtml(cl.nom)} ${escapeHtml(cl.prenom||'')}</b><span style="font-size:11px;color:#888;margin-left:8px;">Dernier achat : ${fmtDate(cl.derniereDate)} · Gest. : ${escapeHtml(cl.derniereVente?.gestionnaire||'')}</span></div><div style="display:flex;gap:8px;align-items:center;"><span style="font-size:12px;color:#555;">${escapeHtml(cl.telephone||'')}</span><a href="https://wa.me/${num}?text=${msg}" target="_blank" style="display:inline-flex;align-items:center;gap:5px;background:#25D366;color:#fff;border:none;padding:5px 10px;border-radius:6px;font-size:11px;font-weight:600;text-decoration:none;">WhatsApp</a></div></div>`;}).join('') },
+    // 8 — À relancer 18-24 mois
+    { titre:`🟡 À relancer bientôt — 18 à 24 mois (${boutique18.length})`, couleur:'#E8A93B',
+      items: boutique18.map(cl=>{const numR18=(cl.telephone||'').startsWith('226')?cl.telephone:'226'+(cl.telephone||'');const msgR18=encodeURIComponent(`${bonjourClient(cl.nom,cl.prenom,cl.civilite)}, vos lunettes auront bientôt 2 ans. Chez Jéricho Optique, nous vous invitons à anticiper votre renouvellement. Voulez-vous en discuter ?`);return `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--line);flex-wrap:wrap;gap:8px;"><div><b style="font-size:13px;">${escapeHtml(cl.nom)} ${escapeHtml(cl.prenom||'')}</b><span style="font-size:11px;color:#888;margin-left:8px;">Dernier achat : ${fmtDate(cl.derniereDate)}</span></div><div style="display:flex;gap:8px;align-items:center;"><span style="font-size:12px;color:#555;">${escapeHtml(cl.telephone||'')}</span><a href="https://wa.me/${numR18}?text=${msgR18}" target="_blank" style="display:inline-flex;align-items:center;gap:5px;background:#25D366;color:#fff;padding:5px 10px;border-radius:6px;font-size:11px;font-weight:600;text-decoration:none;">WhatsApp</a></div></div>`;}).join('') },
+    // 9 — Lentilles urgentes
+    { titre:`🔴 Lentilles urgentes +24 mois (${boutiqueLentilles24.length})`, couleur:'#A6402E',
+      items: boutiqueLentilles24.map(cl=>{const effTel=String(cl.telephone||cl.telephone2||'');const num=effTel.startsWith('226')?effTel:'226'+effTel;const msg=encodeURIComponent(`${bonjourClient(cl.nom,cl.prenom,cl.civilite)}, vos lentilles de contact ont plus de 2 ans. Nous vous recommandons un renouvellement urgent. Contactez-nous à Jéricho Optique.`);return `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--line);"><div><b>${escapeHtml(bonjourClient(cl.nom,cl.prenom,cl.civilite))}</b> <span style="font-size:11px;color:#A6402E;">● ${cl.moisDepuis||'?'} mois</span></div>${effTel?`<a href="https://wa.me/${num}?text=${msg}" target="_blank" style="background:#25D366;color:#fff;padding:4px 10px;border-radius:6px;font-size:12px;text-decoration:none;font-weight:600;">WhatsApp</a>":''}</div>`;}).join('') },
+    // 10 — Lentilles 20-24 mois
+    { titre:`🔵 Lentilles à relancer 20-24 mois (${lentillesRelance.length})`, couleur:'#68AAD1',
+      items: lentillesRelance.map(cl=>{const msgL=encodeURIComponent(`${bonjourClient(cl.nom,cl.prenom,cl.civilite)}, il est bientôt temps de renouveler vos lentilles de contact chez Jéricho Optique. Souhaitez-vous prendre rendez-vous ?`);return `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--line);flex-wrap:wrap;gap:8px;"><div><b style="font-size:13px;">${escapeHtml(cl.nom)} ${escapeHtml(cl.prenom||'')}</b><span style="font-size:11px;color:#888;margin-left:8px;">Dernier achat : ${fmtDate(cl.derniereDate)}</span></div><div style="display:flex;gap:8px;align-items:center;"><span style="font-size:12px;color:#555;">${escapeHtml(cl.telephone||'')}</span>${waBtn(cl.telephone,decodeURIComponent(msgL))}</div></div>`;}).join('') },
+    // 11 — Tickets labo
+    { titre:`🔬 Commandes labo à passer (${ticketsLabo.length})`, couleur:'#A6402E',
+      items: ticketsLabo.map(t=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--line);flex-wrap:wrap;gap:8px;"><div><b style="font-size:13px;">${escapeHtml(t.clientNom||'')}</b><span style="font-size:11px;color:#888;margin-left:6px;">${escapeHtml(t.labo||'Labo non précisé')} · ${fmtDate(t.dateCreation)}</span>${t.description?`<div style="font-size:11px;color:#555;margin-top:2px;">${escapeHtml(t.description.split('\n')[0]||'')}</div>`:''}</div><button class="icon-btn" data-edit-ticket="${t.id}">Traiter →</button></div>`).join('') },
+  ];
+
   return `
   <div class="main-head">
     <div>
@@ -3865,7 +3930,7 @@ function renderJournee(){
   ${section(
     `RDV demain à confirmer (${rdvDemain.length})`,
     '#E8A93B', '📞',
-    rdvDemain.length ? rdvDemain.slice(0,3).map(v=>carteVente(v,'rappel-rdv')).join('')+(rdvDemain.length>3?`<p style="font-size:12px;margin-top:8px;text-align:center;"><button onclick="state.tab='ventes';render();" style="background:none;border:none;color:#E8A93B;cursor:pointer;font-size:12px;font-weight:600;">+${rdvDemain.length-3} autres → Voir toutes les ventes</button></p>`:'') : null,
+    rdvDemain.length ? rdvDemain.slice(0,3).map(v=>carteVente(v,'rappel-rdv')).join('')+(rdvDemain.length>3?`<p style="font-size:12px;margin-top:8px;text-align:center;"><button type="button" onclick="showListeComplete(0)" style="background:none;border:none;color:#E8A93B;cursor:pointer;font-size:12px;font-weight:600;">+${rdvDemain.length-3} autres → Voir tous (${rdvDemain.length})</button></p>`:'') : null,
     'Aucun RDV demain — profites-en pour prospecter !'
   )}
 
@@ -3873,7 +3938,7 @@ function renderJournee(){
   ${section(
     `Clients attendus aujourd'hui (${rdvAujourdHui.length})`,
     '#68AAD1', '🏪',
-    rdvAujourdHui.length ? rdvAujourdHui.slice(0,3).map(v=>carteVente(v,'accueil')).join('')+(rdvAujourdHui.length>3?`<p style="font-size:12px;margin-top:8px;text-align:center;"><button onclick="state.tab='ventes';render();" style="background:none;border:none;color:#E8A93B;cursor:pointer;font-size:12px;font-weight:600;">+${rdvAujourdHui.length-3} autres → Voir toutes les ventes</button></p>`:'') : null,
+    rdvAujourdHui.length ? rdvAujourdHui.slice(0,3).map(v=>carteVente(v,'accueil')).join('')+(rdvAujourdHui.length>3?`<p style="font-size:12px;margin-top:8px;text-align:center;"><button type="button" onclick="showListeComplete(1)" style="background:none;border:none;color:#E8A93B;cursor:pointer;font-size:12px;font-weight:600;">+${rdvAujourdHui.length-3} autres → Voir tous (${rdvAujourdHui.length})</button></p>`:'') : null,
     'Personne d\'attendu aujourd\'hui.'
   )}
 
@@ -3883,7 +3948,7 @@ function renderJournee(){
     '#9b59b6', '🎯',
     (()=>{
       const allP=[...prospRdvPris.map(p=>carteProspect(p,'rdv')),...prospContactes.map(p=>carteProspect(p,'relance')),...prospNouveaux.map(p=>carteProspect(p,'relance'))];
-      return allP.slice(0,3).join('')+(allP.length>3?`<p style="font-size:12px;margin-top:8px;text-align:center;"><button onclick="state.tab='prospects';render();" style="background:none;border:none;color:#E8A93B;cursor:pointer;font-size:12px;font-weight:600;">+${allP.length-3} autres → Voir tous les prospects</button></p>`:'');
+      return allP.slice(0,3).join('')+(allP.length>3?`<p style="font-size:12px;margin-top:8px;text-align:center;"><button type="button" onclick="showListeComplete(2)" style="background:none;border:none;color:#E8A93B;cursor:pointer;font-size:12px;font-weight:600;">+${allP.length-3} autres → Voir tous (${allP.length})</button></p>`:'');
     })()
   ) : section('Prospects à relancer', '#9b59b6', '🎯', null, 'Tous tes prospects sont à jour.')}
 
@@ -3891,7 +3956,7 @@ function renderJournee(){
   ${section(
     `Soldes en attente (${rdvDepasses.length})`,
     '#A6402E', '💰',
-    rdvDepasses.length ? rdvDepasses.slice(0,3).map(v=>carteVente(v,'relance-paiement')).join('')+(rdvDepasses.length>3?`<p style="font-size:12px;margin-top:8px;text-align:center;"><button onclick="state.tab='ventes';render();" style="background:none;border:none;color:#E8A93B;cursor:pointer;font-size:12px;font-weight:600;">+${rdvDepasses.length-3} autres → Voir toutes les ventes</button></p>`:'') : null,
+    rdvDepasses.length ? rdvDepasses.slice(0,3).map(v=>carteVente(v,'relance-paiement')).join('')+(rdvDepasses.length>3?`<p style="font-size:12px;margin-top:8px;text-align:center;"><button type="button" onclick="showListeComplete(3)" style="background:none;border:none;color:#E8A93B;cursor:pointer;font-size:12px;font-weight:600;">+${rdvDepasses.length-3} autres → Voir tous (${rdvDepasses.length})</button></p>`:'') : null,
     'Aucun solde en attente — bravo !'
   )}
 
@@ -3907,7 +3972,7 @@ function renderJournee(){
           ${s.description?`<div style="font-size:12px;color:#666;margin-top:3px;font-style:italic;">${escapeHtml(s.description.slice(0,80))}${s.description.length>80?'…':''}</div>`:''}
         </div>
         ${waBtn(s.telephone, `${bonjourClient(s.clientNom,'',s.civilite||'')}, nous vous contactons de Jéricho Optique concernant votre dossier SAV (${s.typeDemande||''}). Pouvez-vous nous donner des nouvelles ?`)}
-      </div>`).join('')+(mesSAV.length>3?`<p style="font-size:12px;margin-top:8px;text-align:center;"><button onclick="state.tab='tickets';render();" style="background:none;border:none;color:#E8A93B;cursor:pointer;font-size:12px;font-weight:600;">+${mesSAV.length-3} autres → Voir tous les tickets</button></p>`:'') : null,
+      </div>`).join('')+(mesSAV.length>3?`<p style="font-size:12px;margin-top:8px;text-align:center;"><button type="button" onclick="showListeComplete(4)" style="background:none;border:none;color:#E8A93B;cursor:pointer;font-size:12px;font-weight:600;">+${mesSAV.length-3} autres → Voir tous (${mesSAV.length})</button></p>`:'') : null,
     'Aucun ticket SAV ouvert.'
   )}
 
@@ -3923,7 +3988,7 @@ function renderJournee(){
             +'<div>🎁 <b>'+escapeHtml(bonjourClient(c.nom,c.prenom,c.civilite))+'</b></div>'
             +(tel?'<a href="https://wa.me/'+num+'?text='+msg+'" target="_blank" style="background:#25D366;color:#fff;padding:4px 10px;border-radius:6px;font-size:12px;text-decoration:none;font-weight:600;">WhatsApp 🎂</a>':'')
             +'</div>';
-        }).join('')+(anniversairesNaissance.length>3?`<p style="font-size:12px;margin-top:8px;text-align:center;"><button onclick="state.tab='clients';render();" style="background:none;border:none;color:#E8A93B;cursor:pointer;font-size:12px;font-weight:600;">+${anniversairesNaissance.length-3} autres → Voir tous les clients</button></p>`:'')
+        }).join('')+(anniversairesNaissance.length>3?`<p style="font-size:12px;margin-top:8px;text-align:center;"><button type="button" onclick="showListeComplete(5)" style="background:none;border:none;color:#E8A93B;cursor:pointer;font-size:12px;font-weight:600;">+${anniversairesNaissance.length-3} autres → Voir tous (${anniversairesNaissance.length})</button></p>`:'')
       : '<p style="color:#9a998f;font-size:12px;font-style:italic;">Aucun anniversaire de naissance aujourd\'hui.</p>'
     }
   </div>
@@ -3941,7 +4006,7 @@ function renderJournee(){
             +'<div>🏆 <b>'+escapeHtml(bonjourClient(v.nom,v.prenom,v.civilite))+'</b> <span style="font-size:11px;color:#E8A93B;">'+ans+' an'+(ans>1?'s':'')+'</span></div>'
             +(tel?'<a href="https://wa.me/'+num+'?text='+msg+'" target="_blank" style="background:#25D366;color:#fff;padding:4px 10px;border-radius:6px;font-size:12px;text-decoration:none;font-weight:600;">WhatsApp 🏆</a>':'')
             +'</div>';
-        }).join('')+(anniversairesFidelite.length>3?`<p style="font-size:12px;margin-top:8px;text-align:center;"><button onclick="state.tab='ventes';render();" style="background:none;border:none;color:#E8A93B;cursor:pointer;font-size:12px;font-weight:600;">+${anniversairesFidelite.length-3} autres → Voir toutes les ventes</button></p>`:'')
+        }).join('')+(anniversairesFidelite.length>3?`<p style="font-size:12px;margin-top:8px;text-align:center;"><button type="button" onclick="showListeComplete(6)" style="background:none;border:none;color:#E8A93B;cursor:pointer;font-size:12px;font-weight:600;">+${anniversairesFidelite.length-3} autres → Voir tous (${anniversairesFidelite.length})</button></p>`:'')
       : '<p style="color:#9a998f;font-size:12px;font-style:italic;">Aucun anniversaire de fidélité aujourd\'hui.</p>'
     }
   </div>
@@ -3992,7 +4057,7 @@ function renderJournee(){
         ${t.description?`<div style="font-size:11px;color:#555;margin-top:2px;">${escapeHtml(t.description.split('\n')[0]||'')}</div>`:''}
       </div>
       <button class="icon-btn" data-edit-ticket="${t.id}">Traiter →</button>
-    </div>`).join('')+(ticketsLabo.length>3?`<p style="font-size:12px;margin-top:8px;text-align:center;"><button onclick="state.tab='tickets';render();" style="background:none;border:none;color:#E8A93B;cursor:pointer;font-size:12px;font-weight:600;">+${ticketsLabo.length-3} autres → Voir tous les tickets</button></p>`:''),
+    </div>`).join('')+(ticketsLabo.length>3?`<p style="font-size:12px;margin-top:8px;text-align:center;"><button type="button" onclick="showListeComplete(11)" style="background:none;border:none;color:#E8A93B;cursor:pointer;font-size:12px;font-weight:600;">+${ticketsLabo.length-3} autres → Voir tous (${ticketsLabo.length})</button></p>`:''),
     ''
   ) : ''}
   ${boutique24.length||boutique18.length||boutiqueLentilles.length ? `
@@ -4014,7 +4079,7 @@ function renderJournee(){
         </div>
       </div>`;
     }).join('')+
-    (boutique24.length>3?`<p style="font-size:12px;margin-top:8px;text-align:center;"><button onclick="state.teamTab='dashboard';render();" style="background:none;border:none;color:#E8A93B;cursor:pointer;font-size:12px;font-weight:600;">+${boutique24.length-3} autres → Voir dans le Tableau de bord</button></p>`:''),
+    (boutique24.length>3?`<p style="font-size:12px;margin-top:8px;text-align:center;"><button type="button" onclick="showListeComplete(7)" style="background:none;border:none;color:#E8A93B;cursor:pointer;font-size:12px;font-weight:600;">+${boutique24.length-3} autres → Voir tous (${boutique24.length})</button></p>`:''),
     'Aucun client en renouvellement urgent.'
   ) : ''}
 
@@ -4032,7 +4097,7 @@ function renderJournee(){
         </div>
       </div>`;
     }).join('')+
-    (boutique18.length>3?`<p style="font-size:12px;margin-top:8px;text-align:center;"><button onclick="state.teamTab='dashboard';render();" style="background:none;border:none;color:#E8A93B;cursor:pointer;font-size:12px;font-weight:600;">+${boutique18.length-3} autres → Voir dans le Tableau de bord</button></p>`:''),
+    (boutique18.length>3?`<p style="font-size:12px;margin-top:8px;text-align:center;"><button type="button" onclick="showListeComplete(8)" style="background:none;border:none;color:#E8A93B;cursor:pointer;font-size:12px;font-weight:600;">+${boutique18.length-3} autres → Voir tous (${boutique18.length})</button></p>`:''),
     'Aucun client à relancer.'
   ) : ''}
 
@@ -4045,12 +4110,12 @@ function renderJournee(){
       return `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--line);">
         <div><b>${escapeHtml(bonjourClient(cl.nom,cl.prenom,cl.civilite))}</b> <span style="font-size:11px;color:#A6402E;">● ${cl.moisDepuis||'?'} mois</span></div>
         ${effTel?`<a href="https://wa.me/${num}?text=${msg}" target="_blank" style="background:#25D366;color:#fff;padding:4px 10px;border-radius:6px;font-size:12px;text-decoration:none;font-weight:600;">WhatsApp</a>`:''}
-      </div>`;}).join('')+(boutiqueLentilles24.length>3?`<p style="font-size:12px;margin-top:8px;text-align:center;"><button onclick="state.teamTab='dashboard';render();" style="background:none;border:none;color:#E8A93B;cursor:pointer;font-size:12px;font-weight:600;">+${boutiqueLentilles24.length-3} autres → Voir dans le Tableau de bord</button></p>`:''),
+      </div>`;}).join('')+(boutiqueLentilles24.length>3?`<p style="font-size:12px;margin-top:8px;text-align:center;"><button type="button" onclick="showListeComplete(9)" style="background:none;border:none;color:#E8A93B;cursor:pointer;font-size:12px;font-weight:600;">+${boutiqueLentilles24.length-3} autres → Voir tous (${boutiqueLentilles24.length})</button></p>`:''),
     'Aucune lentille urgente.'
   ) : ''}
-  ${boutiqueLentilles.filter(c=>c.derniereDate>s24b).length ? section(
-    `Lentilles à relancer 20-24 mois (${boutiqueLentilles.filter(c=>c.derniereDate>s24b).length})`, '#68AAD1', '🔵',
-    boutiqueLentilles.filter(c=>c.derniereDate>s24b).slice(0,3).map(cl=>{
+  ${lentillesRelance.length ? section(
+    `Lentilles à relancer 20-24 mois (${lentillesRelance.length})`, '#68AAD1', '🔵',
+    lentillesRelance.slice(0,3).map(cl=>{
       const msg = encodeURIComponent(`${bonjourClient(cl.nom,cl.prenom,cl.civilite)}, il est bientôt temps de renouveler vos lentilles de contact chez Jéricho Optique. Souhaitez-vous prendre rendez-vous ?`);
       return `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--line);flex-wrap:wrap;gap:8px;">
         <div><b style="font-size:13px;">${escapeHtml(cl.nom)} ${escapeHtml(cl.prenom||'')}</b>
@@ -4061,7 +4126,7 @@ function renderJournee(){
         </div>
       </div>`;
     }).join('')+
-    (boutiqueLentilles.filter(c=>c.derniereDate>s24b).length>4?`<p style="font-size:12px;color:#E8A93B;margin-top:8px;text-align:center;">+${boutiqueLentilles.filter(c=>c.derniereDate>s24b).length-4} autres → <button onclick="state.teamTab='dashboard';render();" style="background:none;border:none;color:#E8A93B;cursor:pointer;font-weight:600;">Tableau de bord</button></p>`:''),
+    (lentillesRelance.length>3?`<p style="font-size:12px;margin-top:8px;text-align:center;"><button type="button" onclick="showListeComplete(10)" style="background:none;border:none;color:#E8A93B;cursor:pointer;font-size:12px;font-weight:600;">+${lentillesRelance.length-3} autres → Voir tous (${lentillesRelance.length})</button></p>`:''),
     'Aucun renouvellement lentilles.'
   ) : ''}
   `;
