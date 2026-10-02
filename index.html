@@ -1749,8 +1749,8 @@ function renderDashboard(){
     ${kpi('Taux de conversion', taux+'%', convertis+' convertis / '+totalProspects+' prospects', false, "state.teamTab='prospects';render();")}
     ${(()=>{
       const today = todayISO();
-      const contactsAujourd = (DB.contacts||[]).filter(c=>c.date===today && (!iAmAdmin ? c.commercial===nom : true));
-      const contactsMois = (DB.contacts||[]).filter(c=>(c.date||'').slice(0,7)===today.slice(0,7) && (!iAmAdmin ? c.commercial===nom : true));
+      const contactsAujourd = (DB.contacts||[]).filter(c=>c.date===today && (!iAmAdmin ? c.commercial===myName : true));
+      const contactsMois = (DB.contacts||[]).filter(c=>(c.date||'').slice(0,7)===today.slice(0,7) && (!iAmAdmin ? c.commercial===myName : true));
       return kpi("📱 Contacts aujourd'hui", contactsAujourd.length, contactsMois.length+' ce mois', false, null);
     })()}
     ${iAmAdmin?kpi('SAV ouverts', savOuverts, 'tickets en cours', savOuverts>0, "state.teamTab='clients';render();"):''}
