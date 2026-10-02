@@ -380,6 +380,7 @@ const COL_MAP = {
   'modePaiement': 'modepaiement',
   'dateRdv': 'daterdv',
   'apporteurAffaire': 'apporteuraffaire', 'apporteurAffaireAutre': 'apporteuraffaireautre',
+  'gestionnaireAutre': 'gestionnaireautre',
   // Prospects/Clients
   'telephone2': 'telephone2',
   // Tickets
@@ -2593,7 +2594,7 @@ function venteForm(data){
     cout:'',
     fonction:'', entreprise:'', assurance:getAssurances()[0], assuranceAutre:'',
     apporteurAffaire:STAFF[0], apporteurAffaireAutre:'',
-    gestionnaire:STAFF[0], gestionnaireAutre:'',
+    gestionnaire:state.commercial||STAFF[0], gestionnaireAutre:'',
     odSphere:'', odCylindre:'', odAxe:'', odAddition:'',
     ogSphere:'', ogCylindre:'', ogAxe:'', ogAddition:'',
     deuxiemePaire: false,
@@ -3864,7 +3865,7 @@ function renderJournee(){
   ${section(
     `RDV demain à confirmer (${rdvDemain.length})`,
     '#E8A93B', '📞',
-    rdvDemain.length ? rdvDemain.map(v=>carteVente(v,'rappel-rdv')).join('') : null,
+    rdvDemain.length ? rdvDemain.slice(0,3).map(v=>carteVente(v,'rappel-rdv')).join('')+(rdvDemain.length>3?`<p style="font-size:12px;margin-top:8px;text-align:center;"><button onclick="state.tab='ventes';render();" style="background:none;border:none;color:#E8A93B;cursor:pointer;font-size:12px;font-weight:600;">+${rdvDemain.length-3} autres → Voir toutes les ventes</button></p>`:'') : null,
     'Aucun RDV demain — profites-en pour prospecter !'
   )}
 
@@ -3872,7 +3873,7 @@ function renderJournee(){
   ${section(
     `Clients attendus aujourd'hui (${rdvAujourdHui.length})`,
     '#68AAD1', '🏪',
-    rdvAujourdHui.length ? rdvAujourdHui.map(v=>carteVente(v,'accueil')).join('') : null,
+    rdvAujourdHui.length ? rdvAujourdHui.slice(0,3).map(v=>carteVente(v,'accueil')).join('')+(rdvAujourdHui.length>3?`<p style="font-size:12px;margin-top:8px;text-align:center;"><button onclick="state.tab='ventes';render();" style="background:none;border:none;color:#E8A93B;cursor:pointer;font-size:12px;font-weight:600;">+${rdvAujourdHui.length-3} autres → Voir toutes les ventes</button></p>`:'') : null,
     'Personne d\'attendu aujourd\'hui.'
   )}
 
@@ -3880,18 +3881,17 @@ function renderJournee(){
   ${(prospRdvPris.length+prospContactes.length+prospNouveaux.length)>0 ? section(
     `Prospects à relancer (${prospRdvPris.length+prospContactes.length+prospNouveaux.length})`,
     '#9b59b6', '🎯',
-    [
-      ...prospRdvPris.map(p=>carteProspect(p,'rdv')),
-      ...prospContactes.map(p=>carteProspect(p,'relance')),
-      ...prospNouveaux.map(p=>carteProspect(p,'relance'))
-    ].join('')
+    (()=>{
+      const allP=[...prospRdvPris.map(p=>carteProspect(p,'rdv')),...prospContactes.map(p=>carteProspect(p,'relance')),...prospNouveaux.map(p=>carteProspect(p,'relance'))];
+      return allP.slice(0,3).join('')+(allP.length>3?`<p style="font-size:12px;margin-top:8px;text-align:center;"><button onclick="state.tab='prospects';render();" style="background:none;border:none;color:#E8A93B;cursor:pointer;font-size:12px;font-weight:600;">+${allP.length-3} autres → Voir tous les prospects</button></p>`:'');
+    })()
   ) : section('Prospects à relancer', '#9b59b6', '🎯', null, 'Tous tes prospects sont à jour.')}
 
   <!-- RDV DÉPASSÉS NON SOLDÉS -->
   ${section(
     `Soldes en attente (${rdvDepasses.length})`,
     '#A6402E', '💰',
-    rdvDepasses.length ? rdvDepasses.map(v=>carteVente(v,'relance-paiement')).join('') : null,
+    rdvDepasses.length ? rdvDepasses.slice(0,3).map(v=>carteVente(v,'relance-paiement')).join('')+(rdvDepasses.length>3?`<p style="font-size:12px;margin-top:8px;text-align:center;"><button onclick="state.tab='ventes';render();" style="background:none;border:none;color:#E8A93B;cursor:pointer;font-size:12px;font-weight:600;">+${rdvDepasses.length-3} autres → Voir toutes les ventes</button></p>`:'') : null,
     'Aucun solde en attente — bravo !'
   )}
 
@@ -3899,7 +3899,7 @@ function renderJournee(){
   ${section(
     `Tickets SAV ouverts (${mesSAV.length})`,
     '#555', '🔧',
-    mesSAV.length ? mesSAV.map(s=>`
+    mesSAV.length ? mesSAV.slice(0,3).map(s=>`
       <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--line);flex-wrap:wrap;gap:8px;">
         <div>
           <div style="font-weight:600;font-size:14px;">${escapeHtml(s.clientNom||'Client')}</div>
@@ -3907,7 +3907,7 @@ function renderJournee(){
           ${s.description?`<div style="font-size:12px;color:#666;margin-top:3px;font-style:italic;">${escapeHtml(s.description.slice(0,80))}${s.description.length>80?'…':''}</div>`:''}
         </div>
         ${waBtn(s.telephone, `${bonjourClient(s.clientNom,'',s.civilite||'')}, nous vous contactons de Jéricho Optique concernant votre dossier SAV (${s.typeDemande||''}). Pouvez-vous nous donner des nouvelles ?`)}
-      </div>`).join('') : null,
+      </div>`).join('')+(mesSAV.length>3?`<p style="font-size:12px;margin-top:8px;text-align:center;"><button onclick="state.tab='tickets';render();" style="background:none;border:none;color:#E8A93B;cursor:pointer;font-size:12px;font-weight:600;">+${mesSAV.length-3} autres → Voir tous les tickets</button></p>`:'') : null,
     'Aucun ticket SAV ouvert.'
   )}
 
@@ -3923,7 +3923,7 @@ function renderJournee(){
             +'<div>🎁 <b>'+escapeHtml(bonjourClient(c.nom,c.prenom,c.civilite))+'</b></div>'
             +(tel?'<a href="https://wa.me/'+num+'?text='+msg+'" target="_blank" style="background:#25D366;color:#fff;padding:4px 10px;border-radius:6px;font-size:12px;text-decoration:none;font-weight:600;">WhatsApp 🎂</a>':'')
             +'</div>';
-        }).join('')+(anniversairesNaissance.length>3?'<p style="font-size:11px;color:#888;margin-top:6px;text-align:center;">+${anniversairesNaissance.length-3} autres</p>':'')
+        }).join('')+(anniversairesNaissance.length>3?`<p style="font-size:12px;margin-top:8px;text-align:center;"><button onclick="state.tab='clients';render();" style="background:none;border:none;color:#E8A93B;cursor:pointer;font-size:12px;font-weight:600;">+${anniversairesNaissance.length-3} autres → Voir tous les clients</button></p>`:'')
       : '<p style="color:#9a998f;font-size:12px;font-style:italic;">Aucun anniversaire de naissance aujourd\'hui.</p>'
     }
   </div>
@@ -3941,7 +3941,7 @@ function renderJournee(){
             +'<div>🏆 <b>'+escapeHtml(bonjourClient(v.nom,v.prenom,v.civilite))+'</b> <span style="font-size:11px;color:#E8A93B;">'+ans+' an'+(ans>1?'s':'')+'</span></div>'
             +(tel?'<a href="https://wa.me/'+num+'?text='+msg+'" target="_blank" style="background:#25D366;color:#fff;padding:4px 10px;border-radius:6px;font-size:12px;text-decoration:none;font-weight:600;">WhatsApp 🏆</a>':'')
             +'</div>';
-        }).join('')+(anniversairesFidelite.length>3?'<p style="font-size:11px;color:#888;margin-top:6px;text-align:center;">+${anniversairesFidelite.length-3} autres</p>':'')
+        }).join('')+(anniversairesFidelite.length>3?`<p style="font-size:12px;margin-top:8px;text-align:center;"><button onclick="state.tab='ventes';render();" style="background:none;border:none;color:#E8A93B;cursor:pointer;font-size:12px;font-weight:600;">+${anniversairesFidelite.length-3} autres → Voir toutes les ventes</button></p>`:'')
       : '<p style="color:#9a998f;font-size:12px;font-style:italic;">Aucun anniversaire de fidélité aujourd\'hui.</p>'
     }
   </div>
@@ -3992,7 +3992,7 @@ function renderJournee(){
         ${t.description?`<div style="font-size:11px;color:#555;margin-top:2px;">${escapeHtml(t.description.split('\n')[0]||'')}</div>`:''}
       </div>
       <button class="icon-btn" data-edit-ticket="${t.id}">Traiter →</button>
-    </div>`).join(''),
+    </div>`).join('')+(ticketsLabo.length>3?`<p style="font-size:12px;margin-top:8px;text-align:center;"><button onclick="state.tab='tickets';render();" style="background:none;border:none;color:#E8A93B;cursor:pointer;font-size:12px;font-weight:600;">+${ticketsLabo.length-3} autres → Voir tous les tickets</button></p>`:''),
     ''
   ) : ''}
   ${boutique24.length||boutique18.length||boutiqueLentilles.length ? `
@@ -4045,7 +4045,7 @@ function renderJournee(){
       return `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--line);">
         <div><b>${escapeHtml(bonjourClient(cl.nom,cl.prenom,cl.civilite))}</b> <span style="font-size:11px;color:#A6402E;">● ${cl.moisDepuis||'?'} mois</span></div>
         ${effTel?`<a href="https://wa.me/${num}?text=${msg}" target="_blank" style="background:#25D366;color:#fff;padding:4px 10px;border-radius:6px;font-size:12px;text-decoration:none;font-weight:600;">WhatsApp</a>`:''}
-      </div>`;}).join(''),
+      </div>`;}).join('')+(boutiqueLentilles24.length>3?`<p style="font-size:12px;margin-top:8px;text-align:center;"><button onclick="state.teamTab='dashboard';render();" style="background:none;border:none;color:#E8A93B;cursor:pointer;font-size:12px;font-weight:600;">+${boutiqueLentilles24.length-3} autres → Voir dans le Tableau de bord</button></p>`:''),
     'Aucune lentille urgente.'
   ) : ''}
   ${boutiqueLentilles.filter(c=>c.derniereDate>s24b).length ? section(
@@ -6742,7 +6742,7 @@ function attachModalEvents(){
       entreprise: val('v-entreprise').trim(),
       assurance: val('v-assurance'), assuranceAutre: val('v-assurance-autre').trim(),
       apporteurAffaire: val('v-apporteur'), apporteurAffaireAutre: val('v-apporteur-autre').trim(),
-      gestionnaire: val('v-gestionnaire'), gestionnaireAutre: val('v-gestionnaire-autre').trim(),
+      gestionnaire: (val('v-article')==='Réparation et entretien') ? (state.commercial||STAFF[0]) : (val('v-gestionnaire')||state.commercial||STAFF[0]), gestionnaireAutre: val('v-gestionnaire-autre').trim(),
       odSphere: val('v-od-sphere').trim(), odCylindre: val('v-od-cyl').trim(), odAxe: val('v-od-axe').trim(), odAddition: val('v-od-add').trim(),
       ogSphere: val('v-og-sphere').trim(), ogCylindre: val('v-og-cyl').trim(), ogAxe: val('v-og-axe').trim(), ogAddition: val('v-og-add').trim(),
       deuxiemePaire: document.getElementById('v-deuxieme-paire')?.checked || false,
