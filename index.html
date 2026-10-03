@@ -904,14 +904,21 @@ const LOGO_SONAR = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQQAAACICAMAAA
 /* =========================================================
    RENDU PRINCIPAL
    ========================================================= */
+let _publicHtmlCache = null;
+let _lastRenderedView = null;
+let _lastRenderedTab = null;
 function render(){
   const app = document.getElementById('app');
   if(typeof state === 'undefined'){ console.error("state not defined!"); return; }
   if(state.view==='accueil'){
-    app.innerHTML = renderPublic();
+    // Cache de la page publique (images base64 = 1.4MB, inutile de la reparsrer)
+    if(!_publicHtmlCache) _publicHtmlCache = renderPublic();
+    if(_lastRenderedView !== 'accueil') app.innerHTML = _publicHtmlCache;
   } else {
     app.innerHTML = `${renderTopbar()}${renderTeam()}`;
   }
+  _lastRenderedView = state.view;
+  _lastRenderedTab = state.teamTab;
   attachGlobalEvents();
   if(state.view!=='accueil' && state.teamTab==='analyse' && isAdmin()){ try{ initAnalyseDirection(); }catch(e){ console.error('Analyse:',e); } }
   if(state.modal) renderModal();
@@ -2395,7 +2402,7 @@ function prospectForm(data){
       <div class="field"><label>Statut</label><select id="p-statut">${STATUTS_PROSPECT.map(s=>`<option ${d.statut===s?'selected':''}>${s}</option>`).join('')}</select></div>
       <div class="field full"><label>Commercial en charge</label><input id="p-commercial" value="${escapeAttr(d.commercial)}"></div>
       <div class="field"><label>Date de naissance <span style="font-size:11px;color:#888;">(optionnel)</span></label><input type="date" id="p-dob" value="${escapeAttr(d.dateNaissance||'')}"></div>
-      <div class="field"><label>📅 Date de relance <span style="font-weight:400;color:#9a998f;font-size:11px;">— rappel dans la journée</span></label><input type="date" id="p-relance" value="${escapeAttr(d.dateRelance||'')}"></div>
+      <div class="field"><label>📅 Date de relance <span style="color:#A6402E;">*</span> <span style="font-weight:400;color:#9a998f;font-size:11px;">— rappel dans la journée</span></label><input required type="date" id="p-relance" value="${escapeAttr(d.dateRelance||'')}"></div>
       <div class="field full"><label>Notes</label><textarea id="p-notes">${escapeHtml(d.notes)}</textarea></div>
     </div>
     <div class="modal-actions">
@@ -6377,10 +6384,6 @@ function attachGlobalEvents(){
   bindFilter('f-vente-q', v=>state.filters.ventes.q=v, 'input');
   bindFilter('f-vente-boutique', v=>state.filters.ventes.boutique=v, 'change');
   bindFilter('f-vente-type', v=>state.filters.ventes.typeArticle=v, 'change');
-  bindFilter('f-stock-q', v=>state.filters.stock.q=v, 'input');
-  bindFilter('f-stock-boutique', v=>state.filters.stock.boutique=v, 'change');
-  bindFilter('f-stock-categorie', v=>state.filters.stock.categorie=v, 'change');
-
   // Autocomplete
   setTimeout(()=>{
     setupAutocomplete('s-nom', getClientSuggestions, (s)=>{
@@ -6401,6 +6404,7 @@ function attachGlobalEvents(){
 }
 
 function bindClick(id, fn){ const el=document.getElementById(id); if(el) el.addEventListener('click', fn); }
+const _filterTimers = {};
 function bindFilter(id, setter, evt){
   const el = document.getElementById(id);
   if(!el) return;
@@ -6408,12 +6412,17 @@ function bindFilter(id, setter, evt){
     setter(el.value);
     const val = el.value;
     const pos = el.selectionStart;
-    render();
-    // Remettre le focus et la position du curseur après render
-    const newEl = document.getElementById(id);
-    if(newEl){
-      newEl.focus();
-      if(evt==='input') try{ newEl.setSelectionRange(pos, pos); }catch(e){}
+    // Debounce 220ms sur les champs texte (input) pour éviter un render à chaque touche
+    if(evt === 'input'){
+      clearTimeout(_filterTimers[id]);
+      _filterTimers[id] = setTimeout(()=>{
+        render();
+        const newEl = document.getElementById(id);
+        if(newEl){ newEl.focus(); try{ newEl.setSelectionRange(pos, pos); }catch(e){} }
+      }, 220);
+    } else {
+      render();
+      // Pas de restauration focus nécessaire sur change (select)
     }
   });
 }
@@ -6638,6 +6647,14 @@ function attachModalEvents(){
   const fp = document.getElementById('form-prospect');
   if(fp) fp.addEventListener('submit', async (e)=>{
     e.preventDefault();
+    // Validation manuelle — obligatoire sur mobile
+    const relanceVal = document.getElementById('p-relance')?.value||'';
+    if(!relanceVal){
+      const relEl = document.getElementById('p-relance');
+      if(relEl){ relEl.style.borderColor='#A6402E'; relEl.focus(); }
+      showToast('📅 La date de relance est obligatoire.', true);
+      return;
+    }
     const id = document.getElementById('p-id').value || uid();
     const obj = {
       id, civilite: document.getElementById('p-civilite').value,
@@ -7121,8 +7138,7 @@ function exportCSV(rows, fields, filename){
    ========================================================= */
 (async function init(){
   document.getElementById('app').innerHTML = `<div style="display:flex;align-items:center;justify-content:center;height:100vh;font-family:'IBM Plex Sans',sans-serif;color:#8a8980;">Chargement de Jéricho Optique…</div>`;
-  await loadAll();
-  await loadUsers();
+  await loadAll(); // loadAll inclut déjà loadUsers via la normalisation USERS_CACHE
   // Si déjà connecté via sessionStorage, restaurer la vue et l'onglet
   if(state.commercial && state.role){
     state.view = 'equipe';
