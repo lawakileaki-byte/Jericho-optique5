@@ -2141,6 +2141,15 @@ function ventesCommercial(ventes, nom){
   return ventes.filter(v => v.gestionnaire === nom && !aApporteur(v));
 }
 function venteReste(v){
+  if(v.typeArticle==='Réparation et entretien'){
+    const enc = Number(v.repEncaisse)||Number(v.cout)||0;
+    return Math.max((Number(v.cout)||0) - enc, 0);
+  }
+  if(v.typeArticle==='Accessoires'){
+    const total = (Number(v.prixVenteMontureAcc)||0)-(Number(v.remiseAcc)||0)+(Number(v.montantAchatSpray)||0)+(Number(v.montantVenteEtui)||0)+(Number(v.montantVenteEssuieVerre)||0);
+    const enc = Number(v.accEncaisse)||0;
+    return Math.max(total - enc, 0);
+  }
   // Bon non encaissé ne s'applique que s'il y a une assurance (pas "Pas d'assurance")
   const avance = Number(v.avance)||0;
   const bon = !isPasAssurance(v.assurance) ? (Number(v.montantBonNonEncaisse)||0) : 0;
@@ -2679,7 +2688,23 @@ function venteForm(data){
       <div class="form-section-title">Article vendu</div>
       <div class="field full"><label>Quel article vendez-vous ?</label><select id="v-article">${TYPES_ARTICLE.map(t=>`<option ${d.typeArticle===t?'selected':''}>${t}</option>`).join('')}</select></div>
 
-      <div id="sec-reparation" class="field full" style="display:none;"><label>Coût</label><input type="number" min="0" id="v-cout" value="${escapeAttr(d.cout)}"></div>
+      <div id="sec-reparation" style="display:none;grid-column:1/-1;">
+        <div class="form-section-title">Réparation</div>
+        <div class="form-grid">
+          <div class="field"><label>Coût total <span style="color:#A6402E;">*</span></label><input type="number" min="0" id="v-cout" value="${escapeAttr(d.cout)}" oninput="calcReparationReste()"></div>
+          <div class="field"><label>Montant encaissé</label><input type="number" min="0" id="v-rep-encaisse" value="${escapeAttr(d.repEncaisse||d.cout||'')}" oninput="calcReparationReste()"></div>
+          <div class="field"><label>Moyen de paiement</label>
+            <select id="v-rep-mode">
+              ${['Espèces','Orange Money','Moov Money','Carte bancaire','Virement','Chèque','Autre'].map(m=>`<option ${(d.repModePaiement||'Espèces')===m?'selected':''}>${m}</option>`).join('')}
+            </select>
+          </div>
+          <div class="field"><label>Date de paiement</label><input type="date" id="v-rep-date-paiement" value="${escapeAttr(d.repDatePaiement||todayISO())}"></div>
+          <div class="field" style="background:#fdf0ee;border-radius:8px;padding:8px;">
+            <label style="color:#A6402E;font-weight:600;">Reste à payer</label>
+            <input type="text" id="v-rep-reste" readonly style="font-weight:700;font-size:16px;color:#A6402E;background:transparent;border:none;cursor:default;" value="${escapeAttr(fmtFCFA(Math.max(0,(Number(d.cout)||0)-(Number(d.repEncaisse||d.cout)||0))))}">
+          </div>
+        </div>
+      </div>
 
       <div id="sec-assurance" class="form-grid" style="display:none;grid-column:1/-1;">
         <div class="field"><label>Assurance</label><select id="v-assurance">${getAssurances().map(a=>`<option ${d.assurance===a?'selected':''}>${a}</option>`).join('')}</select></div>
@@ -2772,13 +2797,31 @@ function venteForm(data){
       </div>
 
       <div id="sec-accessoires-cost" style="display:none;grid-column:1/-1;">
-        <div class="form-section-title">Coûts accessoires</div>
+        <div class="form-section-title">Détail accessoires</div>
         <div class="form-grid">
-          <div class="field"><label>Montant total achat spray</label><input type="number" min="0" id="v-spray" value="${escapeAttr(d.montantAchatSpray)}"></div>
-          <div class="field"><label>Montant vente étui</label><input type="number" min="0" id="v-etui" value="${escapeAttr(d.montantVenteEtui)}"></div>
-          <div class="field"><label>Montant vente essuie-verre</label><input type="number" min="0" id="v-essuie" value="${escapeAttr(d.montantVenteEssuieVerre)}"></div>
-          <div class="field"><label>Prix de vente monture</label><input type="number" min="0" id="v-monture-acc" value="${escapeAttr(d.prixVenteMontureAcc)}"></div>
-          <div class="field"><label>Remise (montant)</label><input type="number" min="0" id="v-remise-acc" value="${escapeAttr(d.remiseAcc)}"></div>
+          <div class="field"><label>Montant total achat spray</label><input type="number" min="0" id="v-spray" value="${escapeAttr(d.montantAchatSpray)}" oninput="calcAccTotal()"></div>
+          <div class="field"><label>Montant vente étui</label><input type="number" min="0" id="v-etui" value="${escapeAttr(d.montantVenteEtui)}" oninput="calcAccTotal()"></div>
+          <div class="field"><label>Montant vente essuie-verre</label><input type="number" min="0" id="v-essuie" value="${escapeAttr(d.montantVenteEssuieVerre)}" oninput="calcAccTotal()"></div>
+          <div class="field"><label>Prix de vente monture</label><input type="number" min="0" id="v-monture-acc" value="${escapeAttr(d.prixVenteMontureAcc)}" oninput="calcAccTotal()"></div>
+          <div class="field"><label>Remise (montant)</label><input type="number" min="0" id="v-remise-acc" value="${escapeAttr(d.remiseAcc)}" oninput="calcAccTotal()"></div>
+          <div class="field" style="background:var(--sand-light);border-radius:8px;padding:8px;">
+            <label style="color:#E8A93B;font-weight:600;">Total accessoires (calculé)</label>
+            <input type="text" id="v-acc-total-display" readonly style="font-weight:600;background:transparent;border:none;cursor:default;" value="${escapeAttr(fmtFCFA((Number(d.prixVenteMontureAcc)||0)-(Number(d.remiseAcc)||0)+(Number(d.montantAchatSpray)||0)+(Number(d.montantVenteEtui)||0)+(Number(d.montantVenteEssuieVerre)||0)))}">
+          </div>
+        </div>
+        <div class="form-section-title">Paiement accessoires</div>
+        <div class="form-grid">
+          <div class="field"><label>Montant encaissé</label><input type="number" min="0" id="v-acc-encaisse" value="${escapeAttr(d.accEncaisse||'')}" oninput="calcAccReste()"></div>
+          <div class="field"><label>Moyen de paiement</label>
+            <select id="v-acc-mode">
+              ${['Espèces','Orange Money','Moov Money','Carte bancaire','Virement','Chèque','Autre'].map(m=>`<option ${(d.accModePaiement||'Espèces')===m?'selected':''}>${m}</option>`).join('')}
+            </select>
+          </div>
+          <div class="field"><label>Date de paiement</label><input type="date" id="v-acc-date-paiement" value="${escapeAttr(d.accDatePaiement||todayISO())}"></div>
+          <div class="field" style="background:#fdf0ee;border-radius:8px;padding:8px;">
+            <label style="color:#A6402E;font-weight:600;">Reste à payer</label>
+            <input type="text" id="v-acc-reste" readonly style="font-weight:700;font-size:16px;color:#A6402E;background:transparent;border:none;cursor:default;" value="${escapeAttr(fmtFCFA(Math.max(0,((Number(d.prixVenteMontureAcc)||0)-(Number(d.remiseAcc)||0)+(Number(d.montantAchatSpray)||0)+(Number(d.montantVenteEtui)||0)+(Number(d.montantVenteEssuieVerre)||0))-(Number(d.accEncaisse)||0))))}">
+          </div>
         </div>
       </div>
 
@@ -6037,8 +6080,14 @@ function imprimerRecu(v){
     <div class="total-row main"><span>Total net</span><span>${fmtFCFA(total)}</span></div>
     ${avance ? `<div class="total-row"><span>Avance versée</span><span>- ${fmtFCFA(avance)}</span></div>` : ''}
     ${bon ? `<div class="total-row"><span>Bon assurance</span><span>- ${fmtFCFA(bon)}</span></div>` : ''}
+    ${v.typeArticle==='Réparation et entretien' && v.repEncaisse ? `<div class="total-row"><span>Montant encaissé</span><span>- ${fmtFCFA(Number(v.repEncaisse))}</span></div>` : ''}
+    ${v.typeArticle==='Accessoires' && v.accEncaisse ? `<div class="total-row"><span>Montant encaissé</span><span>- ${fmtFCFA(Number(v.accEncaisse))}</span></div>` : ''}
     <div class="total-row remain"><span>${reste>0?'Reste à payer':'Soldé ✓'}</span><span>${reste>0?fmtFCFA(reste):'0'}</span></div>
-    ${v.modePaiement ? `<div class="total-row" style="opacity:0.75;font-size:12px;"><span>Mode de paiement</span><span>${escapeHtml(v.modePaiement)}</span></div>` : ''}
+    ${v.typeArticle==='Réparation et entretien' && v.repModePaiement ? `<div class="total-row" style="opacity:0.75;font-size:12px;"><span>Mode de paiement</span><span>${escapeHtml(v.repModePaiement)}</span></div>` : ''}
+    ${v.typeArticle==='Réparation et entretien' && v.repDatePaiement ? `<div class="total-row" style="opacity:0.75;font-size:12px;"><span>Date de paiement</span><span>${fmtDate(v.repDatePaiement)}</span></div>` : ''}
+    ${v.typeArticle==='Accessoires' && v.accModePaiement ? `<div class="total-row" style="opacity:0.75;font-size:12px;"><span>Mode de paiement</span><span>${escapeHtml(v.accModePaiement)}</span></div>` : ''}
+    ${v.typeArticle==='Accessoires' && v.accDatePaiement ? `<div class="total-row" style="opacity:0.75;font-size:12px;"><span>Date de paiement</span><span>${fmtDate(v.accDatePaiement)}</span></div>` : ''}
+    ${v.modePaiement && v.typeArticle!=='Réparation et entretien' && v.typeArticle!=='Accessoires' ? `<div class="total-row" style="opacity:0.75;font-size:12px;"><span>Mode de paiement</span><span>${escapeHtml(v.modePaiement)}</span></div>` : ''}
   </div>
 
   ${v.dateRdv ? `<div class="rdv-box">📅 <b>Date de rendez-vous :</b> ${fmtDate(v.dateRdv)}${v.commentaire?'<br>💬 '+escapeHtml(v.commentaire):''}</div>` : (v.commentaire?`<div class="rdv-box">💬 ${escapeHtml(v.commentaire)}</div>`:'')}
@@ -6457,6 +6506,40 @@ function attachVenteConditionalLogic(){
     sel.addEventListener('change', update);
     update();
   };
+  // Calcul reste réparation
+  window.calcReparationReste = function(){
+    const cout = Number(document.getElementById('v-cout')?.value)||0;
+    const enc = Number(document.getElementById('v-rep-encaisse')?.value)||0;
+    const reste = Math.max(0, cout - enc);
+    const el = document.getElementById('v-rep-reste');
+    if(el) el.value = fmtFCFA(reste);
+  };
+
+  // Calcul total + reste accessoires
+  window.calcAccTotal = function(){
+    const spray = Number(document.getElementById('v-spray')?.value)||0;
+    const etui = Number(document.getElementById('v-etui')?.value)||0;
+    const essuie = Number(document.getElementById('v-essuie')?.value)||0;
+    const monture = Number(document.getElementById('v-monture-acc')?.value)||0;
+    const remise = Number(document.getElementById('v-remise-acc')?.value)||0;
+    const total = monture - remise + spray + etui + essuie;
+    const elT = document.getElementById('v-acc-total-display');
+    if(elT) elT.value = fmtFCFA(Math.max(0,total));
+    window.calcAccReste();
+  };
+  window.calcAccReste = function(){
+    const spray = Number(document.getElementById('v-spray')?.value)||0;
+    const etui = Number(document.getElementById('v-etui')?.value)||0;
+    const essuie = Number(document.getElementById('v-essuie')?.value)||0;
+    const monture = Number(document.getElementById('v-monture-acc')?.value)||0;
+    const remise = Number(document.getElementById('v-remise-acc')?.value)||0;
+    const total = monture - remise + spray + etui + essuie;
+    const enc = Number(document.getElementById('v-acc-encaisse')?.value)||0;
+    const reste = Math.max(0, total - enc);
+    const el = document.getElementById('v-acc-reste');
+    if(el) el.value = fmtFCFA(reste);
+  };
+
   // Calcul automatique du total
   window.calcVenteTotal = function(){
     const monture = Number(document.getElementById('v-prix-monture')?.value)||0;
@@ -6870,6 +6953,8 @@ function attachModalEvents(){
       caracteristiqueVerre: val('v-carac-verre').trim(),
       montantAchatSpray: val('v-spray'), montantVenteEtui: val('v-etui'), montantVenteEssuieVerre: val('v-essuie'),
       prixVenteMontureAcc: val('v-monture-acc'), remiseAcc: val('v-remise-acc'),
+      accEncaisse: val('v-acc-encaisse'), accModePaiement: val('v-acc-mode'), accDatePaiement: val('v-acc-date-paiement'),
+      repEncaisse: val('v-rep-encaisse'), repModePaiement: val('v-rep-mode'), repDatePaiement: val('v-rep-date-paiement'),
       prixVenteMonture: val('v-prix-monture'), prixVenteLentilles: val('v-prix-lentilles'),
       prixVenteLentilles2e: val('v-prix-lentilles-2e'), prixVenteMonture2e: val('v-prix-monture-2e'),
       prixVenteTotalSansRemise: val('v-prix-total'), remise: val('v-remise'),
