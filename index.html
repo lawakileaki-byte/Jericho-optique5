@@ -382,6 +382,7 @@ const COL_MAP = {
   'apporteurAffaire': 'apporteuraffaire', 'apporteurAffaireAutre': 'apporteuraffaireautre',
   'gestionnaireAutre': 'gestionnaireautre',
   // Prospects/Clients
+  'dateRelance': 'rdv',
   'telephone2': 'telephone2',
   // Tickets
   'clientNom': 'clientnom', 'clientPrenom': 'clientprenom',
@@ -421,11 +422,12 @@ async function apiGet(table) {
 // Convertir camelCase → minuscules pour Supabase
 function toSupabase(row) {
   const out = {};
-  const DATE_KEYS = /date/i;
+  const DATE_KEYS = /date|rdv/i;
   for (const [k, v] of Object.entries(row)) {
-    // Les colonnes date Supabase n'acceptent pas '' (chaîne vide) → null
+    // Utiliser COL_MAP si disponible, sinon lowercase
+    const colName = COL_MAP[k] || k.toLowerCase();
     const isDate = DATE_KEYS.test(k);
-    out[k.toLowerCase()] = (isDate && v === '') ? null : v;
+    out[colName] = (isDate && v === '') ? null : v;
   }
   return out;
 }
@@ -2354,9 +2356,26 @@ function modalContent(){
 
 function prospectForm(data){
   const d = data || { id:'', civilite:'', nom:'', prenom:'', adresse:'', telephone:'', telephone2:'', fonction:'', entreprise:'', besoin:'', source:SOURCES[0], boutique:BOUTIQUES[0], statut:'Nouveau', commercial: state.commercial, notes:'', dateMiseEnRelation: todayISO() };
+
+  // Historique contacts pour ce prospect (affiché uniquement si existant)
+  const contactsProspectBlock = (()=>{
+    if(!data) return '';
+    const telN = normTel(data.telephone);
+    const contactsP = (DB.contacts||[]).filter(c=>{
+      if(telN && normTel(c.telephone)===telN) return true;
+      return (c.clientid && c.clientid===data.id) || (c.clientnom||'').toLowerCase().trim()===(data.nom||'').toLowerCase().trim();
+    }).sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+    if(!contactsP.length) return '<p style="font-size:12px;color:#9a998f;margin:4px 0 12px;">Aucun contact enregistré pour ce prospect.</p>';
+    return '<h4 style="font-size:13px;font-weight:700;margin:14px 0 8px;">📱 Historique contacts ('+contactsP.length+')</h4>'
+      +'<div style="overflow-x:auto;margin-bottom:14px;"><table><thead><tr><th>Date</th><th>Motif</th><th>Commercial</th></tr></thead><tbody>'
+      +contactsP.slice(0,10).map(c=>'<tr><td style="white-space:nowrap;">'+fmtDate(c.date)+'</td><td>'+escapeHtml(c.motif||'')+'</td><td style="font-size:11px;color:#888;">'+escapeHtml(c.commercial||'')+'</td></tr>').join('')
+      +'</tbody></table></div>';
+  })();
+
   return `
   <h3>${data ? 'Modifier le prospect' : 'Nouveau prospect'}</h3>
   <p style="font-size:12.5px;color:#8a8980;margin:-8px 0 18px;">Base Jéricho — remplacement du formulaire Google Form.</p>
+  ${data ? `<div style="background:var(--sand-light);border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:13px;">${contactsProspectBlock}</div>` : ''}
   <form id="form-prospect" novalidate>
     <div class="form-grid">
       <div class="form-section-title">Informations personnelles</div>
@@ -6646,7 +6665,23 @@ function attachModalEvents(){
       await apiUpsert('prospects', obj);
       state.modal=null; render();
       showToast(idx>=0 ? 'Prospect mis à jour.' : 'Prospect ajouté.');
-    }catch(err){ showToast("Erreur d'enregistrement, réessaie."); }
+    }catch(err){
+      console.error('Prospect save error:', err);
+      // Si l'erreur mentionne une colonne inconnue (datenaissance/daterelance pas encore créées),
+      // réessayer sans ces champs pour ne pas bloquer l'enregistrement
+      const msg = (err.message||'');
+      const isColErr = /column|42703|does not exist/i.test(msg);
+      if(isColErr){
+        try{
+          const objSafe = Object.fromEntries(Object.entries(obj).filter(([k])=>!['dateNaissance','dateRelance'].includes(k)));
+          await apiUpsert('prospects', objSafe);
+          state.modal=null; render();
+          showToast((idx>=0 ? 'Prospect mis à jour.' : 'Prospect ajouté.') + ' (date naissance/relance ignorées — colonnes à créer dans Supabase)');
+        }catch(err2){ showToast("Erreur : " + (err2.message||'inconnue').slice(0,80), true); }
+      } else {
+        showToast("Erreur : " + msg.slice(0,80), true);
+      }
+    }
   });
 
   const fc = document.getElementById('form-client');
