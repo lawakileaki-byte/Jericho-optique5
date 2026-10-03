@@ -2127,7 +2127,13 @@ function rxInput(id, val, allowNeg=true, step=0.25, minVal=null, maxVal=null, ex
    --------------------------------------------------------- */
 function venteTotal(v){
   if(v.typeArticle==='Réparation et entretien') return Number(v.cout)||0;
-  if(v.typeArticle==='Accessoires') return (Number(v.prixVenteMontureAcc)||0) - (Number(v.remiseAcc)||0) + (Number(v.montantAchatSpray)||0) + (Number(v.montantVenteEtui)||0) + (Number(v.montantVenteEssuieVerre)||0);
+  if(v.typeArticle==='Accessoires'){
+    const detailTotal = (Number(v.prixVenteMontureAcc)||0) - (Number(v.remiseAcc)||0) + (Number(v.montantAchatSpray)||0) + (Number(v.montantVenteEtui)||0) + (Number(v.montantVenteEssuieVerre)||0);
+    if(detailTotal > 0) return detailTotal;
+    // Fallback: utiliser le total stocké dans versements (pour les ventes saisies sans détail)
+    const pi = getPaiementInfo(v);
+    return pi ? (Number(pi.total)||Number(pi.encaisse)||0) : 0;
+  }
   return (Number(v.prixVenteTotalSansRemise)||0) - (Number(v.remise)||0);
 }
 // Retourne true si la vente est apportée par un apporteur d'affaire
@@ -6021,6 +6027,8 @@ function imprimerRecu(v){
     if(Number(v.montantVenteEtui)) lignes.push(['Étui', fmtFCFA(Number(v.montantVenteEtui))]);
     if(Number(v.montantVenteEssuieVerre)) lignes.push(['Lingette', fmtFCFA(Number(v.montantVenteEssuieVerre))]);
     if(Number(v.remiseAcc)) lignes.push(['Remise', '- '+fmtFCFA(Number(v.remiseAcc))]);
+    // Si aucun détail n'est renseigné, afficher le total global
+    if(lignes.length === 0 && total > 0) lignes.push(['Accessoires', fmtFCFA(total)]);
   } else {
     if(Number(v.prixVenteMonture)) lignes.push(['Monture optique', fmtFCFA(Number(v.prixVenteMonture))]);
     if(Number(v.prixVenteMonture2e)) lignes.push(['Monture (2e paire)', fmtFCFA(Number(v.prixVenteMonture2e))]);
@@ -6992,7 +7000,11 @@ function attachModalEvents(){
         }
         if(typeArt==='Accessoires'){
           const enc = val('v-acc-encaisse'); const mode = val('v-acc-mode'); const datep = val('v-acc-date-paiement');
-          return JSON.stringify([{type:'acc', encaisse: Number(enc)||0, mode: mode||'Espèces', date: datep||todayISO()}]);
+          // Calculer et stocker le total pour pouvoir l'afficher même si les sous-champs sont vides
+          const spray=Number(val('v-spray'))||0, etui=Number(val('v-etui'))||0, essuie=Number(val('v-essuie'))||0;
+          const monture=Number(val('v-monture-acc'))||0, remise=Number(val('v-remise-acc'))||0;
+          const accTotal = Math.max(0, monture - remise + spray + etui + essuie);
+          return JSON.stringify([{type:'acc', encaisse: Number(enc)||0, mode: mode||'Espèces', date: datep||todayISO(), total: accTotal}]);
         }
         const vj=document.getElementById('v-versements-json')?.value||'[]'; return vj;
       })(),
