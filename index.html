@@ -373,7 +373,14 @@ const COL_MAP = {
   'saisePar': 'saisepar',
   'odSphere': 'odsphere', 'odCylindre': 'odcylindre', 'odAxe': 'odaxe', 'odAddition': 'odaddition',
   'ogSphere': 'ogsphere', 'ogCylindre': 'ogcylindre', 'ogAxe': 'ogaxe', 'ogAddition': 'ogaddition',
+  'deuxiemePaire': 'deuxiemepaire',
+  'p2odSphere': 'p2odsphere', 'p2odCylindre': 'p2odcylindre', 'p2odAxe': 'p2odaxe', 'p2odAddition': 'p2odaddition',
+  'p2ogSphere': 'p2ogsphere', 'p2ogCylindre': 'p2ogcylindre', 'p2ogAxe': 'p2ogaxe', 'p2ogAddition': 'p2ogaddition',
+  'p2monture': 'p2monture', 'p2caracteristiqueVerre': 'p2caracteristiqueverre',
   'caracteristiqueVerre': 'caracteristiqueverre',
+  'laboratoireAutre': 'laboratoireautre',
+  'montantAchatSpray': 'montantachatspray', 'montantVenteEtui': 'montantventetui', 'montantVenteEssuieVerre': 'montantventeessuieverre',
+  'prixVenteMontureAcc': 'prixventemontureacc', 'remiseAcc': 'remiseacc',
   'prixVenteMonture': 'prixventemonture', 'prixVenteLentilles': 'prixventelentilles',
   'prixVenteLentilles2e': 'prixventelentilles2e', 'prixVenteMonture2e': 'prixventemonture2e',
   'prixVenteTotalSansRemise': 'prixventetotalsansremise',
@@ -6935,34 +6942,52 @@ function attachModalEvents(){
     const existing = DB.ventes.find(v=>v.id===id);
     const val = (elId)=> (document.getElementById(elId)||{}).value || '';
 
-    // Validation prescription obligatoire pour Monture/Verres et Lentilles
+    // Validation prescription pour Monture/Verres et Lentilles
+    // — obligatoire uniquement pour les NOUVELLES ventes (pas pour les modifications / versements)
     const typeArt = val('v-article');
     if(typeArt==='Monture / Verres correcteurs' || typeArt==='Lentilles'){
-      const rxFields = [
+      // Champs sphère/cylindre obligatoires (les autres peuvent être 0 ou vides)
+      const rxFieldsOblig = [
         {id:'v-od-sphere', label:'OD Sphère'},
         {id:'v-od-cyl',    label:'OD Cylindre'},
-        {id:'v-od-axe',    label:'OD Axe'},
-        {id:'v-od-add',    label:'OD Addition'},
         {id:'v-og-sphere', label:'OG Sphère'},
         {id:'v-og-cyl',    label:'OG Cylindre'},
-        {id:'v-og-axe',    label:'OG Axe'},
-        {id:'v-og-add',    label:'OG Addition'},
       ];
-      const manquants = rxFields.filter(f=>!val(f.id).trim());
+      const rxFieldsAll = [
+        ...rxFieldsOblig,
+        {id:'v-od-axe', label:'OD Axe'},
+        {id:'v-od-add', label:'OD Addition'},
+        {id:'v-og-axe', label:'OG Axe'},
+        {id:'v-og-add', label:'OG Addition'},
+      ];
+      const manquants = rxFieldsOblig.filter(f=>!val(f.id).trim());
       if(manquants.length>0){
-        // Mettre en rouge les champs manquants
-        rxFields.forEach(f=>{
-          const el = document.getElementById(f.id);
-          if(el) el.style.outline = !val(f.id).trim() ? '2px solid #DC2626' : '';
-        });
-        // Scroll vers la prescription
-        document.getElementById('sec-prescription')?.scrollIntoView({behavior:'smooth',block:'center'});
-        const msg = '⚠️ Prescription incomplète :\n' + manquants.map(f=>'• '+f.label).join('\n') + '\n\nCes champs sont obligatoires avant l\'enregistrement.';
-        alert(msg);
-        return;
+        if(isNewVente){
+          // Nouvelle vente : bloquer si prescription incomplète
+          rxFieldsAll.forEach(f=>{
+            const el = document.getElementById(f.id);
+            if(el) el.style.outline = rxFieldsOblig.find(x=>x.id===f.id) && !val(f.id).trim() ? '2px solid #DC2626' : '';
+          });
+          document.getElementById('sec-prescription')?.scrollIntoView({behavior:'smooth',block:'center'});
+          const msg = '⚠️ Prescription incomplète :\n' + manquants.map(f=>'• '+f.label).join('\n') + '\n\nCes champs sont obligatoires pour une nouvelle vente.';
+          alert(msg);
+          return;
+        }
+        // Édition / versement : si les champs sont vides, récupérer les valeurs existantes
+        // (les données de prescription peuvent être null dans Supabase pour les anciennes ventes)
+        if(existing){
+          ['v-od-sphere','v-od-cyl','v-od-axe','v-od-add','v-og-sphere','v-og-cyl','v-og-axe','v-og-add'].forEach(fid=>{
+            const el = document.getElementById(fid);
+            if(el && !el.value.trim()){
+              const map = {'v-od-sphere':'odSphere','v-od-cyl':'odCylindre','v-od-axe':'odAxe','v-od-add':'odAddition','v-og-sphere':'ogSphere','v-og-cyl':'ogCylindre','v-og-axe':'ogAxe','v-og-add':'ogAddition'};
+              const existingVal = existing[map[fid]]||'';
+              if(existingVal) el.value = existingVal;
+            }
+          });
+        }
       }
       // Tout ok : supprimer les contours rouges
-      rxFields.forEach(f=>{ const el=document.getElementById(f.id); if(el) el.style.outline=''; });
+      rxFieldsAll.forEach(f=>{ const el=document.getElementById(f.id); if(el) el.style.outline=''; });
     }
     const obj = {
       id,
@@ -6980,14 +7005,30 @@ function attachModalEvents(){
       assurance: val('v-assurance'), assuranceAutre: val('v-assurance-autre').trim(),
       apporteurAffaire: val('v-apporteur'), apporteurAffaireAutre: val('v-apporteur-autre').trim(),
       gestionnaire: (val('v-article')==='Réparation et entretien') ? (state.commercial||STAFF[0]) : (val('v-gestionnaire')||state.commercial||STAFF[0]), gestionnaireAutre: val('v-gestionnaire-autre').trim(),
-      odSphere: val('v-od-sphere').trim(), odCylindre: val('v-od-cyl').trim(), odAxe: val('v-od-axe').trim(), odAddition: val('v-od-add').trim(),
-      ogSphere: val('v-og-sphere').trim(), ogCylindre: val('v-og-cyl').trim(), ogAxe: val('v-og-axe').trim(), ogAddition: val('v-og-add').trim(),
-      deuxiemePaire: document.getElementById('v-deuxieme-paire')?.checked || false,
-      p2odSphere: val('v-p2-od-sphere').trim(), p2odCylindre: val('v-p2-od-cyl').trim(), p2odAxe: val('v-p2-od-axe').trim(), p2odAddition: val('v-p2-od-add').trim(),
-      p2ogSphere: val('v-p2-og-sphere').trim(), p2ogCylindre: val('v-p2-og-cyl').trim(), p2ogAxe: val('v-p2-og-axe').trim(), p2ogAddition: val('v-p2-og-add').trim(),
-      p2monture: val('v-p2-monture').trim(), p2caracteristiqueVerre: val('v-p2-carac-verre').trim(),
-      laboratoire: val('v-labo'), laboratoireAutre: val('v-labo-autre').trim(),
-      caracteristiqueVerre: val('v-carac-verre').trim(),
+      // Prescription : conserver les valeurs existantes si les champs sont vides en mode édition
+      // (évite d'écraser des prescriptions valides si les inputs sont null/vides lors d'un versement reliquat)
+      odSphere: val('v-od-sphere').trim() || (existing&&existing.odSphere)||'',
+      odCylindre: val('v-od-cyl').trim() || (existing&&existing.odCylindre)||'',
+      odAxe: val('v-od-axe').trim() || (existing&&existing.odAxe)||'',
+      odAddition: val('v-od-add').trim() || (existing&&existing.odAddition)||'',
+      ogSphere: val('v-og-sphere').trim() || (existing&&existing.ogSphere)||'',
+      ogCylindre: val('v-og-cyl').trim() || (existing&&existing.ogCylindre)||'',
+      ogAxe: val('v-og-axe').trim() || (existing&&existing.ogAxe)||'',
+      ogAddition: val('v-og-add').trim() || (existing&&existing.ogAddition)||'',
+      deuxiemePaire: document.getElementById('v-deuxieme-paire')?.checked || (existing&&existing.deuxiemePaire)||false,
+      p2odSphere: val('v-p2-od-sphere').trim() || (existing&&existing.p2odSphere)||'',
+      p2odCylindre: val('v-p2-od-cyl').trim() || (existing&&existing.p2odCylindre)||'',
+      p2odAxe: val('v-p2-od-axe').trim() || (existing&&existing.p2odAxe)||'',
+      p2odAddition: val('v-p2-od-add').trim() || (existing&&existing.p2odAddition)||'',
+      p2ogSphere: val('v-p2-og-sphere').trim() || (existing&&existing.p2ogSphere)||'',
+      p2ogCylindre: val('v-p2-og-cyl').trim() || (existing&&existing.p2ogCylindre)||'',
+      p2ogAxe: val('v-p2-og-axe').trim() || (existing&&existing.p2ogAxe)||'',
+      p2ogAddition: val('v-p2-og-add').trim() || (existing&&existing.p2ogAddition)||'',
+      p2monture: val('v-p2-monture').trim() || (existing&&existing.p2monture)||'',
+      p2caracteristiqueVerre: val('v-p2-carac-verre').trim() || (existing&&existing.p2caracteristiqueVerre)||'',
+      laboratoire: val('v-labo') || (existing&&existing.laboratoire)||'',
+      laboratoireAutre: val('v-labo-autre').trim() || (existing&&existing.laboratoireAutre)||'',
+      caracteristiqueVerre: val('v-carac-verre').trim() || (existing&&existing.caracteristiqueVerre)||'',
       montantAchatSpray: val('v-spray'), montantVenteEtui: val('v-etui'), montantVenteEssuieVerre: val('v-essuie'),
       prixVenteMontureAcc: val('v-monture-acc'), remiseAcc: val('v-remise-acc'),
       prixVenteMonture: val('v-prix-monture'), prixVenteLentilles: val('v-prix-lentilles'),
