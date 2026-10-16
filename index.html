@@ -6929,7 +6929,9 @@ function attachModalEvents(){
   const fv = document.getElementById('form-vente');
   if(fv) fv.addEventListener('submit', async (e)=>{
     e.preventDefault();
-    const id = document.getElementById('v-id').value || uid();
+    const idInitial = document.getElementById('v-id').value; // vide = nouvelle vente, rempli = édition
+    const isNewVente = !idInitial;
+    const id = idInitial || uid();
     const existing = DB.ventes.find(v=>v.id===id);
     const val = (elId)=> (document.getElementById(elId)||{}).value || '';
 
@@ -7051,19 +7053,22 @@ function attachModalEvents(){
       };
       try{ await apiUpsert('clients', clientToSave); }catch(e){ /* synchro client non bloquante */ }
 
-      // Créer ticket labo automatiquement pour montures/lentilles
-      try{
-        const ticket = creerTicketLabo(obj);
-        if(ticket){
-          await apiUpsert('tickets', ticket);
-          if(!Array.isArray(DB.tickets)) DB.tickets = [];
-          DB.tickets.unshift(ticket);
-        }
-      }catch(e){ console.warn('Ticket labo non créé:', e.message); }
+      // Créer ticket labo automatiquement — UNIQUEMENT pour les nouvelles ventes (pas les mises à jour / versements reliquat)
+      // isNewVente = true si v-id était vide à l'ouverture du formulaire (pas un enregistrement existant)
+      if(isNewVente){
+        try{
+          const ticket = creerTicketLabo(obj);
+          if(ticket){
+            await apiUpsert('tickets', ticket);
+            if(!Array.isArray(DB.tickets)) DB.tickets = [];
+            DB.tickets.unshift(ticket);
+          }
+        }catch(e){ console.warn('Ticket labo non créé:', e.message); }
+      }
 
       state.modal=null; render();
       window._jCache=null;
-      showToast(idx>=0 ? 'Vente mise à jour.' : 'Vente enregistrée. Ticket labo créé automatiquement.');
+      showToast(isNewVente ? 'Vente enregistrée. Ticket labo créé automatiquement.' : 'Vente mise à jour.');
     }catch(err){ showToast("⚠️ Erreur: " + (err.message||'inconnue'), true); console.error('Vente err:', err); }
   });
 
