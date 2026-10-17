@@ -2760,7 +2760,7 @@ function venteForm(data){
         <div class="field" id="wrap-apporteur-autre" style="display:none;"><label>Précisez</label><input id="v-apporteur-autre" value="${escapeAttr(d.apporteurAffaireAutre)}"></div>
         <div class="field">
           <label>Gestionnaire <span style="font-weight:400;color:#9a998f;font-size:11px;">— propriétaire du client, porte le CA</span></label>
-          <select id="v-gestionnaire">${STAFF.map(s=>`<option ${(d.gestionnaire||state.commercial)===s?'selected':''}>${s}</option>`).join('')}</select>
+          <select id="v-gestionnaire">${[...( (USERS_CACHE&&USERS_CACHE.length?USERS_CACHE:[] ).map(u=>u.nom||u.prenom||'').filter(Boolean)), 'Autre'].map(s=>`<option ${(d.gestionnaire||state.commercial)===s?'selected':''}>${s}</option>`).join('')}</select>
         </div>
         <div class="field" id="wrap-gestionnaire-autre" style="display:none;"><label>Précisez</label><input id="v-gestionnaire-autre" value="${escapeAttr(d.gestionnaireAutre)}"></div>
         <div class="field">
