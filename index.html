@@ -427,12 +427,16 @@ async function apiGet(table) {
   if (!Array.isArray(rows)) return [];
   return rows.map(denormalizeRow);
 }
+// Champs Accessoires sans colonne Supabase → exclus de l'UPSERT (sérialisés dans versements)
+const SUPABASE_EXCLUDED_FIELDS = new Set([
+  'montantAchatSpray','montantVenteEtui','montantVenteEssuieVerre','prixVenteMontureAcc','remiseAcc'
+]);
 // Convertir camelCase → minuscules pour Supabase
 function toSupabase(row) {
   const out = {};
   const DATE_KEYS = /date|rdv/i;
   for (const [k, v] of Object.entries(row)) {
-    // Utiliser COL_MAP si disponible, sinon lowercase
+    if(SUPABASE_EXCLUDED_FIELDS.has(k)) continue;
     const colName = COL_MAP[k] || k.toLowerCase();
     const isDate = DATE_KEYS.test(k);
     out[colName] = (isDate && v === '') ? null : v;
