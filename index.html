@@ -2098,7 +2098,7 @@ window.rxStep = function(id, dir){
   }
   inp.dispatchEvent(new Event('input'));
   var extra = window._rxExtra[id];
-  if(extra) extra();
+  if(extra) extra.call(inp);
 };
 
 // step: incrément (0.25 par défaut)
@@ -2119,7 +2119,7 @@ function rxInput(id, val, allowNeg=true, step=0.25, minVal=null, maxVal=null, ex
   const maxAttr = maxVal !== null ? String(maxVal) : '';
   const btnStyle = 'flex-shrink:0;width:36px;height:36px;border:none;border-radius:8px;background:var(--sand-light);color:var(--ink);font-size:19px;font-weight:300;cursor:pointer;display:flex;align-items:center;justify-content:center;touch-action:manipulation;user-select:none;-webkit-tap-highlight-color:transparent;';
   // oninput simple : normalise la saisie et appelle l'extra si présent
-  const onInputSimple = 'var v=this.value.replace(\',\',\'.\');if(v===\'\'||v===\'-\'||v===\'+\')return;var n=parseFloat(v);if(isNaN(n))return;var ex=window._rxExtra[this.id];if(ex)ex();';
+  const onInputSimple = 'var v=this.value.replace(\',\',\'.\');if(v===\'\'||v===\'-\'||v===\'+\')return;var n=parseFloat(v);if(isNaN(n))return;var ex=window._rxExtra[this.id];if(ex)ex.call(this);';
   return `<div style="display:flex;align-items:center;gap:5px;">
     <button type="button" onclick="rxStep('${id}',-1)" style="${btnStyle}">−</button>
     <input id="${id}" type="text" inputmode="decimal"
