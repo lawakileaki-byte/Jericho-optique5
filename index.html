@@ -2895,7 +2895,7 @@ function venteForm(data){
   <input type="hidden" id="v-versements-json" value="${escapeAttr(d.versements||'[]')}">
   <input type="hidden" id="v-avance" value="${escapeAttr(d.avance||'0')}">
 </div>
-          <div class="field" id="wrap-bon" style="display:none;"><label>Bon non encaissé <span style="font-weight:400;color:#9a998f;font-size:11px;">(si assurance)</span></label><input type="number" min="0" step="500" id="v-bon" value="${escapeAttr(!isPasAssurance(d.assurance) && (d.montantBonNonEncaisse===''||d.montantBonNonEncaisse==null) ? '0' : d.montantBonNonEncaisse)}" oninput="calcVenteReste()"></div>
+          <div class="field" id="wrap-bon" style="display:none;"><label>Bon non encaissé <span style="font-weight:400;color:#DC2626;font-size:11px;font-weight:600;">* obligatoire</span></label><input type="number" min="1" step="500" id="v-bon" value="${escapeAttr(!isPasAssurance(d.assurance) && (d.montantBonNonEncaisse===''||d.montantBonNonEncaisse==null) ? '' : d.montantBonNonEncaisse)}" placeholder="ex: 50000" oninput="calcVenteReste()"></div>
           <div class="field" style="background:#fdf0ee;border-radius:8px;padding:8px;" id="wrap-reste">
             <label style="color:#A6402E;font-weight:600;">Reste à payer</label>
             <input type="text" id="v-reste-display" readonly style="font-weight:700;font-size:18px;color:#A6402E;background:transparent;border:none;cursor:default;" value="0 FCFA">
@@ -6989,6 +6989,21 @@ function attachModalEvents(){
       // Tout ok : supprimer les contours rouges
       rxFieldsAll.forEach(f=>{ const el=document.getElementById(f.id); if(el) el.style.outline=''; });
     }
+
+    // Validation bon non encaissé : obligatoire si assurance
+    const assuranceVal = val('v-assurance');
+    if(!isPasAssurance(assuranceVal)){
+      const bonVal = Number(val('v-bon'));
+      if(!bonVal || bonVal <= 0){
+        const inputBon = document.getElementById('v-bon');
+        if(inputBon){ inputBon.style.outline = '2px solid #DC2626'; inputBon.focus(); inputBon.scrollIntoView({behavior:'smooth',block:'center'}); }
+        showToast('⚠️ Veuillez saisir le montant du bon non encaissé (assurance obligatoire).');
+        return;
+      }
+      const inputBon = document.getElementById('v-bon');
+      if(inputBon) inputBon.style.outline = '';
+    }
+
     const obj = {
       id,
       dateMiseEnRelation: val('v-date') || todayISO(),
