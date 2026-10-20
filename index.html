@@ -379,9 +379,8 @@ const COL_MAP = {
   'p2monture': 'p2monture', 'p2caracteristiqueVerre': 'p2caracteristiqueverre',
   'caracteristiqueVerre': 'caracteristiqueverre',
   'laboratoireAutre': 'laboratoireautre',
-  // montantAchatSpray, montantVenteEtui, montantVenteEssuieVerre, prixVenteMontureAcc, remiseAcc
-  // → colonnes absentes de Supabase : sérialisées dans le champ 'versements' (type acc)
-  'prixVenteMonture': 'prixventemonture',
+  'montantAchatSpray': 'montantachatspray', 'montantVenteEtui': 'montantventetui', 'montantVenteEssuieVerre': 'montantventeessuieverre',
+  'prixVenteMontureAcc': 'prixventemontureacc', 'remiseAcc': 'remiseacc',
   'prixVenteMonture': 'prixventemonture', 'prixVenteLentilles': 'prixventelentilles',
   'prixVenteLentilles2e': 'prixventelentilles2e', 'prixVenteMonture2e': 'prixventemonture2e',
   'prixVenteTotalSansRemise': 'prixventetotalsansremise',
@@ -428,16 +427,12 @@ async function apiGet(table) {
   if (!Array.isArray(rows)) return [];
   return rows.map(denormalizeRow);
 }
-// Colonnes absentes de la table Supabase — ne jamais envoyer
-const SUPABASE_EXCLUDED_FIELDS = new Set([
-  'montantAchatSpray','montantVenteEtui','montantVenteEssuieVerre','prixVenteMontureAcc','remiseAcc'
-]);
 // Convertir camelCase → minuscules pour Supabase
 function toSupabase(row) {
   const out = {};
   const DATE_KEYS = /date|rdv/i;
   for (const [k, v] of Object.entries(row)) {
-    if(SUPABASE_EXCLUDED_FIELDS.has(k)) continue; // champ sans colonne Supabase
+    // Utiliser COL_MAP si disponible, sinon lowercase
     const colName = COL_MAP[k] || k.toLowerCase();
     const isDate = DATE_KEYS.test(k);
     out[colName] = (isDate && v === '') ? null : v;
@@ -2106,7 +2101,7 @@ window.rxStep = function(id, dir){
 // minVal/maxVal: limites optionnelles
 // extraOninput: code JS supplémentaire à exécuter à l'oninput (string ou null)
 function rxInput(id, val, allowNeg=true, step=0.25, minVal=null, maxVal=null, extraOninput=''){
-  const safeVal = escapeAttr(String(val != null && val !== undefined ? val : ''));
+  const safeVal = escapeAttr(String(val||''));
   const ph = allowNeg ? (step===1 ? 'ex: 90' : 'ex: -1.75') : (step===1 ? 'ex: 90' : 'ex: 2.00');
   const dec = step < 1 ? 2 : 0;
   // Enregistre le callback extra dans le registre global (évite tout JS dans les attributs HTML)
@@ -2896,7 +2891,7 @@ function venteForm(data){
   <input type="hidden" id="v-versements-json" value="${escapeAttr(d.versements||'[]')}">
   <input type="hidden" id="v-avance" value="${escapeAttr(d.avance||'0')}">
 </div>
-          <div class="field" id="wrap-bon" style="display:none;"><label>Bon non encaissé <span style="font-weight:400;color:#9a998f;font-size:11px;">(si assurance)</span></label><input type="number" min="0" step="500" id="v-bon" value="${escapeAttr(d.montantBonNonEncaisse)}" oninput="calcVenteReste()"></div>
+          <div class="field" id="wrap-bon" style="display:none;"><label>Bon non encaissé <span style="font-weight:400;color:#9a998f;font-size:11px;">(si assurance)</span></label><input type="number" min="0" step="500" id="v-bon" value="${escapeAttr(!isPasAssurance(d.assurance) && (d.montantBonNonEncaisse===''||d.montantBonNonEncaisse==null) ? '0' : d.montantBonNonEncaisse)}" oninput="calcVenteReste()"></div>
           <div class="field" style="background:#fdf0ee;border-radius:8px;padding:8px;" id="wrap-reste">
             <label style="color:#A6402E;font-weight:600;">Reste à payer</label>
             <input type="text" id="v-reste-display" readonly style="font-weight:700;font-size:18px;color:#A6402E;background:transparent;border:none;cursor:default;" value="0 FCFA">
@@ -4581,27 +4576,23 @@ window.updateBadgeTypeVerre = function(){
 };
 
 window.autoOgAdd = function(val){
-  // OD → OG : copie si OG est vide ou avait été auto-rempli depuis OD
+  // OD → OG : toujours copier (les deux additions doivent être identiques)
   const ogAdd = document.getElementById('v-og-add');
   const hint = document.getElementById('og-add-hint');
   if(!ogAdd) return;
-  if(!ogAdd.value || ogAdd.dataset.autoFilled==='od'){
-    ogAdd.value = val;
-    ogAdd.dataset.autoFilled = val ? 'od' : '';
-    if(hint) hint.textContent = val ? '↑ copié depuis OD' : '';
-  }
+  ogAdd.value = val;
+  ogAdd.dataset.autoFilled = val ? 'od' : '';
+  if(hint) hint.textContent = val ? '= OD' : '';
   updateBadgeTypeVerre();
 };
 window.autoOdAdd = function(val){
-  // OG → OD : copie si OD est vide ou avait été auto-rempli depuis OG
+  // OG → OD : toujours copier (les deux additions doivent être identiques)
   const odAdd = document.getElementById('v-od-add');
   const hint = document.getElementById('og-add-hint');
   if(!odAdd) return;
-  if(!odAdd.value || odAdd.dataset.autoFilled==='og'){
-    odAdd.value = val;
-    odAdd.dataset.autoFilled = val ? 'og' : '';
-    if(hint) hint.textContent = val ? '↑ copié depuis OG' : '';
-  }
+  odAdd.value = val;
+  odAdd.dataset.autoFilled = val ? 'og' : '';
+  if(hint) hint.textContent = val ? '= OG' : '';
   updateBadgeTypeVerre();
 };
 
