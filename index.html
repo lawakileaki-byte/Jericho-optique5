@@ -2101,7 +2101,7 @@ window.rxStep = function(id, dir){
 // minVal/maxVal: limites optionnelles
 // extraOninput: code JS supplémentaire à exécuter à l'oninput (string ou null)
 function rxInput(id, val, allowNeg=true, step=0.25, minVal=null, maxVal=null, extraOninput=''){
-  const safeVal = escapeAttr(String(val||''));
+  const safeVal = escapeAttr(String(val != null && val !== undefined ? val : ''));
   const ph = allowNeg ? (step===1 ? 'ex: 90' : 'ex: -1.75') : (step===1 ? 'ex: 90' : 'ex: 2.00');
   const dec = step < 1 ? 2 : 0;
   // Enregistre le callback extra dans le registre global (évite tout JS dans les attributs HTML)
