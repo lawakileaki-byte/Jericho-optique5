@@ -379,8 +379,9 @@ const COL_MAP = {
   'p2monture': 'p2monture', 'p2caracteristiqueVerre': 'p2caracteristiqueverre',
   'caracteristiqueVerre': 'caracteristiqueverre',
   'laboratoireAutre': 'laboratoireautre',
-  'montantAchatSpray': 'montantachatspray', 'montantVenteEtui': 'montantventetui', 'montantVenteEssuieVerre': 'montantventeessuieverre',
-  'prixVenteMontureAcc': 'prixventemontureacc', 'remiseAcc': 'remiseacc',
+  // montantAchatSpray, montantVenteEtui, montantVenteEssuieVerre, prixVenteMontureAcc, remiseAcc
+  // → colonnes absentes de Supabase : sérialisées dans le champ 'versements' (type acc)
+  'prixVenteMonture': 'prixventemonture',
   'prixVenteMonture': 'prixventemonture', 'prixVenteLentilles': 'prixventelentilles',
   'prixVenteLentilles2e': 'prixventelentilles2e', 'prixVenteMonture2e': 'prixventemonture2e',
   'prixVenteTotalSansRemise': 'prixventetotalsansremise',
@@ -427,12 +428,16 @@ async function apiGet(table) {
   if (!Array.isArray(rows)) return [];
   return rows.map(denormalizeRow);
 }
+// Colonnes absentes de la table Supabase — ne jamais envoyer
+const SUPABASE_EXCLUDED_FIELDS = new Set([
+  'montantAchatSpray','montantVenteEtui','montantVenteEssuieVerre','prixVenteMontureAcc','remiseAcc'
+]);
 // Convertir camelCase → minuscules pour Supabase
 function toSupabase(row) {
   const out = {};
   const DATE_KEYS = /date|rdv/i;
   for (const [k, v] of Object.entries(row)) {
-    // Utiliser COL_MAP si disponible, sinon lowercase
+    if(SUPABASE_EXCLUDED_FIELDS.has(k)) continue; // champ sans colonne Supabase
     const colName = COL_MAP[k] || k.toLowerCase();
     const isDate = DATE_KEYS.test(k);
     out[colName] = (isDate && v === '') ? null : v;
@@ -2101,7 +2106,7 @@ window.rxStep = function(id, dir){
 // minVal/maxVal: limites optionnelles
 // extraOninput: code JS supplémentaire à exécuter à l'oninput (string ou null)
 function rxInput(id, val, allowNeg=true, step=0.25, minVal=null, maxVal=null, extraOninput=''){
-  const safeVal = escapeAttr(String(val||''));
+  const safeVal = escapeAttr(String(val != null && val !== undefined ? val : ''));
   const ph = allowNeg ? (step===1 ? 'ex: 90' : 'ex: -1.75') : (step===1 ? 'ex: 90' : 'ex: 2.00');
   const dec = step < 1 ? 2 : 0;
   // Enregistre le callback extra dans le registre global (évite tout JS dans les attributs HTML)
