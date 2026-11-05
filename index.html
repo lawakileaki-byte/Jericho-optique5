@@ -46,7 +46,7 @@
 
   /* Zone principale : scroll, pas de débordement */
   .main{
-    order:1;padding:14px 12px 74px;
+    order:1;padding:14px 8px 74px;
     overflow-y:auto;overflow-x:hidden;
     flex:1;min-height:0;
     -webkit-overflow-scrolling:touch;
@@ -67,7 +67,7 @@
   .kpi .lbl{font-size:11px}
 
   /* Panneaux */
-  .panel{padding:16px 12px;margin-bottom:14px}
+  .panel{padding:14px 10px;margin-bottom:14px}
   .panel h3{font-size:15px;margin-bottom:12px}
 
   /* Toolbar : champs pleins + boutons full width */
@@ -108,6 +108,16 @@
 
   /* Bouton déconnexion mobile : visible uniquement sur mobile */
   #mobile-logout-panel{display:block}
+
+  /* Analyse : grilles 2 colonnes → 1 colonne sur mobile */
+  .an-two-col{grid-template-columns:1fr !important;}
+  /* Apporteurs : lignes responsives */
+  .ap-row{flex-wrap:wrap !important;}
+  .ap-montant{font-size:12px !important;}
+  /* an2-kpis : 2 colonnes */
+  .an2-kpis{grid-template-columns:1fr 1fr !important;}
+  .an2-kpi{padding:10px 12px !important;}
+  .an2-v{font-size:18px !important;}
 }
 
 /* Sur desktop, masquer le panneau de déconnexion mobile */
@@ -130,20 +140,20 @@
 .an2-pill.on{background:var(--pc);border-color:var(--pc);color:#fff}
 .an2-in{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.25);color:#fff;border-radius:6px;padding:5px 9px;font-size:13px;font-family:inherit;color-scheme:dark}
 .an2-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:16px}
-.an2-kpi,.an2-card{background:#fff;border:1px solid var(--bd);border-radius:10px;padding:14px 16px}
+.an2-kpi,.an2-card{background:#fff;border:1px solid var(--bd);border-radius:10px;padding:14px 16px;min-width:0;overflow:visible}
 .an2-kpi.gold{border-top:3px solid var(--gold)}.an2-kpi.warn{border-top:3px solid var(--warn)}.an2-kpi.good{border-top:3px solid var(--good)}
 .an2-k{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--fg3)}
 .an2-v{font-size:22px;font-weight:700;color:var(--fg);line-height:1.25}
 .an2-s{font-size:12px;color:var(--fg2)}
-.an2-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}.an2-wide{grid-column:1/-1}
+.an2-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;width:100%;max-width:100%}.an2-wide{grid-column:1/-1;min-width:0}
 .an2-t{font-size:13px;font-weight:600;color:var(--fg);margin-bottom:12px}
-.an2-wrap{position:relative;height:210px}
+.an2-wrap{position:relative;height:210px;width:100%;max-width:100%;overflow:hidden}.an2-wrap canvas{position:absolute;top:0;left:0;width:100%!important;height:100%!important}
 .an2-tb{width:100%;border-collapse:collapse;font-size:13px}
 .an2-tb th{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--fg3);text-align:right;padding:7px 8px;border-bottom:2px solid var(--bd)}
 .an2-tb th:first-child,.an2-tb td:first-child{text-align:left}
 .an2-tb td{text-align:right;padding:7px 8px;border-bottom:1px solid var(--bd)}
 .an2-bg{height:6px;background:var(--bd);border-radius:3px;overflow:hidden;min-width:70px}.an2-bg i{display:block;height:100%}
-@media(max-width:760px){.an2-grid{grid-template-columns:1fr}}
+@media(max-width:760px){.an2-grid{grid-template-columns:1fr}}.an2-wrap canvas{max-width:100%;display:block}
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script>
@@ -262,7 +272,7 @@ function an2Update(){
     const ord=Object.entries(parAp).sort((a,b)=>b[1].ca-a[1].ca);
     const caTotal=ord.reduce((s,[,d])=>s+d.ca,0);
     if(ord.length===0){apDiv.innerHTML=`<div style="text-align:center;padding:20px 0;color:#9AA0B2;font-size:13px;">Aucune vente via apporteur sur cette période</div>`}
-    else{apDiv.innerHTML=`<div style="font-size:12px;color:#9AA0B2;margin-bottom:10px;">${ventesAp.length} vente(s) · ${fmtFCFA(caTotal)} total</div><div style="display:flex;flex-direction:column;gap:10px;">${ord.map(([nom,d])=>{const maxC=ord[0][1].ca||1,pct=Math.round(d.ca/maxC*100);return`<div><div style="display:flex;justify-content:space-between;align-items:center;font-size:13px;margin-bottom:5px;"><div style="display:flex;align-items:center;gap:8px;"><span style="width:26px;height:26px;border-radius:50%;background:#1B2340;color:#C8830A;display:inline-flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;flex-shrink:0;">${escapeHtml(nom.slice(0,2).toUpperCase())}</span><span style="font-weight:600;">${escapeHtml(nom)}</span><span style="font-size:11px;color:#9AA0B2;">${d.nb} vente${d.nb>1?'s':''}</span></div><span style="font-weight:700;color:#C8830A;font-variant-numeric:tabular-nums;">${fmtFCFA(d.ca)}</span></div><div style="background:#E2E5EC;border-radius:4px;height:7px;overflow:hidden;"><div style="background:linear-gradient(90deg,#1B2340,#C8830A);height:100%;width:${pct}%;border-radius:4px;"></div></div></div>`}).join('')}</div>`}
+    else{apDiv.innerHTML=`<div style="font-size:12px;color:#9AA0B2;margin-bottom:10px;">${ventesAp.length} vente(s) · ${fmtFCFA(caTotal)} total</div><div style="display:flex;flex-direction:column;gap:10px;">${ord.map(([nom,d])=>{const maxC=ord[0][1].ca||1,pct=Math.round(d.ca/maxC*100);return`<div><div class="ap-row" style="display:flex;justify-content:space-between;align-items:center;font-size:13px;margin-bottom:5px;gap:6px;flex-wrap:wrap;"><div style="display:flex;align-items:center;gap:6px;min-width:0;flex:1;"><span style="width:26px;height:26px;border-radius:50%;background:#1B2340;color:#C8830A;display:inline-flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;flex-shrink:0;">${escapeHtml(nom.slice(0,2).toUpperCase())}</span><span style="font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;">${escapeHtml(nom)}</span><span style="font-size:10px;color:#9AA0B2;white-space:nowrap;flex-shrink:0;">${d.nb}v</span></div><span class="ap-montant" style="font-weight:700;color:#C8830A;font-variant-numeric:tabular-nums;white-space:nowrap;flex-shrink:0;font-size:13px;">${fmtFCFA(d.ca)}</span></div><div style="background:#E2E5EC;border-radius:4px;height:7px;overflow:hidden;"><div style="background:linear-gradient(90deg,#1B2340,#C8830A);height:100%;width:${pct}%;border-radius:4px;"></div></div></div>`}).join('')}</div>`}
   }
 }
 function renderAnalyseDirection(){an2EnsureObj();const t=an2Today();
@@ -379,8 +389,8 @@ const COL_MAP = {
   'p2monture': 'p2monture', 'p2caracteristiqueVerre': 'p2caracteristiqueverre',
   'caracteristiqueVerre': 'caracteristiqueverre',
   'laboratoireAutre': 'laboratoireautre',
-  'montantAchatSpray': 'montantachatspray', 'montantVenteEtui': 'montantventetui', 'montantVenteEssuieVerre': 'montantventeessuieverre',
-  'prixVenteMontureAcc': 'prixventemontureacc', 'remiseAcc': 'remiseacc',
+  // montantAchatSpray, montantVenteEtui, montantVenteEssuieVerre, prixVenteMontureAcc, remiseAcc
+  // → colonnes absentes de Supabase : sérialisées dans le champ 'versements' (type acc)
   'prixVenteMonture': 'prixventemonture', 'prixVenteLentilles': 'prixventelentilles',
   'prixVenteLentilles2e': 'prixventelentilles2e', 'prixVenteMonture2e': 'prixventemonture2e',
   'prixVenteTotalSansRemise': 'prixventetotalsansremise',
@@ -416,6 +426,19 @@ function denormalizeRow(row) {
       out[key] = v;
     }
   }
+  // Restaurer les champs Accessoires sérialisés dans versements (type:'acc')
+  if(out.versements){
+    let vers = out.versements;
+    if(typeof vers === 'string'){ try{ vers = JSON.parse(vers); }catch(e){ vers = []; } }
+    const accEntry = Array.isArray(vers) ? vers.find(v=>v.type==='acc') : null;
+    if(accEntry){
+      if(accEntry.spray   !== undefined) out.montantAchatSpray      = String(accEntry.spray);
+      if(accEntry.etui    !== undefined) out.montantVenteEtui        = String(accEntry.etui);
+      if(accEntry.essuie  !== undefined) out.montantVenteEssuieVerre = String(accEntry.essuie);
+      if(accEntry.monture !== undefined) out.prixVenteMontureAcc     = String(accEntry.monture);
+      if(accEntry.remise  !== undefined) out.remiseAcc               = String(accEntry.remise);
+    }
+  }
   return out;
 }
 
@@ -427,7 +450,7 @@ async function apiGet(table) {
   if (!Array.isArray(rows)) return [];
   return rows.map(denormalizeRow);
 }
-// Champs Accessoires sans colonne Supabase → exclus de l'UPSERT (sérialisés dans versements)
+// Colonnes absentes de la table Supabase — ne jamais envoyer
 const SUPABASE_EXCLUDED_FIELDS = new Set([
   'montantAchatSpray','montantVenteEtui','montantVenteEssuieVerre','prixVenteMontureAcc','remiseAcc'
 ]);
@@ -436,7 +459,8 @@ function toSupabase(row) {
   const out = {};
   const DATE_KEYS = /date|rdv/i;
   for (const [k, v] of Object.entries(row)) {
-    if(SUPABASE_EXCLUDED_FIELDS.has(k)) continue;
+    if(SUPABASE_EXCLUDED_FIELDS.has(k)) continue; // champ sans colonne Supabase
+    // Utiliser COL_MAP si disponible, sinon lowercase
     const colName = COL_MAP[k] || k.toLowerCase();
     const isDate = DATE_KEYS.test(k);
     out[colName] = (isDate && v === '') ? null : v;
@@ -2098,7 +2122,7 @@ window.rxStep = function(id, dir){
   }
   inp.dispatchEvent(new Event('input'));
   var extra = window._rxExtra[id];
-  if(extra) extra.call(inp);
+  if(extra) extra();
 };
 
 // step: incrément (0.25 par défaut)
@@ -2119,7 +2143,7 @@ function rxInput(id, val, allowNeg=true, step=0.25, minVal=null, maxVal=null, ex
   const maxAttr = maxVal !== null ? String(maxVal) : '';
   const btnStyle = 'flex-shrink:0;width:36px;height:36px;border:none;border-radius:8px;background:var(--sand-light);color:var(--ink);font-size:19px;font-weight:300;cursor:pointer;display:flex;align-items:center;justify-content:center;touch-action:manipulation;user-select:none;-webkit-tap-highlight-color:transparent;';
   // oninput simple : normalise la saisie et appelle l'extra si présent
-  const onInputSimple = 'var v=this.value.replace(\',\',\'.\');if(v===\'\'||v===\'-\'||v===\'+\')return;var n=parseFloat(v);if(isNaN(n))return;var ex=window._rxExtra[this.id];if(ex)ex.call(this);';
+  const onInputSimple = 'var v=this.value.replace(\',\',\'.\');if(v===\'\'||v===\'-\'||v===\'+\')return;var n=parseFloat(v);if(isNaN(n))return;var ex=window._rxExtra[this.id];if(ex)ex();';
   return `<div style="display:flex;align-items:center;gap:5px;">
     <button type="button" onclick="rxStep('${id}',-1)" style="${btnStyle}">−</button>
     <input id="${id}" type="text" inputmode="decimal"
@@ -2895,7 +2919,7 @@ function venteForm(data){
   <input type="hidden" id="v-versements-json" value="${escapeAttr(d.versements||'[]')}">
   <input type="hidden" id="v-avance" value="${escapeAttr(d.avance||'0')}">
 </div>
-          <div class="field" id="wrap-bon" style="display:none;"><label>Bon non encaissé <span style="font-weight:400;color:#DC2626;font-size:11px;font-weight:600;">* obligatoire</span></label><input type="number" min="1" step="500" id="v-bon" value="${escapeAttr(!isPasAssurance(d.assurance) && (d.montantBonNonEncaisse===''||d.montantBonNonEncaisse==null) ? '' : d.montantBonNonEncaisse)}" placeholder="ex: 50000" oninput="calcVenteReste()"></div>
+          <div class="field" id="wrap-bon" style="display:none;"><label>Bon non encaissé <span style="font-weight:400;color:#9a998f;font-size:11px;">(si assurance)</span></label><input type="number" min="0" step="500" id="v-bon" value="${escapeAttr(d.montantBonNonEncaisse)}" oninput="calcVenteReste()"></div>
           <div class="field" style="background:#fdf0ee;border-radius:8px;padding:8px;" id="wrap-reste">
             <label style="color:#A6402E;font-weight:600;">Reste à payer</label>
             <input type="text" id="v-reste-display" readonly style="font-weight:700;font-size:18px;color:#A6402E;background:transparent;border:none;cursor:default;" value="0 FCFA">
@@ -3022,7 +3046,7 @@ function renderReunion(){
         <text x="${x+bw/2}" y="${H-2}" text-anchor="middle" font-size="9" fill="var(--ink)" opacity=".6">${d.label}</text>
         ${showLabels && isLast ? `<text x="${x+bw/2}" y="${y-3}" text-anchor="middle" font-size="9" fill="${color}" font-weight="700">${fmtFCFA(d.ca)}</text>` : ''}`;
     }).join('');
-    return `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" style="display:block;">${bars}</svg>`;
+    return `<svg viewBox="0 0 ${W} ${H}" style="display:block;width:100%;max-width:${W}px;height:auto;">${bars}</svg>`;
   }
 
   function miniSparkline(vals, color='#E8A93B'){
@@ -3030,7 +3054,7 @@ function renderReunion(){
     const max=Math.max(...vals,1), min=0;
     const W=80,H=24,pad=3;
     const pts = vals.map((v,i)=>`${pad+i*(W-2*pad)/(vals.length-1)},${H-pad-(v-min)/(max-min||1)*(H-2*pad)}`).join(' ');
-    return `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" style="display:block;"><polyline points="${pts}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/></svg>`;
+    return `<svg viewBox="0 0 ${W} ${H}" style="display:block;width:${W}px;height:${H}px;flex-shrink:0;"><polyline points="${pts}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/></svg>`;
   }
 
   function badge(txt, color, bg){ return `<span style="display:inline-block;padding:2px 8px;border-radius:12px;font-size:10.5px;font-weight:700;background:${bg};color:${color};white-space:nowrap;">${txt}</span>`; }
@@ -3120,7 +3144,7 @@ function renderReunion(){
           <text x="${x+bw/2}" y="${H-10}" text-anchor="middle" font-size="9.5" fill="var(--ink)" font-weight="${isLast?700:400}">${s.label}</text>
           ${s.ca>0?`<text x="${x+bw/2}" y="${y-5}" text-anchor="middle" font-size="9" fill="${isLast?'#E8A93B':'#888'}" font-weight="600">${(s.ca/1000).toFixed(0)}k</text>`:''}`;
       });
-      return `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" style="max-width:100%;">${svgBars}</svg>`;
+      return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;max-width:${W}px;height:auto;display:block;">${svgBars}</svg>`;
     })()}
     <div style="margin-left:auto;text-align:right;font-size:11px;color:#888;">
       <div style="font-weight:700;color:var(--ink);font-size:13px;">${fmtFCFA(totalCaSem)}</div>
@@ -3132,7 +3156,7 @@ function renderReunion(){
 
 <!-- ② PERFORMANCE PAR COMMERCIAL -->
 <div style="font-size:11px;font-weight:700;color:#4A87AC;text-transform:uppercase;letter-spacing:.06em;margin:0 0 10px;">② Performance individuelle</div>
-<div class="panel" style="padding:0;overflow:hidden;margin-bottom:20px;">
+<div class="panel" style="padding:0;overflow-x:auto;margin-bottom:20px;">
   <table style="width:100%;border-collapse:collapse;font-size:13px;">
     <thead>
       <tr style="background:var(--sand-light);">
@@ -3898,7 +3922,7 @@ function renderJournee(){
     }
     return `
     <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--line);gap:12px;flex-wrap:wrap;">
-      <div style="flex:1;min-width:180px;">
+      <div style="flex:1;min-width:140px;">
         <div style="font-weight:600;font-size:14px;">${escapeHtml(client)}</div>
         <div style="font-size:12px;color:#888;margin-top:2px;">
           ${escapeHtml(v.typeArticle||'')} · ${escapeHtml(v.businessUnit||'')}
@@ -4580,23 +4604,27 @@ window.updateBadgeTypeVerre = function(){
 };
 
 window.autoOgAdd = function(val){
-  // OD → OG : toujours copier (les deux additions doivent être identiques)
+  // OD → OG : copie si OG est vide ou avait été auto-rempli depuis OD
   const ogAdd = document.getElementById('v-og-add');
   const hint = document.getElementById('og-add-hint');
   if(!ogAdd) return;
-  ogAdd.value = val;
-  ogAdd.dataset.autoFilled = val ? 'od' : '';
-  if(hint) hint.textContent = val ? '= OD' : '';
+  if(!ogAdd.value || ogAdd.dataset.autoFilled==='od'){
+    ogAdd.value = val;
+    ogAdd.dataset.autoFilled = val ? 'od' : '';
+    if(hint) hint.textContent = val ? '↑ copié depuis OD' : '';
+  }
   updateBadgeTypeVerre();
 };
 window.autoOdAdd = function(val){
-  // OG → OD : toujours copier (les deux additions doivent être identiques)
+  // OG → OD : copie si OD est vide ou avait été auto-rempli depuis OG
   const odAdd = document.getElementById('v-od-add');
   const hint = document.getElementById('og-add-hint');
   if(!odAdd) return;
-  odAdd.value = val;
-  odAdd.dataset.autoFilled = val ? 'og' : '';
-  if(hint) hint.textContent = val ? '= OG' : '';
+  if(!odAdd.value || odAdd.dataset.autoFilled==='og'){
+    odAdd.value = val;
+    odAdd.dataset.autoFilled = val ? 'og' : '';
+    if(hint) hint.textContent = val ? '↑ copié depuis OG' : '';
+  }
   updateBadgeTypeVerre();
 };
 
@@ -5674,7 +5702,7 @@ function renderAnalyse(){
     }).join('');
     const legend = data.map((d,i)=>`<div style="display:flex;align-items:center;gap:6px;font-size:12px;margin-bottom:4px;"><span style="width:12px;height:12px;border-radius:2px;background:${COLORS[i%COLORS.length]};flex-shrink:0;"></span><span style="color:#555;">${escapeHtml(d[0])}</span><span style="margin-left:auto;font-weight:600;">${Math.round(d[1]/total*100)}%</span></div>`).join('');
     return `<div style="display:flex;align-items:center;gap:20px;">
-      <svg viewBox="0 0 140 140" style="width:140px;height:140px;flex-shrink:0;">${slices}</svg>
+      <svg viewBox="0 0 140 140" style="width:min(140px,35vw);height:min(140px,35vw);flex-shrink:0;">${slices}</svg>
       <div style="flex:1;">${legend}</div>
     </div>`;
   }
@@ -5887,7 +5915,7 @@ function renderAnalyse(){
   </div>
 
   <!-- LIGNE 2 : TYPE + BOUTIQUE -->
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+  <div class="an-two-col" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
     <div class="panel">
       <h3 style="margin-bottom:14px;">Répartition par type d'article</h3>
       ${svgDonut(typesOrder)}
@@ -5907,7 +5935,7 @@ function renderAnalyse(){
 
   <!-- APPORTEURS D'AFFAIRES -->
   <div class="panel">
-    <h3 style="margin-bottom:16px;">🤝 Apporteurs d'affaires <span style="font-size:13px;font-weight:400;color:#9AA0B2;margin-left:8px;">${ventesApporteurs.length} vente(s) · ${fmtFCFA(caApporteurTotal)} total</span></h3>
+    <h3 style="margin-bottom:16px;display:flex;align-items:baseline;flex-wrap:wrap;gap:4px;">🤝 Apporteurs d'affaires <span style="font-size:12px;font-weight:400;color:#9AA0B2;">${ventesApporteurs.length} vente(s) · ${fmtFCFA(caApporteurTotal)} total</span></h3>
     ${apporteursOrder.length === 0 ? `
     <div style="text-align:center;padding:24px 0;color:#9AA0B2;font-size:14px;">
       <div style="font-size:28px;margin-bottom:8px;">🤝</div>
@@ -5918,13 +5946,13 @@ function renderAnalyse(){
         const maxCa = apporteursOrder[0][1].ca||1;
         const pct = Math.round(data.ca/maxCa*100);
         return `<div>
-          <div style="display:flex;justify-content:space-between;align-items:baseline;font-size:13px;margin-bottom:5px;">
-            <div style="display:flex;align-items:center;gap:8px;">
-              <span style="width:28px;height:28px;border-radius:50%;background:#1B2340;color:#C8830A;display:inline-flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0;">${escapeHtml(nom.slice(0,2).toUpperCase())}</span>
-              <span style="font-weight:600;color:#1B2340;">${escapeHtml(nom)}</span>
-              <span style="font-size:11px;color:#9AA0B2;">${data.nb} vente${data.nb>1?'s':''}</span>
+          <div class="ap-row" style="display:flex;justify-content:space-between;align-items:center;font-size:13px;margin-bottom:5px;gap:6px;flex-wrap:wrap;">
+            <div style="display:flex;align-items:center;gap:6px;min-width:0;flex:1;">
+              <span style="width:26px;height:26px;border-radius:50%;background:#1B2340;color:#C8830A;display:inline-flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;flex-shrink:0;">${escapeHtml(nom.slice(0,2).toUpperCase())}</span>
+              <span style="font-weight:600;color:#1B2340;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;">${escapeHtml(nom)}</span>
+              <span style="font-size:10px;color:#9AA0B2;white-space:nowrap;flex-shrink:0;">${data.nb}v</span>
             </div>
-            <span style="font-weight:700;color:#C8830A;font-variant-numeric:tabular-nums;">${fmtFCFA(data.ca)}</span>
+            <span class="ap-montant" style="font-weight:700;color:#C8830A;font-variant-numeric:tabular-nums;white-space:nowrap;flex-shrink:0;font-size:13px;">${fmtFCFA(data.ca)}</span>
           </div>
           <div style="background:#E2E5EC;border-radius:4px;height:8px;overflow:hidden;">
             <div style="background:linear-gradient(90deg,#1B2340,#C8830A);height:100%;width:${pct}%;border-radius:4px;transition:width .5s;"></div>
@@ -5971,7 +5999,7 @@ function renderAnalyse(){
     <h3 style="margin-bottom:18px;">🎯 Mes objectifs ${anneeN}</h3>
     ${!user?`<div style="border:2px dashed #E2E5EC;text-align:center;padding:28px;color:#9AA0B2;border-radius:8px;"><div style="font-size:32px;margin-bottom:8px;">🎯</div><div style="font-weight:600;margin-bottom:4px;">Aucun objectif défini</div><div style="font-size:13px;">La directrice peut fixer vos objectifs dans Gestion comptes.</div></div>`:`
     <!-- KPI tiles objectifs -->
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:22px;">
+    <div class="an-two-col" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:22px;">
       <!-- Mois en cours -->
       <div style="background:#F5F6F8;border:1px solid #E2E5EC;border-radius:10px;padding:16px 18px;">
         <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#C8830A;margin-bottom:6px;">${MOIS[moisIdx].toUpperCase()} ${anneeN}</div>
@@ -6989,21 +7017,6 @@ function attachModalEvents(){
       // Tout ok : supprimer les contours rouges
       rxFieldsAll.forEach(f=>{ const el=document.getElementById(f.id); if(el) el.style.outline=''; });
     }
-
-    // Validation bon non encaissé : obligatoire si assurance
-    const assuranceVal = val('v-assurance');
-    if(!isPasAssurance(assuranceVal)){
-      const bonVal = Number(val('v-bon'));
-      if(!bonVal || bonVal <= 0){
-        const inputBon = document.getElementById('v-bon');
-        if(inputBon){ inputBon.style.outline = '2px solid #DC2626'; inputBon.focus(); inputBon.scrollIntoView({behavior:'smooth',block:'center'}); }
-        showToast('⚠️ Veuillez saisir le montant du bon non encaissé (assurance obligatoire).');
-        return;
-      }
-      const inputBon = document.getElementById('v-bon');
-      if(inputBon) inputBon.style.outline = '';
-    }
-
     const obj = {
       id,
       dateMiseEnRelation: val('v-date') || todayISO(),
@@ -7044,8 +7057,8 @@ function attachModalEvents(){
       laboratoire: val('v-labo') || (existing&&existing.laboratoire)||'',
       laboratoireAutre: val('v-labo-autre').trim() || (existing&&existing.laboratoireAutre)||'',
       caracteristiqueVerre: val('v-carac-verre').trim() || (existing&&existing.caracteristiqueVerre)||'',
-      montantAchatSpray: val('v-spray'), montantVenteEtui: val('v-etui'), montantVenteEssuieVerre: val('v-essuie'),
-      prixVenteMontureAcc: val('v-monture-acc'), remiseAcc: val('v-remise-acc'),
+      // montantAchatSpray, montantVenteEtui, montantVenteEssuieVerre, prixVenteMontureAcc, remiseAcc
+      // → sérialisés dans versements[type:'acc'] — pas de colonnes Supabase pour ces champs
       prixVenteMonture: val('v-prix-monture'), prixVenteLentilles: val('v-prix-lentilles'),
       prixVenteLentilles2e: val('v-prix-lentilles-2e'), prixVenteMonture2e: val('v-prix-monture-2e'),
       prixVenteTotalSansRemise: val('v-prix-total'), remise: val('v-remise'),
@@ -7059,11 +7072,11 @@ function attachModalEvents(){
         }
         if(typeArt==='Accessoires'){
           const enc = val('v-acc-encaisse'); const mode = val('v-acc-mode'); const datep = val('v-acc-date-paiement');
-          // Calculer et stocker le total pour pouvoir l'afficher même si les sous-champs sont vides
+          // Stocker les sous-champs Accessoires dans versements (colonnes absentes de Supabase)
           const spray=Number(val('v-spray'))||0, etui=Number(val('v-etui'))||0, essuie=Number(val('v-essuie'))||0;
           const monture=Number(val('v-monture-acc'))||0, remise=Number(val('v-remise-acc'))||0;
           const accTotal = Math.max(0, monture - remise + spray + etui + essuie);
-          return JSON.stringify([{type:'acc', encaisse: Number(enc)||0, mode: mode||'Espèces', date: datep||todayISO(), total: accTotal}]);
+          return JSON.stringify([{type:'acc', encaisse: Number(enc)||0, mode: mode||'Espèces', date: datep||todayISO(), total: accTotal, spray, etui, essuie, monture, remise}]);
         }
         const vj=document.getElementById('v-versements-json')?.value||'[]'; return vj;
       })(),
@@ -7078,11 +7091,19 @@ function attachModalEvents(){
       commercial: (existing && existing.commercial) || state.commercial,
       dateCreation: (existing && existing.dateCreation) || todayISO()
     };
+    // Enrichir obj en mémoire avec les sous-champs Accessoires (tirés de versements, non envoyés à Supabase)
+    if(obj.typeArticle==='Accessoires'){
+      let vers=[]; try{vers=JSON.parse(obj.versements||'[]');}catch(e){}
+      const a=Array.isArray(vers)?vers.find(v=>v.type==='acc'):null;
+      if(a){ obj.montantAchatSpray=String(a.spray||0); obj.montantVenteEtui=String(a.etui||0); obj.montantVenteEssuieVerre=String(a.essuie||0); obj.prixVenteMontureAcc=String(a.monture||0); obj.remiseAcc=String(a.remise||0); }
+    }
     const idx = DB.ventes.findIndex(v=>v.id===id);
     if(idx>=0) DB.ventes[idx]=obj; else DB.ventes.unshift(obj);
 
+    // Préparer le payload Supabase sans les champs non existants en base
+    const {montantAchatSpray:_s, montantVenteEtui:_e, montantVenteEssuieVerre:_ev, prixVenteMontureAcc:_p, remiseAcc:_r, ...objSupabase} = obj;
     try{
-      await apiUpsert('ventes', obj);
+      await apiUpsert('ventes', objSupabase);
 
       // Synchronise avec la fiche client : retrouve ou crée le client, ajoute l'achat à son historique
       let client = null;
@@ -7484,25 +7505,22 @@ async function soumettreRDV() {
 <!-- ===== SERVICE WORKER REGISTRATION ===== -->
 <script>
 if ('serviceWorker' in navigator) {
-  // Désinstaller tout ancien Service Worker pour éviter les problèmes de cache
+  // Désinstaller TOUS les Service Workers et vider leurs caches
   navigator.serviceWorker.getRegistrations().then(regs => {
     for (const reg of regs) {
       reg.unregister();
-      console.log('[PWA] Service Worker désinstallé (cache forcé)');
+      console.log('[PWA] Service Worker désinstallé');
     }
   });
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/Jericho-optique5/sw.js', { scope: '/Jericho-optique5/' })
-      .then(reg => {
-        console.log('[PWA] Service Worker enregistré ✅', reg.scope);
-        // Forcer la mise à jour immédiate
-        reg.update();
-        setInterval(() => reg.update(), 3600000);
-      })
-      .catch(err => {
-        console.warn('[PWA] Service Worker non enregistré:', err);
-      });
-  });
+  // Vider tous les caches du navigateur
+  if ('caches' in window) {
+    caches.keys().then(names => {
+      for (const name of names) {
+        caches.delete(name);
+        console.log('[PWA] Cache supprimé:', name);
+      }
+    });
+  }
 
   // Prompt d'installation Android
   let deferredPrompt = null;
