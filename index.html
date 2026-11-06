@@ -871,7 +871,7 @@ var state = {
   primesMois: new Date().getMonth(),
   pages: { clients: 1, prospects: 1, ventes: 1, tickets: 1 },
   primesAnnee: new Date().getFullYear(),
-  filters: { prospects:{statut:'', boutique:'', q:''}, clients:{boutique:'', q:''}, sav:{statut:'', boutique:'', q:''}, stock:{boutique:'', categorie:'', q:''}, ventes:{boutique:'', typeArticle:'', q:'', periode:'mois'}, tickets:{q:'',statut:'',type:'',assigne:''} },
+  filters: { prospects:{statut:'', boutique:'', q:''}, clients:{boutique:'', q:''}, sav:{statut:'', boutique:'', q:''}, stock:{boutique:'', categorie:'', q:''}, ventes:{boutique:'', typeArticle:'', q:'', periode:'mois', periodeDebut:'', periodeFin:'', gestionnaire:'', apporteur:''}, tickets:{q:'',statut:'',type:'',assigne:''} },
   modal: null,
 };
 
@@ -2221,13 +2221,13 @@ function renderVentes(){
   // Commerciaux : limités à l'année en cours max
   if(!isAdmin() && f.periode === 'tout') { f.periode = 'annee'; }
   const now = new Date();
-  const today = now.toISOString().slice(0,10);
+  const todayStr = now.toISOString().slice(0,10);
   const annee = now.getFullYear();
   const moisIdx = now.getMonth();
 
   // Période par défaut : mois en cours
   if(!f.periode) f.periode = 'mois';
-  let debutPeriode = '';
+  let debutPeriode = '', finPeriode = todayStr;
   if(f.periode==='mois') debutPeriode = `${annee}-${String(moisIdx+1).padStart(2,'0')}-01`;
   else if(f.periode==='annee') debutPeriode = `${annee}-01-01`;
   else if(f.periode==='semaine'){
@@ -2235,13 +2235,26 @@ function renderVentes(){
     debutPeriode = d.toISOString().slice(0,10);
   }
   else if(f.periode==='tout') debutPeriode = '';
+  else if(f.periode==='custom'){
+    debutPeriode = f.periodeDebut || '';
+    finPeriode = f.periodeFin || todayStr;
+  }
+
+  // Liste commerciaux pour filtre gestionnaire
+  const commerciauxList = USERS_CACHE.filter(u=>u.actif==='oui'&&u.role!=='admin').sort((a,b)=>a.nom.localeCompare(b.nom));
+  // Liste apporteurs uniques
+  const tousApporteurs = [...new Set(DB.ventes.filter(v=>aApporteur(v)).map(v=>getApporteurNom(v)).filter(Boolean))].sort();
 
   if(!state.pages) state.pages={clients:1,prospects:1,ventes:1,tickets:1};
   let rowsAll = DB.ventes.filter(v=>{
-    if(!isAdmin() && v.gestionnaire !== state.commercial) return false; // CA = gestionnaire
-    if(debutPeriode && (v.dateMiseEnRelation||'').slice(0,10) < debutPeriode) return false;
+    if(!isAdmin() && v.gestionnaire !== state.commercial) return false;
+    const vd = (v.dateMiseEnRelation||'').slice(0,10);
+    if(debutPeriode && vd < debutPeriode) return false;
+    if(f.periode==='custom' && f.periodeFin && vd > finPeriode) return false;
     if(f.boutique && v.businessUnit!==f.boutique) return false;
     if(f.typeArticle && v.typeArticle!==f.typeArticle) return false;
+    if(f.gestionnaire && v.gestionnaire!==f.gestionnaire) return false;
+    if(f.apporteur && getApporteurNom(v)!==f.apporteur) return false;
     if(f.q){
       const q = f.q.toLowerCase();
       const hay = `${v.nom} ${v.prenom||''} ${v.telephone||''}`.toLowerCase();
@@ -2255,37 +2268,45 @@ function renderVentes(){
   state.pages.ventes = pageV;
   const rows = rowsAll.slice((pageV-1)*PS_VENTES, pageV*PS_VENTES);
 
-  // CA = ventes sans apporteur uniquement ; les ventes avec apporteur sont visibles mais hors CA perso
+  // CA = ventes sans apporteur uniquement
   const caTotal = rowsAll.filter(v=>!aApporteur(v)).reduce((a,v)=>a+venteTotal(v),0);
   const caTotalApporteur = rowsAll.filter(v=>aApporteur(v)).reduce((a,v)=>a+venteTotal(v),0);
   const resteTotal = rowsAll.reduce((a,v)=>a+venteReste(v),0);
-  const periodeLabel = {mois:'Ce mois', semaine:'Cette semaine', annee:'Cette année', tout:'Tout l\'historique'};
+  const periodeLabels = {mois:'Ce mois', semaine:'Cette semaine', annee:'Cette année', tout:'Tout l\'historique', custom:'Période personnalisée'};
+  const periodeLabel = periodeLabels[f.periode] || 'Ce mois';
   const titre = isAdmin() ? 'Toutes les ventes' : `Mes ventes : ${escapeHtml(state.commercial)}`;
+  const hasFiltre = !!(f.gestionnaire||f.apporteur||(f.periode==='custom'));
 
   return `
   <div class="main-head">
-    <div><h2>Ventes</h2><p>${titre} · ${periodeLabel[f.periode]}</p></div>
+    <div><h2>Ventes</h2><p>${titre} · ${periodeLabel}</p></div>
     <button class="btn-sm" id="btn-new-vente">+ Nouvelle vente</button>
   </div>
 
   <!-- Filtre période -->
-  <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
-    ${['semaine','mois','annee',...(isAdmin()?['tout']:[])].map(p=>`
-      <button onclick="state.filters.ventes.periode=\`${p}\`;render();"
-        style="padding:6px 14px;border-radius:16px;border:2px solid ${f.periode===p?'#E8A93B':'#ddd'};background:${f.periode===p?'#E8A93B':'#fff'};color:${f.periode===p?'#26282B':'#666'};font-weight:${f.periode===p?'700':'400'};font-size:12px;cursor:pointer;">
-        ${{semaine:'Cette semaine',mois:'Ce mois',annee:'Cette année',tout:'Tout l\'historique'}[p]}
+  <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;align-items:center;">
+    ${['semaine','mois','annee',...(isAdmin()?['tout']:[]),'custom'].map(p=>`
+      <button onclick="state.filters.ventes.periode='${p}';state.pages.ventes=1;render();"
+        style="padding:6px 14px;border-radius:16px;border:2px solid ${f.periode===p?'#E8A93B':'#ddd'};background:${f.periode===p?'#E8A93B':'#fff'};color:${f.periode===p?'#26282B':'#666'};font-weight:${f.periode===p?700:400};font-size:12px;cursor:pointer;white-space:nowrap;">
+        ${{semaine:'Cette semaine',mois:'Ce mois',annee:'Cette année',tout:'Tout l\'historique',custom:'Personnalisé'}[p]}
       </button>`).join('')}
+    ${f.periode==='custom'?`
+      <input type="date" value="${f.periodeDebut||''}" onchange="state.filters.ventes.periodeDebut=this.value;state.pages.ventes=1;render();"
+        style="padding:5px 8px;border:1px solid #ddd;border-radius:8px;font-size:12px;">
+      <span style="font-size:12px;color:#888;">→</span>
+      <input type="date" value="${f.periodeFin||''}" onchange="state.filters.ventes.periodeFin=this.value;state.pages.ventes=1;render();"
+        style="padding:5px 8px;border:1px solid #ddd;border-radius:8px;font-size:12px;">`:''}
   </div>
 
   <div class="kpi-row">
-    <div class="kpi"><div class="lbl">Ventes</div><div class="val">${totalVentes}</div><div class="sub">${periodeLabel[f.periode]}</div></div>
-    <div class="kpi"><div class="lbl">Mon CA ${periodeLabel[f.periode].toLowerCase()}</div><div class="val" style="font-size:${caTotal>9999999?'16px':'22px'};">${fmtFCFA(caTotal)}</div>${!isAdmin()&&caTotalApporteur>0?`<div class="sub" style="color:#888;">+ ${fmtFCFA(caTotalApporteur)} apporteurs (hors CA)</div>`:''}
+    <div class="kpi"><div class="lbl">Ventes</div><div class="val">${totalVentes}</div><div class="sub">${periodeLabel}</div></div>
+    <div class="kpi"><div class="lbl">${isAdmin()?'CA total':'Mon CA'} ${periodeLabel.toLowerCase()}</div><div class="val" style="font-size:${caTotal>9999999?'16px':'22px'};">${fmtFCFA(caTotal)}</div>${caTotalApporteur>0?`<div class="sub" style="color:#888;">+ ${fmtFCFA(caTotalApporteur)} apporteurs</div>`:''}
     </div>
     <div class="kpi ${resteTotal>0?'warn':''}"><div class="lbl">Reste à encaisser</div><div class="val" style="font-size:${resteTotal>9999999?'16px':'22px'};">${fmtFCFA(resteTotal)}</div></div>
   </div>
 
-  <div class="toolbar">
-    <input type="text" id="f-vente-q" placeholder="Rechercher nom, prénom ou contact..." value="${escapeHtml(f.q)}">
+  <div class="toolbar" style="flex-wrap:wrap;gap:8px;">
+    <input type="text" id="f-vente-q" placeholder="Rechercher nom, prénom ou contact..." value="${escapeHtml(f.q)}" style="min-width:160px;">
     <select id="f-vente-boutique">
       <option value="">Toutes les boutiques</option>
       ${BOUTIQUES.map(b=>`<option ${f.boutique===b?'selected':''}>${b}</option>`).join('')}
@@ -2294,7 +2315,17 @@ function renderVentes(){
       <option value="">Tous les articles</option>
       ${TYPES_ARTICLE.map(t=>`<option ${f.typeArticle===t?'selected':''}>${t}</option>`).join('')}
     </select>
+    ${isAdmin()?`
+    <select id="f-vente-gestionnaire" onchange="state.filters.ventes.gestionnaire=this.value;state.pages.ventes=1;render();">
+      <option value="">Tous les gestionnaires</option>
+      ${commerciauxList.map(u=>`<option value="${escapeAttr(u.nom)}" ${f.gestionnaire===u.nom?'selected':''}>${escapeHtml(u.nom)}</option>`).join('')}
+    </select>
+    <select id="f-vente-apporteur" onchange="state.filters.ventes.apporteur=this.value;state.pages.ventes=1;render();">
+      <option value="">Tous les apporteurs</option>
+      ${tousApporteurs.map(a=>`<option value="${escapeAttr(a)}" ${f.apporteur===a?'selected':''}>${escapeHtml(a)}</option>`).join('')}
+    </select>`:''}
     <div class="spacer"></div>
+    ${hasFiltre?`<button onclick="state.filters.ventes.gestionnaire='';state.filters.ventes.apporteur='';state.filters.ventes.periode='mois';state.filters.ventes.periodeDebut='';state.filters.ventes.periodeFin='';state.pages.ventes=1;render();" style="padding:5px 10px;border-radius:12px;border:1px solid #ccc;background:transparent;color:#888;font-size:11px;cursor:pointer;white-space:nowrap;">✕ Réinitialiser</button>`:''}
     ${isAdmin() ? '<button class="btn-sm btn-ghost" id="btn-export-ventes">Exporter en CSV</button>' : ''}
   </div>
 
