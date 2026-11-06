@@ -863,6 +863,11 @@ var state = {
   analysePeriode: 'annee',
   analyseDebut: '',
   analyseFin: '',
+  reunionPeriode: 'semaine', // 'semaine' | 'semaine_prec' | 'mois' | 'custom'
+  reunionDebut: '',
+  reunionFin: '',
+  reunionGestionnaire: '', // '' = tous
+  reunionApporteur: '',    // '' = tous
   primesMois: new Date().getMonth(),
   pages: { clients: 1, prospects: 1, ventes: 1, tickets: 1 },
   primesAnnee: new Date().getFullYear(),
@@ -2178,6 +2183,7 @@ function aApporteur(v){
   const a = (v.apporteurAffaire||'').trim();
   return a !== '' && a !== 'Autre';
 }
+function getApporteurNom(v){ return (v.apporteurAffaire||'').trim(); }
 // Filtre à appliquer sur les ventes d'un commercial : exclut les ventes avec apporteur
 function ventesCommercial(ventes, nom){
   return ventes.filter(v => v.gestionnaire === nom && !aApporteur(v));
@@ -2945,32 +2951,53 @@ function venteForm(data){
    ========================================================= */
 function renderReunion(){
   const now = new Date();
-  const today = now.toISOString().slice(0,10);
+  const todayReal = now.toISOString().slice(0,10);
   const annee = now.getFullYear();
   const moisIdx = now.getMonth();
 
   // Semaine en cours (lundi → aujourd'hui)
   const lundiSem = new Date(now);
   lundiSem.setDate(now.getDate() - (now.getDay()===0?6:now.getDay()-1));
-  const debutSem = lundiSem.toISOString().slice(0,10);
+  const debutSemCourant = lundiSem.toISOString().slice(0,10);
   // Semaine précédente
   const lundiPrec = new Date(lundiSem); lundiPrec.setDate(lundiPrec.getDate()-7);
   const dimPrec = new Date(lundiSem); dimPrec.setDate(dimPrec.getDate()-1);
   const debutSemPrec = lundiPrec.toISOString().slice(0,10);
   const finSemPrec = dimPrec.toISOString().slice(0,10);
   // Mois en cours
-  const debutMois = `${annee}-${String(moisIdx+1).padStart(2,'0')}-01`;
+  const debutMoisCourant = `${annee}-${String(moisIdx+1).padStart(2,'0')}-01`;
+
+  // --- Période selon filtre ---
+  const rp = state.reunionPeriode || 'semaine';
+  let debutSem, today, debutMois;
+  if(rp==='semaine'){
+    debutSem = debutSemCourant; today = todayReal; debutMois = debutMoisCourant;
+  } else if(rp==='semaine_prec'){
+    debutSem = debutSemPrec; today = finSemPrec; debutMois = debutSemPrec.slice(0,7)+'-01';
+  } else if(rp==='mois'){
+    debutSem = debutMoisCourant; today = todayReal; debutMois = debutMoisCourant;
+  } else if(rp==='custom'){
+    debutSem = state.reunionDebut || debutSemCourant;
+    today = state.reunionFin || todayReal;
+    debutMois = debutSem.slice(0,7)+'-01';
+  } else {
+    debutSem = debutSemCourant; today = todayReal; debutMois = debutMoisCourant;
+  }
 
   const ventesToutes = DB.ventes;
   const venteSem = v => (v.dateMiseEnRelation||'').slice(0,10) >= debutSem && (v.dateMiseEnRelation||'').slice(0,10) <= today;
   const ventePrecSem = v => (v.dateMiseEnRelation||'').slice(0,10) >= debutSemPrec && (v.dateMiseEnRelation||'').slice(0,10) <= finSemPrec;
-  const venteMois = v => (v.dateMiseEnRelation||'').slice(0,10) >= debutMois;
+  const venteMois = v => (v.dateMiseEnRelation||'').slice(0,10) >= debutMois && (v.dateMiseEnRelation||'').slice(0,10) <= today;
 
   // Commerciaux actifs
   const commerciaux = USERS_CACHE.filter(u=>u.actif==='oui' && u.role!=='admin').sort((a,b)=>a.nom.localeCompare(b.nom));
+  // Filtre gestionnaire
+  const filtreGest = state.reunionGestionnaire || '';
+  const filtreAp = state.reunionApporteur || '';
 
-  // Données par commercial
-  const dataCommerciaux = commerciaux.map(u=>{
+  // Données par commercial (filtré par gestionnaire si sélectionné)
+  const commerciauxFiltres = filtreGest ? commerciaux.filter(u=>u.nom===filtreGest) : commerciaux;
+  const dataCommerciaux = commerciauxFiltres.map(u=>{
     const nom = u.nom;
     // Exclut les ventes avec apporteur d'affaire (CA attribué à l'apporteur)
     const vSem = ventesToutes.filter(v=>v.gestionnaire===nom && !aApporteur(v) && venteSem(v));
@@ -3001,8 +3028,9 @@ function renderReunion(){
   const totalCaMois = dataCommerciaux.reduce((a,d)=>a+d.caMois,0);
   const totalObjMois = dataCommerciaux.reduce((a,d)=>a+d.objMois,0);
   // CA des apporteurs d'affaire (séparé du CA commercial)
-  const caApporteursSem = ventesToutes.filter(v=>aApporteur(v)&&venteSem(v)).reduce((a,v)=>a+venteTotal(v),0);
-  const caApporteursMois = ventesToutes.filter(v=>aApporteur(v)&&venteMois(v)).reduce((a,v)=>a+venteTotal(v),0);
+  const ventesApporteursFiltrees = ventesToutes.filter(v=>aApporteur(v)&&venteSem(v)&&(filtreAp===''||getApporteurNom(v)===filtreAp));
+  const caApporteursSem = ventesApporteursFiltrees.reduce((a,v)=>a+venteTotal(v),0);
+  const caApporteursMois = ventesToutes.filter(v=>aApporteur(v)&&venteMois(v)&&(filtreAp===''||getApporteurNom(v)===filtreAp)).reduce((a,v)=>a+venteTotal(v),0);
   const totalPct = totalObjMois>0 ? Math.min(Math.round(totalCaMois/totalObjMois*100),150) : null;
   const evolGlobal = totalCaSemPrec>0 ? Math.round((totalCaSem-totalCaSemPrec)/totalCaSemPrec*100) : null;
 
@@ -3019,9 +3047,10 @@ function renderReunion(){
   }
   const maxSem6 = Math.max(...sem6.map(s=>s.ca), 1);
 
-  // CA par boutique cette semaine
+  // CA par boutique cette semaine (filtre gestionnaire si actif)
   const parBoutique = {};
-  ventesToutes.filter(v=>venteSem(v)&&!aApporteur(v)).forEach(v=>{const b=v.businessUnit||'?';parBoutique[b]=(parBoutique[b]||0)+venteTotal(v);});
+  ventesToutes.filter(v=>venteSem(v)&&!aApporteur(v)&&(filtreGest===''||v.gestionnaire===filtreGest)).forEach(v=>{const b=v.businessUnit||'?';parBoutique[b]=(parBoutique[b]||0)+venteTotal(v);});
+  const nbVentesSemFiltrees = ventesToutes.filter(v=>venteSem(v)&&(filtreGest===''||v.gestionnaire===filtreGest)).length;
 
   // Prospects non assignés
   const prospNonAssignes = DB.prospects.filter(p=>(p.source||'')==='Site web' && (!p.commercial||p.commercial===''));
@@ -3080,17 +3109,66 @@ function renderReunion(){
   const fmtDateFr = d => { if(!d) return '—'; const [y,m,j]=d.split('-'); return `${j}/${m}`; };
   const numSemaine = (()=>{ const d=new Date(debutSem); const j1=new Date(d.getFullYear(),0,1); return Math.ceil(((d-j1)/86400000+j1.getDay()+1)/7); })();
 
+  // Liste des apporteurs uniques dans les ventes
+  const tousApporteurs = [...new Set(DB.ventes.filter(v=>aApporteur(v)).map(v=>getApporteurNom(v)).filter(Boolean))].sort();
+
+  const periodLabel = rp==='semaine'?'Cette semaine':rp==='semaine_prec'?'Semaine préc.':rp==='mois'?'Ce mois':'Personnalisé';
+
   return `
-<div class="main-head" style="flex-direction:column;align-items:flex-start;gap:6px;">
+<div class="main-head" style="flex-direction:column;align-items:flex-start;gap:10px;">
   <div style="display:flex;align-items:center;justify-content:space-between;width:100%;flex-wrap:wrap;gap:12px;">
     <div>
       <h2 style="margin:0;">📋 Réunion hebdomadaire</h2>
-      <p style="margin:4px 0 0;color:#888;font-size:13px;">Semaine ${numSemaine} — du ${fmtDateFr(debutSem)} au ${fmtDateFr(today)} · ${MOIS[moisIdx]} ${annee}</p>
+      <p style="margin:4px 0 0;color:#888;font-size:13px;">Du ${fmtDateFr(debutSem)} au ${fmtDateFr(today)} · ${MOIS[moisIdx]} ${annee}</p>
     </div>
     <div style="display:flex;gap:10px;align-items:center;">
       <button onclick="window.print()" style="display:none;" id="btn-print-reunion">🖨️ Imprimer</button>
-      <div style="background:#E8A93B;color:#1a1a1a;padding:6px 14px;border-radius:20px;font-size:12px;font-weight:700;">Semaine S${numSemaine}</div>
+      <div style="background:#E8A93B;color:#1a1a1a;padding:6px 14px;border-radius:20px;font-size:12px;font-weight:700;">S${numSemaine}</div>
     </div>
+  </div>
+
+  <!-- BARRE DE FILTRES -->
+  <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;width:100%;padding:10px 14px;background:var(--sand-light);border-radius:10px;border:1px solid var(--line);">
+
+    <!-- Période -->
+    <div style="display:flex;gap:4px;flex-wrap:wrap;">
+      ${['semaine','semaine_prec','mois','custom'].map(p=>{
+        const labels={'semaine':'Cette semaine','semaine_prec':'Sem. préc.','mois':'Ce mois','custom':'Personnalisé'};
+        const active = rp===p;
+        return `<button onclick="state.reunionPeriode='${p}';render();" style="padding:5px 11px;border-radius:16px;border:1px solid ${active?'#E8A93B':'var(--line)'};background:${active?'#E8A93B':'var(--sand)'};color:${active?'#1a1a1a':'var(--ink)'};font-size:12px;font-weight:${active?700:500};cursor:pointer;white-space:nowrap;">${labels[p]}</button>`;
+      }).join('')}
+    </div>
+
+    <!-- Date pickers si personnalisé -->
+    ${rp==='custom'?`<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+      <input type="date" value="${state.reunionDebut||''}" onchange="state.reunionDebut=this.value;render();" style="padding:4px 8px;border:1px solid var(--line);border-radius:7px;font-size:12px;background:var(--sand);color:var(--ink);">
+      <span style="font-size:12px;color:#888;">→</span>
+      <input type="date" value="${state.reunionFin||''}" onchange="state.reunionFin=this.value;render();" style="padding:4px 8px;border:1px solid var(--line);border-radius:7px;font-size:12px;background:var(--sand);color:var(--ink);">
+    </div>`:''}
+
+    <!-- Séparateur -->
+    <div style="width:1px;height:24px;background:var(--line);flex-shrink:0;"></div>
+
+    <!-- Filtre gestionnaire -->
+    <div style="display:flex;align-items:center;gap:6px;">
+      <span style="font-size:11px;font-weight:600;color:#888;white-space:nowrap;">Gestionnaire :</span>
+      <select onchange="state.reunionGestionnaire=this.value;render();" style="padding:4px 8px;border:1px solid var(--line);border-radius:7px;font-size:12px;background:var(--sand);color:var(--ink);cursor:pointer;">
+        <option value="" ${filtreGest===''?'selected':''}>Tous</option>
+        ${commerciaux.map(u=>`<option value="${escapeAttr(u.nom)}" ${filtreGest===u.nom?'selected':''}>${escapeHtml(u.nom)}</option>`).join('')}
+      </select>
+    </div>
+
+    <!-- Filtre apporteur -->
+    <div style="display:flex;align-items:center;gap:6px;">
+      <span style="font-size:11px;font-weight:600;color:#888;white-space:nowrap;">Apporteur :</span>
+      <select onchange="state.reunionApporteur=this.value;render();" style="padding:4px 8px;border:1px solid var(--line);border-radius:7px;font-size:12px;background:var(--sand);color:var(--ink);cursor:pointer;">
+        <option value="" ${filtreAp===''?'selected':''}>Tous</option>
+        ${tousApporteurs.map(a=>`<option value="${escapeAttr(a)}" ${filtreAp===a?'selected':''}>${escapeHtml(a)}</option>`).join('')}
+      </select>
+    </div>
+
+    <!-- Reset -->
+    ${(filtreGest||filtreAp||rp!=='semaine')?`<button onclick="state.reunionPeriode='semaine';state.reunionGestionnaire='';state.reunionApporteur='';state.reunionDebut='';state.reunionFin='';render();" style="padding:4px 10px;border-radius:16px;border:1px solid #ccc;background:transparent;color:#888;font-size:11px;cursor:pointer;white-space:nowrap;">✕ Réinitialiser</button>`:''}
   </div>
 </div>
 
@@ -3110,7 +3188,7 @@ function renderReunion(){
   </div>
   <div class="kpi">
     <div class="lbl">Ventes semaine</div>
-    <div class="val">${ventesToutes.filter(venteSem).length}</div>
+    <div class="val">${nbVentesSemFiltrees}</div>
     <div class="sub">${Object.entries(parBoutique).map(([b,ca])=>`${escapeHtml(b)} : ${fmtFCFA(ca)}`).join(' · ')}</div>
   </div>
   <div class="kpi">
