@@ -863,6 +863,9 @@ var state = {
   analysePeriode: 'annee',
   analyseDebut: '',
   analyseFin: '',
+  caissePeriode: 'mois', // 'semaine' | 'mois' | 'annee' | 'custom'
+  caisseDebut: '',
+  caisseFin: '',
   reunionPeriode: 'semaine', // 'semaine' | 'semaine_prec' | 'mois' | 'custom'
   reunionDebut: '',
   reunionFin: '',
@@ -1613,6 +1616,7 @@ function renderTeam(){
         ${isAdmin() ? `<button data-tab="reunion" class="${state.teamTab==='reunion'?'active':''}">📋 Réunion</button>` : ''}
         ${isAdmin() ? `<button data-tab="admin" class="${state.teamTab==='admin'?'active':''}">Comptes</button>` : ''}
         ${isAdmin() ? `<button data-tab="paie" class="${state.teamTab==='paie'?'active':''}">💵 Paie</button>` : ''}
+        ${isAdmin() ? `<button data-tab="caisse" class="${state.teamTab==='caisse'?'active':''}">💳 Caisse</button>` : ''}
         <button data-tab="moncompte" class="${state.teamTab==='moncompte'?'active':''}">👤 Compte</button>
         <div class="out">
           <button id="btn-logout">⇄ Changer de compte</button>
@@ -1639,6 +1643,7 @@ function renderTeamTab(){
   if(state.teamTab==='primes') return renderPrimes();
   if(state.teamTab==='paie') return renderPaie();
   if(state.teamTab==='reunion') return isAdmin() ? renderReunion() : renderDashboard();
+  if(state.teamTab==='caisse') return isAdmin() ? renderCaisse() : renderDashboard();
   return '';
 }
 
@@ -4752,6 +4757,42 @@ window.autoOdAdd = function(val){
 
 
 // Créer automatiquement un ticket labo après une vente
+function creerTicketVersement(vente, vers){
+  const client = `${vente.civilite||''} ${vente.nom||''} ${vente.prenom||''}`.trim();
+  const montant = Number(vers.montant)||0;
+  const mode = vers.mode || 'Espèces';
+  const dateVers = vers.date || todayISO();
+  return {
+    id: 'tk_vers_' + Date.now() + '_' + Math.random().toString(36).slice(2,7),
+    type: '💰 Versement encaissé',
+    titre: `Versement ${fmtFCFA(montant)} — ${client}`,
+    description: [
+      `Client : ${client}`,
+      `Montant : ${fmtFCFA(montant)}`,
+      `Mode : ${mode}`,
+      `Date : ${fmtDate(dateVers)}`,
+      `Vente : ${vente.typeArticle||''}`,
+      `Boutique : ${vente.businessUnit||''}`,
+      `Saisi par : ${state.commercial}`,
+    ].join('\n'),
+    assigne: 'Directrice',
+    priorite: 'Normale',
+    statut: 'À faire',
+    clientNom: vente.nom||'',
+    clientPrenom: vente.prenom||'',
+    clientCivilite: vente.civilite||'',
+    clientTel: normTel(vente.telephone)||'',
+    boutique: vente.businessUnit||'',
+    dateCreation: todayISO(),
+    dateLimite: '',
+    venteId: vente.id,
+    creepar: state.commercial,
+    montantVersement: montant,
+    modeVersement: mode,
+    dateVersement: dateVers,
+  };
+}
+
 function creerTicketLabo(vente){
   if(!['Monture / Verres correcteurs','Lentilles de contact','Lentilles'].includes(vente.typeArticle)) return null;
   const ticket = {
@@ -5676,6 +5717,201 @@ function renderPagination(table, total, current, pageSize=10) {
       ).join('')
     + (current < nbPages ? '<button onclick="state.pages.'+table+'='+(current+1)+';render();" style="padding:6px 10px;border:1px solid #ddd;border-radius:6px;background:#fff;cursor:pointer;font-size:13px;">›</button>' : '')
     + '</div>';
+}
+
+/* =========================================================
+   CAISSE — COMPTES MIROIRS PAR MODE DE PAIEMENT
+   ========================================================= */
+function renderCaisse(){
+  const now = new Date();
+  const todayStr = now.toISOString().slice(0,10);
+  const annee = now.getFullYear();
+  const moisIdx = now.getMonth();
+
+  const cp = state.caissePeriode || 'mois';
+  let debut = '', fin = todayStr;
+  if(cp==='semaine'){
+    const d=new Date(now); d.setDate(d.getDate()-(d.getDay()===0?6:d.getDay()-1));
+    debut = d.toISOString().slice(0,10);
+  } else if(cp==='mois'){
+    debut = `${annee}-${String(moisIdx+1).padStart(2,'0')}-01`;
+  } else if(cp==='annee'){
+    debut = `${annee}-01-01`;
+  } else if(cp==='custom'){
+    debut = state.caisseDebut || '';
+    fin   = state.caisseFin   || todayStr;
+  }
+
+  const periodeLabels = {semaine:'Cette semaine', mois:'Ce mois', annee:'Cette année', custom:'Période personnalisée'};
+
+  // Collecter TOUS les versements de toutes les ventes dans la période
+  const MODES = ['Espèces','Moov Money','Orange Money','Chèque','Virement','Carte'];
+  const stats = {}; // { mode: { total, nb, clients: Set } }
+  MODES.forEach(m=>{ stats[m]={total:0,nb:0,clients:new Set()}; });
+  const autreStats = {total:0,nb:0,clients:new Set()};
+
+  // Versements tickets (type '💰 Versement encaissé') dans la période
+  const ticketsVers = DB.tickets.filter(t=>{
+    if(t.type!=='💰 Versement encaissé') return false;
+    const d=(t.dateVersement||t.dateCreation||'').slice(0,10);
+    if(debut && d<debut) return false;
+    if(fin   && d>fin)   return false;
+    return true;
+  });
+
+  // Aussi parcourir directement les versements dans DB.ventes pour la période
+  const ventesVers = [];
+  DB.ventes.forEach(v=>{
+    let vrs=[]; try{vrs=JSON.parse(v.versements||'[]');}catch(e){}
+    if(!Array.isArray(vrs)) return;
+    vrs.filter(vr=>vr.montant>0).forEach(vr=>{
+      const d=(vr.date||v.dateMiseEnRelation||'').slice(0,10);
+      if(debut && d<debut) return;
+      if(fin   && d>fin)   return;
+      ventesVers.push({
+        montant: Number(vr.montant)||0,
+        mode: vr.mode||'Espèces',
+        date: d,
+        client: `${v.civilite||''} ${v.nom||''} ${v.prenom||''}`.trim(),
+        boutique: v.businessUnit||'',
+        gestionnaire: v.gestionnaire||'',
+        venteId: v.id,
+      });
+    });
+    // Ajouter aussi l'avance initiale si elle n'est pas dans versements (ancien format)
+    if(vrs.length===0 && Number(v.avance)>0){
+      const d=(v.dateMiseEnRelation||'').slice(0,10);
+      if((!debut||d>=debut)&&(!fin||d<=fin)){
+        ventesVers.push({
+          montant: Number(v.avance),
+          mode: v.modePaiement||'Espèces',
+          date: d,
+          client: `${v.civilite||''} ${v.nom||''} ${v.prenom||''}`.trim(),
+          boutique: v.businessUnit||'',
+          gestionnaire: v.gestionnaire||'',
+          venteId: v.id,
+        });
+      }
+    }
+  });
+
+  // Agréger par mode
+  ventesVers.forEach(vr=>{
+    const mode = vr.mode || 'Espèces';
+    const s = stats[mode] || autreStats;
+    if(!stats[mode]) autreStats.total+=vr.montant, autreStats.nb++, autreStats.clients.add(vr.client);
+    else { s.total+=vr.montant; s.nb++; s.clients.add(vr.client); }
+  });
+
+  const totalGeneral = Object.values(stats).reduce((a,s)=>a+s.total,0) + autreStats.total;
+  const nbGeneral    = Object.values(stats).reduce((a,s)=>a+s.nb,0)    + autreStats.nb;
+
+  const modeIcons = {'Espèces':'💵','Moov Money':'📱','Orange Money':'🟠','Chèque':'📄','Virement':'🏦','Carte':'💳'};
+  const modeColors= {'Espèces':'#4F7942','Moov Money':'#276B3F','Orange Money':'#E8A93B','Chèque':'#4A87AC','Virement':'#6366f1','Carte':'#A6402E'};
+
+  // Lignes de détail des versements (pour tableau)
+  const lignesDetail = ventesVers.sort((a,b)=>b.date.localeCompare(a.date));
+
+  return `
+<div class="main-head" style="flex-direction:column;align-items:flex-start;gap:10px;">
+  <div style="display:flex;align-items:center;justify-content:space-between;width:100%;flex-wrap:wrap;gap:12px;">
+    <div>
+      <h2 style="margin:0;">💳 Caisse — Comptes miroirs</h2>
+      <p style="margin:4px 0 0;color:#888;font-size:13px;">${periodeLabels[cp]} · ${totalGeneral>0?fmtFCFA(totalGeneral)+' encaissés':' Aucun versement'}</p>
+    </div>
+  </div>
+
+  <!-- Filtre période -->
+  <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;width:100%;padding:10px 14px;background:var(--sand-light);border-radius:10px;border:1px solid var(--line);">
+    ${['semaine','mois','annee','custom'].map(p=>{
+      const labels={semaine:'Cette semaine',mois:'Ce mois',annee:'Cette année',custom:'Personnalisé'};
+      const active=cp===p;
+      return `<button onclick="state.caissePeriode='${p}';render();" style="padding:5px 11px;border-radius:16px;border:1px solid ${active?'#E8A93B':'var(--line)'};background:${active?'#E8A93B':'var(--sand)'};color:${active?'#1a1a1a':'var(--ink)'};font-size:12px;font-weight:${active?700:500};cursor:pointer;white-space:nowrap;">${labels[p]}</button>`;
+    }).join('')}
+    ${cp==='custom'?`
+      <input type="date" value="${state.caisseDebut||''}" onchange="state.caisseDebut=this.value;render();" style="padding:4px 8px;border:1px solid var(--line);border-radius:7px;font-size:12px;background:var(--sand);color:var(--ink);">
+      <span style="font-size:12px;color:#888;">→</span>
+      <input type="date" value="${state.caisseFin||''}" onchange="state.caisseFin=this.value;render();" style="padding:4px 8px;border:1px solid var(--line);border-radius:7px;font-size:12px;background:var(--sand);color:var(--ink);">`:''}
+  </div>
+</div>
+
+<!-- KPI TOTAL -->
+<div class="kpi-row" style="margin-bottom:20px;">
+  <div class="kpi">
+    <div class="lbl">Total encaissé</div>
+    <div class="val" style="font-size:${String(fmtFCFA(totalGeneral)).length>10?'15px':'22px'};">${fmtFCFA(totalGeneral)}</div>
+    <div class="sub">${nbGeneral} versement(s)</div>
+  </div>
+  ${MODES.map(mode=>{
+    const s=stats[mode];
+    if(s.total===0 && s.nb===0) return '';
+    return `<div class="kpi">
+      <div class="lbl">${modeIcons[mode]||'💳'} ${mode}</div>
+      <div class="val" style="font-size:${String(fmtFCFA(s.total)).length>10?'15px':'22px'};color:${modeColors[mode]||'#333'};">${fmtFCFA(s.total)}</div>
+      <div class="sub">${s.nb} versement(s) · ${s.clients.size} client(s)</div>
+    </div>`;
+  }).join('')}
+</div>
+
+<!-- GRILLE COMPTES MIROIRS -->
+<div style="font-size:11px;font-weight:700;color:#E8A93B;text-transform:uppercase;letter-spacing:.06em;margin:0 0 12px;">① Comptes miroirs par mode de paiement</div>
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;margin-bottom:24px;">
+  ${MODES.map(mode=>{
+    const s=stats[mode];
+    const color=modeColors[mode]||'#4A87AC';
+    const icon=modeIcons[mode]||'💳';
+    const pct=totalGeneral>0?Math.round(s.total/totalGeneral*100):0;
+    return `<div class="panel" style="border-top:4px solid ${color};padding:16px 18px;">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+        <span style="font-size:22px;">${icon}</span>
+        <div style="font-size:13px;font-weight:700;color:var(--ink);">${mode}</div>
+      </div>
+      <div style="font-size:22px;font-weight:800;font-family:'Fraunces',serif;color:${color};margin-bottom:4px;">${fmtFCFA(s.total)}</div>
+      <div style="font-size:11px;color:#888;margin-bottom:8px;">${s.nb} versement(s) · ${s.clients.size} client(s)</div>
+      <div style="height:4px;background:#eee;border-radius:3px;overflow:hidden;">
+        <div style="height:100%;width:${pct}%;background:${color};border-radius:3px;"></div>
+      </div>
+      <div style="font-size:10px;color:#aaa;margin-top:4px;text-align:right;">${pct}% du total</div>
+    </div>`;
+  }).join('')}
+</div>
+
+<!-- TABLEAU DÉTAIL DES VERSEMENTS -->
+<div style="font-size:11px;font-weight:700;color:#4A87AC;text-transform:uppercase;letter-spacing:.06em;margin:0 0 10px;">② Détail des versements</div>
+<div class="panel" style="padding:0;overflow-x:auto;margin-bottom:20px;">
+  <table style="width:100%;border-collapse:collapse;font-size:13px;">
+    <thead>
+      <tr style="background:var(--sand-light);">
+        <th style="text-align:left;padding:10px 14px;font-size:11px;color:#888;font-weight:600;text-transform:uppercase;letter-spacing:.04em;border-bottom:1px solid var(--line);">Date</th>
+        <th style="text-align:left;padding:10px 14px;font-size:11px;color:#888;font-weight:600;text-transform:uppercase;letter-spacing:.04em;border-bottom:1px solid var(--line);">Client</th>
+        <th style="text-align:left;padding:10px 14px;font-size:11px;color:#888;font-weight:600;text-transform:uppercase;letter-spacing:.04em;border-bottom:1px solid var(--line);">Mode</th>
+        <th style="text-align:left;padding:10px 14px;font-size:11px;color:#888;font-weight:600;text-transform:uppercase;letter-spacing:.04em;border-bottom:1px solid var(--line);">Boutique</th>
+        <th style="text-align:left;padding:10px 14px;font-size:11px;color:#888;font-weight:600;text-transform:uppercase;letter-spacing:.04em;border-bottom:1px solid var(--line);">Gestionnaire</th>
+        <th style="text-align:right;padding:10px 14px;font-size:11px;color:#888;font-weight:600;text-transform:uppercase;letter-spacing:.04em;border-bottom:1px solid var(--line);">Montant</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${lignesDetail.length ? lignesDetail.map((vr,i)=>{
+        const color=modeColors[vr.mode]||'#333';
+        const icon=modeIcons[vr.mode]||'💳';
+        return `<tr style="border-bottom:1px solid var(--line);" onmouseover="this.style.background='var(--sand-light)'" onmouseout="this.style.background=''">
+          <td style="padding:10px 14px;font-size:12px;color:#888;">${fmtDate(vr.date)}</td>
+          <td style="padding:10px 14px;font-weight:600;">${escapeHtml(vr.client)}</td>
+          <td style="padding:10px 14px;"><span style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:10px;background:${color}22;color:${color};font-size:11px;font-weight:700;">${icon} ${escapeHtml(vr.mode)}</span></td>
+          <td style="padding:10px 14px;font-size:12px;">${escapeHtml(vr.boutique)}</td>
+          <td style="padding:10px 14px;font-size:12px;">${escapeHtml(vr.gestionnaire)}</td>
+          <td style="padding:10px 14px;text-align:right;font-weight:700;font-variant-numeric:tabular-nums;color:${color};">${fmtFCFA(vr.montant)}</td>
+        </tr>`;
+      }).join('') : `<tr><td colspan="6" style="text-align:center;padding:30px;color:#aaa;font-style:italic;">Aucun versement sur cette période</td></tr>`}
+    </tbody>
+    <tfoot>
+      <tr style="background:var(--sand-light);border-top:2px solid var(--line);">
+        <td colspan="5" style="padding:10px 14px;font-weight:700;font-size:12px;">TOTAL</td>
+        <td style="padding:10px 14px;text-align:right;font-weight:800;font-variant-numeric:tabular-nums;">${fmtFCFA(totalGeneral)}</td>
+      </tr>
+    </tfoot>
+  </table>
+</div>`;
 }
 
 function renderAnalyse(){
@@ -7252,8 +7488,7 @@ function attachModalEvents(){
       };
       try{ await apiUpsert('clients', clientToSave); }catch(e){ /* synchro client non bloquante */ }
 
-      // Créer ticket labo automatiquement — UNIQUEMENT pour les nouvelles ventes (pas les mises à jour / versements reliquat)
-      // isNewVente = true si v-id était vide à l'ouverture du formulaire (pas un enregistrement existant)
+      // Créer ticket labo automatiquement — UNIQUEMENT pour les nouvelles ventes
       if(isNewVente){
         try{
           const ticket = creerTicketLabo(obj);
@@ -7263,6 +7498,25 @@ function attachModalEvents(){
             DB.tickets.unshift(ticket);
           }
         }catch(e){ console.warn('Ticket labo non créé:', e.message); }
+      }
+
+      // Créer ticket versement pour la directrice — UNIQUEMENT pour les mises à jour (versements compléments)
+      if(!isNewVente){
+        try{
+          // Calculer les nouveaux versements (ceux ajoutés par cette mise à jour)
+          const oldVers = existing ? (() => { let v=[]; try{v=JSON.parse(existing.versements||'[]');}catch(e){} return Array.isArray(v)?v.filter(x=>x.montant>0):[];})() : [];
+          const newVers = (() => { let v=[]; try{v=JSON.parse(obj.versements||'[]');}catch(e){} return Array.isArray(v)?v.filter(x=>x.montant>0):[];})();
+          // Nouveaux versements = ceux en plus des anciens (par index)
+          const addedVers = newVers.slice(oldVers.length);
+          if(addedVers.length > 0){
+            for(const vers of addedVers){
+              const tkVers = creerTicketVersement(obj, vers);
+              await apiUpsert('tickets', tkVers);
+              if(!Array.isArray(DB.tickets)) DB.tickets = [];
+              DB.tickets.unshift(tkVers);
+            }
+          }
+        }catch(e){ console.warn('Ticket versement non créé:', e.message); }
       }
 
       state.modal=null; render();
