@@ -1973,7 +1973,7 @@ function renderProspects(){
             <td>${escapeHtml(p.adresse||'—')}</td>
             <td>${escapeHtml(p.telephone||'—')}</td>
             <td>${escapeHtml(p.besoin||'—')}</td>
-            <td>${escapeHtml(p.source)}</td>
+            <td>${escapeHtml(p.source)}${p.source==='Recommandation'&&p.recommandePar?`<div style="font-size:10px;color:#7c3aed;margin-top:2px;">👤 ${escapeHtml(p.recommandePar)}</div>`:''}</td>
             <td>${escapeHtml(p.boutique)}</td>
             <td>${statutBadge(p.statut,'prospect')}</td>
             <td>${escapeHtml(p.commercial||'—')}</td>
@@ -2498,7 +2498,19 @@ function prospectForm(data){
       <div class="field"><label>Date de mise en relation</label><input required type="date" id="p-date" value="${escapeAttr(d.dateMiseEnRelation || todayISO())}"></div>
       <div class="field"><label>Boutique</label><select id="p-boutique">${BOUTIQUES.map(b=>`<option ${d.boutique===b?'selected':''}>${b}</option>`).join('')}</select></div>
       <div class="field full"><label>Besoin exprimé</label><input id="p-besoin" placeholder="ex : lunettes de vue, solaire..." value="${escapeAttr(d.besoin)}"></div>
-      <div class="field"><label>Source</label><select id="p-source">${SOURCES.map(s=>`<option ${d.source===s?'selected':''}>${s}</option>`).join('')}</select></div>
+      <div class="field"><label>Source</label><select id="p-source" onchange="(function(){const v=this.value;const w=document.getElementById('wrap-p-recommande');if(w)w.style.display=v==='Recommandation'?'':'none';}).call(this)">${SOURCES.map(s=>`<option ${d.source===s?'selected':''}>${s}</option>`).join('')}</select></div>
+      <div class="field" id="wrap-p-recommande" style="display:${d.source==='Recommandation'?'':'none'};">
+        <label>Recommandé par</label>
+        <select id="p-recommande-par">
+          <option value="">— Choisir —</option>
+          ${DB.apporteurs.filter(a=>a.actif!=='false'&&a.actif!==false).map(a=>{
+            const label = `${a.nom||''} ${a.prenom||''}`.trim() + (a.specialite?` (${a.specialite})`:'');
+            const val = `${a.nom||''} ${a.prenom||''}`.trim();
+            return `<option value="${escapeAttr(val)}" ${(d.recommandePar||'')===val?'selected':''}>${escapeHtml(label)}</option>`;
+          }).join('')}
+          <option value="Autre" ${(d.recommandePar||'')==='Autre'?'selected':''}>Autre</option>
+        </select>
+      </div>
       <div class="field"><label>Statut</label><select id="p-statut">${STATUTS_PROSPECT.map(s=>`<option ${d.statut===s?'selected':''}>${s}</option>`).join('')}</select></div>
       <div class="field full"><label>Commercial en charge</label><input id="p-commercial" value="${escapeAttr(d.commercial)}"></div>
       <div class="field"><label>Date de naissance <span style="font-size:11px;color:#888;">(optionnel)</span></label><input type="date" id="p-dob" value="${escapeAttr(d.dateNaissance||'')}"></div>
@@ -6930,6 +6942,7 @@ function attachModalEvents(){
       besoin: document.getElementById('p-besoin').value.trim(),
       boutique: document.getElementById('p-boutique').value,
       source: document.getElementById('p-source').value,
+      recommandePar: document.getElementById('p-source').value==='Recommandation' ? (document.getElementById('p-recommande-par')?.value||'') : '',
       statut: document.getElementById('p-statut').value,
       commercial: document.getElementById('p-commercial').value.trim(),
       notes: document.getElementById('p-notes').value,
