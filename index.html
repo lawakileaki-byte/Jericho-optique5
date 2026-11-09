@@ -864,6 +864,7 @@ var state = {
   analyseDebut: '',
   analyseFin: '',
   caissePeriode: 'mois', // 'semaine' | 'mois' | 'annee' | 'custom'
+  caissePage: 0,
   caisseDebut: '',
   caisseFin: '',
   reunionPeriode: 'semaine', // 'semaine' | 'semaine_prec' | 'mois' | 'custom'
@@ -5827,7 +5828,7 @@ function renderCaisse(){
     ${['semaine','mois','annee','custom'].map(p=>{
       const labels={semaine:'Cette semaine',mois:'Ce mois',annee:'Cette année',custom:'Personnalisé'};
       const active=cp===p;
-      return `<button onclick="state.caissePeriode='${p}';render();" style="padding:5px 11px;border-radius:16px;border:1px solid ${active?'#E8A93B':'var(--line)'};background:${active?'#E8A93B':'var(--sand)'};color:${active?'#1a1a1a':'var(--ink)'};font-size:12px;font-weight:${active?700:500};cursor:pointer;white-space:nowrap;">${labels[p]}</button>`;
+      return `<button onclick="state.caissePeriode='${p}';state.caissePage=0;render();" style="padding:5px 11px;border-radius:16px;border:1px solid ${active?'#E8A93B':'var(--line)'};background:${active?'#E8A93B':'var(--sand)'};color:${active?'#1a1a1a':'var(--ink)'};font-size:12px;font-weight:${active?700:500};cursor:pointer;white-space:nowrap;">${labels[p]}</button>`;
     }).join('')}
     ${cp==='custom'?`
       <input type="date" value="${state.caisseDebut||''}" onchange="state.caisseDebut=this.value;render();" style="padding:4px 8px;border:1px solid var(--line);border-radius:7px;font-size:12px;background:var(--sand);color:var(--ink);">
@@ -5848,11 +5849,6 @@ function renderCaisse(){
     <div class="val" style="font-size:${String(fmtFCFA(caTotal)).length>10?'15px':'22px'};color:#4A87AC;">${fmtFCFA(caTotal)}</div>
     <div class="sub">${Math.round(caTotal>0?(totalGeneral/caTotal*100):0)}% encaissé</div>
   </div>
-  <div class="kpi" style="border:1px solid #A6402E40;background:#A6402E0a;">
-    <div class="lbl">⏳ Reste à recouvrer</div>
-    <div class="val" style="font-size:${String(fmtFCFA(resteTotal)).length>10?'15px':'22px'};color:#A6402E;">${fmtFCFA(resteTotal)}</div>
-    <div class="sub">${nbVentesNonSoldees} vente(s) non soldée(s)</div>
-  </div>
   ${MODES.map(mode=>{
     const s=stats[mode];
     if(s.total===0 && s.nb===0) return '';
@@ -5862,6 +5858,11 @@ function renderCaisse(){
       <div class="sub">${s.nb} versement(s) · ${s.clients.size} client(s)</div>
     </div>`;
   }).join('')}
+  <div class="kpi" style="border:1px solid #A6402E40;background:#A6402E0a;">
+    <div class="lbl">⏳ Reste à recouvrer</div>
+    <div class="val" style="font-size:${String(fmtFCFA(resteTotal)).length>10?'15px':'22px'};color:#A6402E;">${fmtFCFA(resteTotal)}</div>
+    <div class="sub">${nbVentesNonSoldees} vente(s) non soldée(s)</div>
+  </div>
 </div>
 
 <!-- GRILLE COMPTES MIROIRS -->
@@ -5887,9 +5888,57 @@ function renderCaisse(){
   }).join('')}
 </div>
 
-<!-- TABLEAU DÉTAIL DES VERSEMENTS -->
+<!-- TABLEAU DÉTAIL DES VERSEMENTS (paginé) -->
 <div style="font-size:11px;font-weight:700;color:#4A87AC;text-transform:uppercase;letter-spacing:.06em;margin:0 0 10px;">② Détail des versements</div>
-<div class="panel" style="padding:0;overflow-x:auto;margin-bottom:20px;">
+${(()=>{
+  const PAGE_SIZE = 10;
+  const totalPages = Math.max(1, Math.ceil(lignesDetail.length / PAGE_SIZE));
+  // Clamp la page courante
+  let curPage = Math.max(0, Math.min((state.caissePage||0), totalPages-1));
+  state.caissePage = curPage;
+  const pageRows = lignesDetail.slice(curPage*PAGE_SIZE, (curPage+1)*PAGE_SIZE);
+
+  const rowsHtml = pageRows.length ? pageRows.map(vr=>{
+    const color=modeColors[vr.mode]||'#333';
+    const icon=modeIcons[vr.mode]||'💳';
+    return `<tr style="border-bottom:1px solid var(--line);" onmouseover="this.style.background='var(--sand-light)'" onmouseout="this.style.background=''">
+      <td style="padding:10px 14px;font-size:12px;color:#888;">${fmtDate(vr.date)}</td>
+      <td style="padding:10px 14px;font-weight:600;">${escapeHtml(vr.client)}</td>
+      <td style="padding:10px 14px;"><span style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:10px;background:${color}22;color:${color};font-size:11px;font-weight:700;">${icon} ${escapeHtml(vr.mode)}</span></td>
+      <td style="padding:10px 14px;font-size:12px;">${escapeHtml(vr.boutique)}</td>
+      <td style="padding:10px 14px;font-size:12px;">${escapeHtml(vr.gestionnaire)}</td>
+      <td style="padding:10px 14px;text-align:right;font-weight:700;font-variant-numeric:tabular-nums;color:${color};">${fmtFCFA(vr.montant)}</td>
+    </tr>`;
+  }).join('') : `<tr><td colspan="6" style="text-align:center;padding:30px;color:#aaa;font-style:italic;">Aucun versement sur cette période</td></tr>`;
+
+  // Pagination buttons (afficher max 5 numéros de page autour de la page courante)
+  let pageButtons = '';
+  if(totalPages > 1){
+    const btnStyle = (active)=>`padding:5px 10px;border-radius:7px;border:1px solid ${active?'#4A87AC':'var(--line)'};background:${active?'#4A87AC':'var(--sand)'};color:${active?'#fff':'var(--ink)'};font-size:12px;font-weight:${active?700:500};cursor:pointer;min-width:32px;`;
+    const navBtnStyle = (disabled)=>`padding:5px 10px;border-radius:7px;border:1px solid var(--line);background:var(--sand);color:${disabled?'#ccc':'var(--ink)'};font-size:14px;cursor:${disabled?'default':'pointer'};pointer-events:${disabled?'none':'auto'};`;
+
+    // Première / Précédent
+    pageButtons += `<button onclick="state.caissePage=0;render();" style="${navBtnStyle(curPage===0)}">«</button>`;
+    pageButtons += `<button onclick="state.caissePage=${curPage-1};render();" style="${navBtnStyle(curPage===0)}">‹</button>`;
+
+    // Numéros de page
+    let start = Math.max(0, curPage-2);
+    let end   = Math.min(totalPages-1, start+4);
+    start = Math.max(0, end-4);
+    for(let p=start; p<=end; p++){
+      pageButtons += `<button onclick="state.caissePage=${p};render();" style="${btnStyle(p===curPage)}">${p+1}</button>`;
+    }
+
+    // Suivant / Dernière
+    pageButtons += `<button onclick="state.caissePage=${curPage+1};render();" style="${navBtnStyle(curPage===totalPages-1)}">›</button>`;
+    pageButtons += `<button onclick="state.caissePage=${totalPages-1};render();" style="${navBtnStyle(curPage===totalPages-1)}">»</button>`;
+  }
+
+  const debut1 = curPage*PAGE_SIZE+1;
+  const fin1   = Math.min((curPage+1)*PAGE_SIZE, lignesDetail.length);
+  const infoStr = lignesDetail.length > 0 ? `${debut1}–${fin1} sur ${lignesDetail.length} versement(s)` : '';
+
+  return `<div class="panel" style="padding:0;overflow-x:auto;margin-bottom:8px;">
   <table style="width:100%;border-collapse:collapse;font-size:13px;">
     <thead>
       <tr style="background:var(--sand-light);">
@@ -5901,28 +5950,21 @@ function renderCaisse(){
         <th style="text-align:right;padding:10px 14px;font-size:11px;color:#888;font-weight:600;text-transform:uppercase;letter-spacing:.04em;border-bottom:1px solid var(--line);">Montant</th>
       </tr>
     </thead>
-    <tbody>
-      ${lignesDetail.length ? lignesDetail.map((vr,i)=>{
-        const color=modeColors[vr.mode]||'#333';
-        const icon=modeIcons[vr.mode]||'💳';
-        return `<tr style="border-bottom:1px solid var(--line);" onmouseover="this.style.background='var(--sand-light)'" onmouseout="this.style.background=''">
-          <td style="padding:10px 14px;font-size:12px;color:#888;">${fmtDate(vr.date)}</td>
-          <td style="padding:10px 14px;font-weight:600;">${escapeHtml(vr.client)}</td>
-          <td style="padding:10px 14px;"><span style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:10px;background:${color}22;color:${color};font-size:11px;font-weight:700;">${icon} ${escapeHtml(vr.mode)}</span></td>
-          <td style="padding:10px 14px;font-size:12px;">${escapeHtml(vr.boutique)}</td>
-          <td style="padding:10px 14px;font-size:12px;">${escapeHtml(vr.gestionnaire)}</td>
-          <td style="padding:10px 14px;text-align:right;font-weight:700;font-variant-numeric:tabular-nums;color:${color};">${fmtFCFA(vr.montant)}</td>
-        </tr>`;
-      }).join('') : `<tr><td colspan="6" style="text-align:center;padding:30px;color:#aaa;font-style:italic;">Aucun versement sur cette période</td></tr>`}
-    </tbody>
+    <tbody>${rowsHtml}</tbody>
     <tfoot>
       <tr style="background:var(--sand-light);border-top:2px solid var(--line);">
-        <td colspan="5" style="padding:10px 14px;font-weight:700;font-size:12px;">TOTAL</td>
+        <td colspan="5" style="padding:10px 14px;font-weight:700;font-size:12px;">TOTAL (toute la période)</td>
         <td style="padding:10px 14px;text-align:right;font-weight:800;font-variant-numeric:tabular-nums;">${fmtFCFA(totalGeneral)}</td>
       </tr>
     </tfoot>
   </table>
-</div>`;
+</div>
+${totalPages > 1 ? `<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:20px;">
+  <span style="font-size:12px;color:#888;">${infoStr}</span>
+  <div style="display:flex;gap:4px;flex-wrap:wrap;">${pageButtons}</div>
+  <span style="font-size:12px;color:#888;">Page ${curPage+1} / ${totalPages}</span>
+</div>` : `<div style="margin-bottom:20px;"></div>`}`;
+})()}`;
 }
 
 function renderAnalyse(){
