@@ -7251,13 +7251,20 @@ function attachModalEvents(){
       // Si l'erreur mentionne une colonne inconnue (datenaissance/daterelance pas encore créées),
       // réessayer sans ces champs pour ne pas bloquer l'enregistrement
       const msg = (err.message||'');
-      const isColErr = /column|42703|does not exist/i.test(msg);
+      const isColErr = /column|42703|PGRST204|does not exist/i.test(msg);
       if(isColErr){
+        // Colonnes optionnelles ajoutées progressivement — retirer celles inconnues et réessayer
+        const optionalCols = ['dateNaissance','dateRelance','recommandePar'];
+        // Identifier quelle(s) colonne(s) sont en cause dans le message d'erreur
+        const toRemove = optionalCols.filter(k=> msg.toLowerCase().includes(k.toLowerCase()) || isColErr);
         try{
-          const objSafe = Object.fromEntries(Object.entries(obj).filter(([k])=>!['dateNaissance','dateRelance'].includes(k)));
+          const objSafe = Object.fromEntries(Object.entries(obj).filter(([k])=>!optionalCols.includes(k)));
           await apiUpsert('prospects', objSafe);
+          // Mettre à jour le cache local avec l'objet complet (incluant les champs optionnels)
+          const idx2 = DB.prospects.findIndex(p=>p.id===id);
+          if(idx2>=0) DB.prospects[idx2]=obj; else DB.prospects.unshift(obj);
           state.modal=null; render();
-          showToast((idx>=0 ? 'Prospect mis à jour.' : 'Prospect ajouté.') + ' (date naissance/relance ignorées — colonnes à créer dans Supabase)');
+          showToast((idx>=0 ? 'Prospect mis à jour.' : 'Prospect ajouté.') + ' (colonnes optionnelles à créer dans Supabase : recommandePar, dateNaissance, dateRelance)');
         }catch(err2){ showToast("Erreur : " + (err2.message||'inconnue').slice(0,80), true); }
       } else {
         showToast("Erreur : " + msg.slice(0,80), true);
