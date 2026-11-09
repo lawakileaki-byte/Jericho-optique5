@@ -5744,67 +5744,68 @@ function renderCaisse(){
 
   const periodeLabels = {semaine:'Cette semaine', mois:'Ce mois', annee:'Cette année', custom:'Période personnalisée'};
 
-  // Collecter TOUS les versements de toutes les ventes dans la période
+  // ── Approche correcte : encaissé = venteTotal - venteReste ──────────────────
+  // On parcourt chaque vente de la période et on reconstitue les lignes encaissées
+  // par mode de paiement depuis le tableau versements[] (nouveau format)
+  // ou depuis avance + modePaiement (ancien format mono-versement).
   const MODES = ['Espèces','Moov Money','Orange Money','Chèque','Virement','Carte'];
-  const stats = {}; // { mode: { total, nb, clients: Set } }
+  const stats = {};
   MODES.forEach(m=>{ stats[m]={total:0,nb:0,clients:new Set()}; });
   const autreStats = {total:0,nb:0,clients:new Set()};
 
-  // Versements tickets (type '💰 Versement encaissé') dans la période
-  const ticketsVers = DB.tickets.filter(t=>{
-    if(t.type!=='💰 Versement encaissé') return false;
-    const d=(t.dateVersement||t.dateCreation||'').slice(0,10);
-    if(debut && d<debut) return false;
-    if(fin   && d>fin)   return false;
-    return true;
-  });
+  const ventesVers = []; // lignes de détail
 
-  // Aussi parcourir directement les versements dans DB.ventes pour la période
-  const ventesVers = [];
   DB.ventes.forEach(v=>{
-    let vrs=[]; try{vrs=JSON.parse(v.versements||'[]');}catch(e){}
-    if(!Array.isArray(vrs)) return;
-    vrs.filter(vr=>vr.montant>0).forEach(vr=>{
-      const d=(vr.date||v.dateMiseEnRelation||'').slice(0,10);
-      if(debut && d<debut) return;
-      if(fin   && d>fin)   return;
-      ventesVers.push({
-        montant: Number(vr.montant)||0,
-        mode: vr.mode||'Espèces',
-        date: d,
-        client: `${v.civilite||''} ${v.nom||''} ${v.prenom||''}`.trim(),
-        boutique: v.businessUnit||'',
-        gestionnaire: v.gestionnaire||'',
-        venteId: v.id,
+    // Filtre période sur la date de mise en relation
+    const dateV = (v.dateMiseEnRelation||'').slice(0,10);
+    if(debut && dateV<debut) return;
+    if(fin   && dateV>fin)   return;
+
+    const encaisseTotal = venteTotal(v) - venteReste(v); // montant réellement encaissé
+    if(encaisseTotal <= 0) return;
+
+    // Essayer de décomposer par versements (nouveau format)
+    let vrs = []; try{ vrs = JSON.parse(v.versements||'[]'); }catch(e){}
+    // Exclure les entrées de type acc/rep (pas des versements multiples)
+    const vrsFiltres = Array.isArray(vrs) ? vrs.filter(vr=>vr.montant>0 && vr.type!=='rep' && vr.type!=='acc') : [];
+
+    if(vrsFiltres.length > 0){
+      // Nouveau format : chaque versement a son propre mode
+      vrsFiltres.forEach(vr=>{
+        const montant = Number(vr.montant)||0;
+        const mode = vr.mode || v.modePaiement || 'Espèces';
+        const dateVr = (vr.date||dateV);
+        ventesVers.push({ montant, mode, date:dateVr, client:`${v.civilite||''} ${v.nom||''} ${v.prenom||''}`.trim(), boutique:v.businessUnit||'', gestionnaire:v.gestionnaire||'', venteId:v.id });
       });
-    });
-    // Ajouter aussi l'avance initiale si elle n'est pas dans versements (ancien format)
-    if(vrs.length===0 && Number(v.avance)>0){
-      const d=(v.dateMiseEnRelation||'').slice(0,10);
-      if((!debut||d>=debut)&&(!fin||d<=fin)){
-        ventesVers.push({
-          montant: Number(v.avance),
-          mode: v.modePaiement||'Espèces',
-          date: d,
-          client: `${v.civilite||''} ${v.nom||''} ${v.prenom||''}`.trim(),
-          boutique: v.businessUnit||'',
-          gestionnaire: v.gestionnaire||'',
-          venteId: v.id,
-        });
-      }
+    } else {
+      // Ancien format mono-versement : on utilise encaisseTotal et modePaiement
+      const mode = v.modePaiement || 'Espèces';
+      ventesVers.push({ montant:encaisseTotal, mode, date:dateV, client:`${v.civilite||''} ${v.nom||''} ${v.prenom||''}`.trim(), boutique:v.businessUnit||'', gestionnaire:v.gestionnaire||'', venteId:v.id });
     }
   });
 
   // Agréger par mode
   ventesVers.forEach(vr=>{
     const mode = vr.mode || 'Espèces';
-    const s = stats[mode] || autreStats;
-    if(!stats[mode]) autreStats.total+=vr.montant, autreStats.nb++, autreStats.clients.add(vr.client);
-    else { s.total+=vr.montant; s.nb++; s.clients.add(vr.client); }
+    if(stats[mode]){ stats[mode].total+=vr.montant; stats[mode].nb++; stats[mode].clients.add(vr.client); }
+    else { autreStats.total+=vr.montant; autreStats.nb++; autreStats.clients.add(vr.client); }
   });
 
   const totalGeneral = Object.values(stats).reduce((a,s)=>a+s.total,0) + autreStats.total;
   const nbGeneral    = Object.values(stats).reduce((a,s)=>a+s.nb,0)    + autreStats.nb;
+
+  // Reste à recouvrer et CA total sur la période
+  let resteTotal = 0, caTotal = 0, nbVentesNonSoldees = 0;
+  DB.ventes.forEach(v=>{
+    const dateV = (v.dateMiseEnRelation||'').slice(0,10);
+    if(debut && dateV<debut) return;
+    if(fin   && dateV>fin)   return;
+    const r = venteReste(v);
+    const t = venteTotal(v);
+    caTotal += t;
+    resteTotal += r;
+    if(r > 0) nbVentesNonSoldees++;
+  });
 
   const modeIcons = {'Espèces':'💵','Moov Money':'📱','Orange Money':'🟠','Chèque':'📄','Virement':'🏦','Carte':'💳'};
   const modeColors= {'Espèces':'#4F7942','Moov Money':'#276B3F','Orange Money':'#E8A93B','Chèque':'#4A87AC','Virement':'#6366f1','Carte':'#A6402E'};
@@ -5841,6 +5842,16 @@ function renderCaisse(){
     <div class="lbl">Total encaissé</div>
     <div class="val" style="font-size:${String(fmtFCFA(totalGeneral)).length>10?'15px':'22px'};">${fmtFCFA(totalGeneral)}</div>
     <div class="sub">${nbGeneral} versement(s)</div>
+  </div>
+  <div class="kpi" style="border:1px solid #E8A93B40;background:var(--sand-light);">
+    <div class="lbl">📊 CA total période</div>
+    <div class="val" style="font-size:${String(fmtFCFA(caTotal)).length>10?'15px':'22px'};color:#4A87AC;">${fmtFCFA(caTotal)}</div>
+    <div class="sub">${Math.round(caTotal>0?(totalGeneral/caTotal*100):0)}% encaissé</div>
+  </div>
+  <div class="kpi" style="border:1px solid #A6402E40;background:#A6402E0a;">
+    <div class="lbl">⏳ Reste à recouvrer</div>
+    <div class="val" style="font-size:${String(fmtFCFA(resteTotal)).length>10?'15px':'22px'};color:#A6402E;">${fmtFCFA(resteTotal)}</div>
+    <div class="sub">${nbVentesNonSoldees} vente(s) non soldée(s)</div>
   </div>
   ${MODES.map(mode=>{
     const s=stats[mode];
